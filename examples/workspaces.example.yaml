@@ -9,7 +9,7 @@ workspaces:
     allow_execute: true
     allow_git: true
     allow_artifacts: true
-    allow_agent_dispatch: true
+    allow_agent_dispatch: false
     # Host-side loopback HTTP is disabled unless exact ports are listed.
     local_http_ports: []
 
