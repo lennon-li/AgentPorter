@@ -74,3 +74,30 @@ Operating principles:
 4. Worker Delegation: For deep reasoning or specialist reviews, use list_agents to check available coding agents, then dispatch_agent and monitor with job_result.
 5. Safety: Never reveal API keys or secret files. Do not perform destructive git operations.
 ```
+
+---
+
+## 5. Authorize User Connection for Microsoft 365 Copilot Desktop
+
+Even if the agent connects successfully in the Copilot Studio web test canvas, the **Microsoft 365 Copilot desktop app** (and Teams) maintains a separate per-user authorization state. If this authorization is missing, the desktop app will report:
+> *"Connector request failed Couldn't retrieve the requested items, 'Not Found'"*
+
+To authorize:
+1. In Copilot Studio, go to **Channels** -> **Microsoft 365 Copilot**.
+2. Navigate to **User connections** (or open the channel connection settings):
+   `https://copilotstudio.microsoft.com/c2/tenants/<tenant-id>/environments/<env-id>/bots/<bot-id>/channels/m365copilot/conversations/<conversation-id>/user-connections`
+3. Verify that the MCP tool connection is explicitly set to **Connected** for your user account.
+4. Click **Publish** to deploy the latest agent configuration to the Microsoft 365 Copilot channel.
+
+---
+
+## 6. Pre-flight Verification Checklist
+
+- [ ] AgentPorter gateway is running (`agentporter serve` or systemd service active).
+- [ ] Ingress tunnel is active and reachable (`curl -I <tunnel-url>/health` returns `200 OK`).
+- [ ] Action configured in Copilot Studio with correct URL and `X-AgentPorter-Key` (or `X-M3-MCP-Key`) header.
+- [ ] Copilot agent system instructions saved.
+- [ ] Agent published to Microsoft 365 Copilot channel.
+- [ ] User connection verified as **Connected** under M365 Copilot channel user connections.
+- [ ] In the Windows Copilot Desktop app: Started a **New Chat** inside the custom agent from the right-hand sidebar.
+
