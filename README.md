@@ -1,116 +1,97 @@
 # AgentPorter
 
-> A secure, local-first Model Context Protocol (MCP) gateway for controlled development workspaces, sandboxed code execution, Git inspection, artifact retrieval, and AI coding agent delegation.
+> A local-first Model Context Protocol (MCP) gateway for controlled development
+> workspaces, sandboxed code execution, Git inspection, artifacts, and AI coding
+> agent delegation.
 
----
+AgentPorter lets MCP-capable clients work with local development environments
+without giving the client unrestricted host access.
 
-## What is AgentPorter?
+## Current capabilities
 
-AgentPorter is a local-first MCP gateway that gives MCP-capable AI clients controlled access to development workspaces, sandboxed code execution, Git, artifacts, and installed AI coding agents.
+- **Workspace-scoped access** using registered workspace IDs instead of arbitrary host roots.
+- **Sensitive-path controls** shared by file reads, writes, patches, and search.
+- **Sandboxed direct execution** for Bash, Python, R, and other installed runtimes through Bubblewrap.
+- **No-network direct execution** with scrubbed environment and private `/tmp`.
+- **Bounded async jobs** with SQLite state, cancellation, timeout, and output limits.
+- **Read-only Git inspection** with bounded output and defensive Git configuration.
+- **Artifact retrieval** with response-size limits.
+- **Explicit loopback HTTP allowlists** per workspace.
+- **Worker-agent delegation** through adapters for installed coding-agent CLIs.
+- **Truthful provenance fields** that separate configured routing, requested overrides, and verified actual model.
 
-It was designed to bridge interactive orchestrators (such as Microsoft Copilot Studio, Claude Desktop, LibreChat, or custom agents) with local development environments while maintaining strict security boundaries around filesystem access, execution, and credentials.
+## Trust boundaries
 
-### Key Capabilities
+Direct code execution is kernel-isolated with Bubblewrap.
 
-- **Local-First & Client-Agnostic**: Implements the standard Model Context Protocol over Streamable HTTP with API-key authentication and strict Host-header validation.
-- **Controlled Workspace Access**: Replaces raw filesystem access with registered workspace identifiers. Operations enforce project-relative paths, block traversal sequences (`..`), prevent symlink escapes, and prohibit access to sensitive credentials (`.ssh`, `.env`, `.git`).
-- **Sandboxed Direct Execution**: Executes code (Bash, Python, R) within unprivileged Linux `bubblewrap` (bwrap) sandboxes with memory-backed private `/tmp`, unshared network namespaces (zero outbound network), and scrubbed environments.
-- **Asynchronous Jobs & Output Tailing**: Manages long-running commands and test suites asynchronously with SQLite tracking, incremental output cursors, and clean process-group cancellation.
-- **Read-Only Git Operations**: Exposes safe, non-destructive inspection tools (`git_status`, `git_diff`, `git_log`, `git_show`). State-changing Git operations (commit, push, force-reset) are explicitly forbidden.
-- **Worker-Agent Delegation**: Dispatches specialist tasks or independent code reviews to installed AI coding agent CLIs (such as Codex, Claude Code, OpenCode, and Antigravity) with structured control packets and telemetry tracking.
+Worker-agent delegation is different: installed CLIs normally run as the host
+user so they can access their own provider credentials and network. AgentPorter
+therefore does not claim that delegated workers are sandboxed. A read-only
+workspace can only dispatch an adapter that can enforce read-only behavior.
 
----
+See [SECURITY.md](SECURITY.md).
 
-## ⚠️ Security Notice: Trust Boundaries
+## Status
 
-AgentPorter maintains two fundamentally different execution trust boundaries:
+**Early alpha / active dogfooding.**
 
-1. **Direct Execution (`exec_run`, `exec_start`)**:
-   - **Strongly Sandboxed**: Executed inside unprivileged `bubblewrap` namespaces.
-   - Network namespace is completely disabled (`--unshare-net`).
-   - Host home, credentials, `/mnt/c`, and Docker sockets are absent from the mount table.
-   - User identity is synthetic (`sandbox:x:1000:1000`).
+"Dogfooding" means using your own product for real work while it is still under
+development. The purpose is to discover failures, awkward interfaces, missing
+controls, and real security requirements before designing features speculatively
+or releasing broadly.
 
-2. **Worker CLI Delegation (`dispatch_agent`)**:
-   - **Runs as Host User**: Installed CLI agents (e.g. `codex`, `claude`, `opencode`, `agy`) require host credentials and user tokens (such as `~/.codex`, `~/.claude`) to reach their respective LLM providers.
-   - Worker agents execute outside the kernel Bubblewrap sandbox and are bounded by working directory scoping and prompt discipline.
-   - **Do not treat worker agent delegation as equivalent to sandboxed execution.**
+Current platform target: Linux and WSL2 with Python 3.11+ and Bubblewrap.
 
-See [SECURITY.md](SECURITY.md) and [docs/security-model.md](docs/security-model.md) for full architectural details.
-
----
-
-## Platform Support & Status
-
-- **Status**: Early alpha / active dogfooding.
-- **Platform**: Linux and WSL2 (Ubuntu 22.04+). Bubblewrap (`bwrap`) is required for sandboxed execution.
-
----
-
-## Installation
+## Install
 
 ```bash
-# Clone the repository
 git clone https://github.com/lennon-li/AgentPorter.git
 cd AgentPorter
-
-# Install with pip / uv
-pip install -e .
-# or with development dependencies:
 pip install -e ".[dev]"
 ```
 
----
+AgentPorter is not published to PyPI yet.
 
-## Quick Start
-
-### 1. Check System Health
-
-```bash
-agentporter doctor
-```
-
-`doctor` verifies Python version, Bubblewrap availability, configuration directories, and detected CLI agent workers.
-
-### 2. Configure Workspaces
+## Configure
 
 Create `~/.config/agentporter/workspaces.yaml`:
 
 ```yaml
 workspaces:
   my-project:
-    path: /path/to/project
+    path: /home/user/projects/my-project
     writable: true
-    description: "Primary development project"
+    allow_execute: true
+    allow_git: true
+    allow_artifacts: true
+    allow_agent_dispatch: false
+    local_http_ports: []
 ```
 
-### 3. Run the Server
+The default server configuration binds only to localhost and uses the
+`X-AgentPorter-Key` API-key header. On first startup, AgentPorter generates a
+key in `~/.config/agentporter/secrets.env` with restrictive permissions.
+
+## Run
 
 ```bash
+agentporter doctor
 agentporter serve --host 127.0.0.1 --port 8765
 ```
 
-On initial startup, an API key is generated and stored securely in `~/.config/agentporter/secrets.env` (file mode `0600`).
-
----
-
 ## Documentation
 
-- [Architecture Overview](docs/architecture.md)
-- [Security Model & Threat Matrix](docs/security-model.md)
-- [Package vs. Local Separation](docs/package-vs-local.md)
-- [Local Installation & Setup Guide](docs/local-setup.md)
-- [Connecting MCP Clients](docs/mcp-clients.md)
-- [Microsoft Copilot Studio Setup](docs/copilot-studio.md)
+- [Architecture](docs/architecture.md)
+- [Security model](docs/security-model.md)
+- [Package vs. local separation](docs/package-vs-local.md)
+- [Local setup](docs/local-setup.md)
+- [MCP clients](docs/mcp-clients.md)
+- [Microsoft Copilot Studio](docs/copilot-studio.md)
 
----
-
-## Contributing & Development
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for test execution instructions and guidelines.
-
-To run the test suite:
+## Development
 
 ```bash
 pytest -v tests/
 ```
+
+The repository intentionally does not choose a public software license yet.
