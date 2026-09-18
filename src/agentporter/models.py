@@ -12,7 +12,7 @@ class WorkspaceDefinition(BaseModel):
     allow_execute: bool = True
     allow_git: bool = True
     allow_artifacts: bool = True
-    allow_agent_dispatch: bool = True
+    allow_agent_dispatch: bool = False
     local_http_ports: list[int] = Field(default_factory=list)
 
 
