@@ -64,27 +64,31 @@ pip install -e ".[dev]"
 
 ## Quick Start
 
-### 1. Check System Health
+### 1. Initialize Configuration
+
+```bash
+agentporter init
+```
+
+This creates standard directories, sets up an initial API key, and prepares workspace configurations.
+
+### 2. Register Workspaces
+
+Register a project workspace via the CLI or edit `~/.config/agentporter/workspaces.yaml`:
+
+```bash
+agentporter workspaces add my-project /path/to/project
+```
+
+### 3. Check System Health
 
 ```bash
 agentporter doctor
 ```
 
-`doctor` verifies Python version, Bubblewrap availability, configuration directories, and detected CLI agent workers.
+`doctor` verifies Python version, Bubblewrap availability, configuration directories, registered workspaces, and detected CLI agent workers.
 
-### 2. Configure Workspaces
-
-Create `~/.config/agentporter/workspaces.yaml`:
-
-```yaml
-workspaces:
-  my-project:
-    path: /path/to/project
-    writable: true
-    description: "Primary development project"
-```
-
-### 3. Run the Server
+### 4. Run the Server
 
 ```bash
 agentporter serve --host 127.0.0.1 --port 8765
@@ -92,7 +96,7 @@ agentporter serve --host 127.0.0.1 --port 8765
 
 On initial startup, an API key is generated and stored securely in `~/.config/agentporter/secrets.env` (file mode `0600`).
 
-### 4. Manage API Keys
+### 5. Manage API Keys
 
 ```bash
 # View active API key and accepted header names

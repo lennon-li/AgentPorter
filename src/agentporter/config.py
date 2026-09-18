@@ -169,6 +169,31 @@ class Config:
             except Exception:
                 pass
 
+    def add_workspace(self, ws_id: str, path: str, writable: bool = True, description: str = "") -> None:
+        """Register and persist a workspace to workspaces.yaml."""
+        real_path = os.path.realpath(os.path.expanduser(path))
+        self.workspaces[ws_id] = {
+            "path": real_path,
+            "writable": writable,
+            "description": description,
+        }
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        ws_file = self.config_dir / "workspaces.yaml"
+        with open(ws_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump({"workspaces": self.workspaces}, f, sort_keys=False)
+
+    def remove_workspace(self, ws_id: str) -> bool:
+        """Remove a workspace from workspaces.yaml. Returns True if removed."""
+        if ws_id in self.workspaces:
+            del self.workspaces[ws_id]
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            ws_file = self.config_dir / "workspaces.yaml"
+            with open(ws_file, "w", encoding="utf-8") as f:
+                yaml.safe_dump({"workspaces": self.workspaces}, f, sort_keys=False)
+            return True
+        return False
+
+
     def _load_or_generate_api_key(self) -> None:
         """Retrieve API key from env or secrets.env, generating one if absent."""
         env_key = os.environ.get("AGENTPORTER_API_KEY") or os.environ.get("M3_MCP_KEY")

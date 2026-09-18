@@ -39,6 +39,17 @@ def test_cli_doctor(tmp_path: Path):
     assert "Security Invariants:" in result.output
 
 
+def test_cli_init(tmp_path: Path):
+    config_dir = tmp_path / "config"
+    runner = CliRunner()
+    result = runner.invoke(main, ["init", "--config-dir", str(config_dir), "--workspace", str(tmp_path), "--name", "init-test"])
+    assert result.exit_code == 0
+    assert "AgentPorter initialized successfully:" in result.output
+    assert (config_dir / "secrets.env").exists()
+    assert (config_dir / "workspaces.yaml").exists()
+    assert "init-test" in (config_dir / "workspaces.yaml").read_text()
+
+
 def test_cli_workspaces(tmp_path: Path):
     config_dir = tmp_path / "config"
     config_dir.mkdir(parents=True)
@@ -54,6 +65,31 @@ def test_cli_workspaces(tmp_path: Path):
     assert result.exit_code == 0
     assert "Registered Workspaces (1):" in result.output
     assert "my-app" in result.output
+
+
+def test_cli_workspaces_add_and_remove(tmp_path: Path):
+    config_dir = tmp_path / "config"
+    runner = CliRunner()
+
+    # Add workspace
+    add_res = runner.invoke(main, ["workspaces", "add", "dynamic-ws", str(tmp_path), "--config-dir", str(config_dir)])
+    assert add_res.exit_code == 0
+    assert "Added workspace 'dynamic-ws'" in add_res.output
+
+    # List workspaces
+    list_res = runner.invoke(main, ["workspaces", "list", "--config-dir", str(config_dir)])
+    assert list_res.exit_code == 0
+    assert "dynamic-ws" in list_res.output
+
+    # Remove workspace
+    rem_res = runner.invoke(main, ["workspaces", "remove", "dynamic-ws", "--config-dir", str(config_dir)])
+    assert rem_res.exit_code == 0
+    assert "Removed workspace 'dynamic-ws'" in rem_res.output
+
+    # Verify removal
+    list_after = runner.invoke(main, ["workspaces", "list", "--config-dir", str(config_dir)])
+    assert "dynamic-ws" not in list_after.output
+
 
 
 def test_cli_agents(tmp_path: Path):
