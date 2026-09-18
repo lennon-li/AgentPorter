@@ -87,3 +87,19 @@ def test_middleware_rate_limiting():
     # 4th request exceeds rate limit
     resp = client.get("/", headers=headers)
     assert resp.status_code == 429
+
+
+def test_middleware_streamed_payload_ceiling():
+    app = create_test_app(max_payload=50)
+    client = TestClient(app, base_url="http://testserver")
+
+    def chunks():
+        yield b"x" * 30
+        yield b"y" * 30
+
+    resp = client.post(
+        "/",
+        content=chunks(),
+        headers={"X-AgentPorter-Key": "valid-key-123"},
+    )
+    assert resp.status_code == 413
