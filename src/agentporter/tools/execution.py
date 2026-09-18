@@ -8,48 +8,54 @@ from agentporter.tools.jobs import JobManager
 def create_execution_tools(
     registry: WorkspaceRegistry,
     sandbox: BubblewrapSandbox,
-    job_manager: JobManager
+    job_manager: JobManager,
 ):
+    def _workspace(workspace_id: str):
+        ws = registry.get(workspace_id)
+        if not ws.allow_execute:
+            raise PermissionError(f"Workspace '{workspace_id}' does not allow direct execution")
+        return ws
+
     def exec_run(
         workspace_id: str,
         argv: list[str],
         cwd: str = "",
-        timeout_seconds: int = 30
+        timeout_seconds: int = 30,
     ) -> dict:
-        """Execute command synchronously inside the bubblewrap sandbox with network disabled."""
-        ws = registry.get(workspace_id)
+        ws = _workspace(workspace_id)
         return sandbox.run(
             workspace_path=ws.path,
             argv=argv,
             cwd=cwd,
             timeout_seconds=timeout_seconds,
-            writable=ws.writable
+            writable=ws.writable,
         )
 
     def exec_start(
         workspace_id: str,
         argv: list[str],
         cwd: str = "",
-        timeout_seconds: int = 300
+        timeout_seconds: int = 300,
     ) -> dict:
-        """Start command asynchronously inside the sandbox, returning a job ID."""
-        ws = registry.get(workspace_id)
+        ws = _workspace(workspace_id)
+        timeout = sandbox.clamp_timeout(timeout_seconds)
         bwrap_cmd = sandbox.build_bwrap_args(
             workspace_path=ws.path,
             writable=ws.writable,
-            sub_cwd=cwd
+            sub_cwd=cwd,
         ) + ["--"] + argv
 
         job_id = job_manager.start_raw_job(
             workspace_id=workspace_id,
             workspace_path=ws.path,
             cmd=bwrap_cmd,
-            timeout_seconds=timeout_seconds
+            timeout_seconds=timeout,
         )
         return {
             "job_id": job_id,
             "workspace_id": workspace_id,
-            "status": "running"
+            "status": "running",
+            "timeout_seconds": timeout,
         }
 
     return exec_run, exec_start
