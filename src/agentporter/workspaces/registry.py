@@ -20,16 +20,38 @@ class WorkspaceRegistry:
                     ws_id=ws_id,
                     path=data.get("path", ""),
                     writable=data.get("writable", True),
-                    description=data.get("description", "")
+                    description=data.get("description", ""),
+                    allow_execute=data.get("allow_execute", True),
+                    allow_git=data.get("allow_git", True),
+                    allow_artifacts=data.get("allow_artifacts", True),
+                    allow_agent_dispatch=data.get("allow_agent_dispatch", False),
+                    local_http_ports=data.get("local_http_ports", []),
                 )
 
-    def register(self, ws_id: str, path: str, writable: bool = True, description: str = "") -> None:
+    def register(
+        self,
+        ws_id: str,
+        path: str,
+        writable: bool = True,
+        description: str = "",
+        allow_execute: bool = True,
+        allow_git: bool = True,
+        allow_artifacts: bool = True,
+        allow_agent_dispatch: bool = False,
+        local_http_ports: Optional[list[int]] = None,
+    ) -> None:
         real_path = os.path.realpath(os.path.expanduser(path))
+        ports = sorted({int(p) for p in (local_http_ports or []) if 1 <= int(p) <= 65535})
         self._workspaces[ws_id] = WorkspaceDefinition(
             id=ws_id,
             path=real_path,
             writable=writable,
-            description=description
+            description=description,
+            allow_execute=allow_execute,
+            allow_git=allow_git,
+            allow_artifacts=allow_artifacts,
+            allow_agent_dispatch=allow_agent_dispatch,
+            local_http_ports=ports,
         )
 
     def get(self, ws_id: str) -> WorkspaceDefinition:
@@ -47,6 +69,13 @@ class WorkspaceRegistry:
                 "exists": os.path.isdir(ws.path),
                 "writable": ws.writable,
                 "description": ws.description,
+                "permissions": {
+                    "execute": ws.allow_execute,
+                    "git": ws.allow_git,
+                    "artifacts": ws.allow_artifacts,
+                    "agent_dispatch": ws.allow_agent_dispatch,
+                    "local_http_ports": ws.local_http_ports,
+                },
             })
         return results
 
@@ -117,6 +146,13 @@ class WorkspaceRegistry:
             "workspace_id": ws.id,
             "path": ws.path,
             "writable": ws.writable,
+            "permissions": {
+                "execute": ws.allow_execute,
+                "git": ws.allow_git,
+                "artifacts": ws.allow_artifacts,
+                "agent_dispatch": ws.allow_agent_dispatch,
+                "local_http_ports": ws.local_http_ports,
+            },
             "git": {
                 "is_repo": os.path.exists(git_dir),
                 "branch": git_branch,

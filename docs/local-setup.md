@@ -1,57 +1,53 @@
-# Local Installation & Setup Guide
+# Local Installation & Setup
 
-This guide describes how to install and configure AgentPorter on a host machine (Linux or WSL2).
+AgentPorter currently targets Linux and WSL2.
 
----
+## Requirements
 
-## 1. System Requirements
+- Python 3.11+
+- Bubblewrap (`bwrap`)
+- ripgrep (`rg`)
+- `patch`
+- Git
+- R only if you want to execute R workloads
 
-- **Operating System**: Linux (Ubuntu 22.04+ recommended) or WSL2.
-- **Python**: 3.11 or higher.
-- **Bubblewrap**: Required for sandboxing (`sudo apt install bubblewrap`).
-- **Ripgrep**: Required for fast text search (`sudo apt install ripgrep`).
-- **Patch**: Required for unified diff patches (`sudo apt install patch`).
-- **Git**: Required for git inspection tools.
-
----
-
-## 2. Package Installation
+## Install
 
 ```bash
-# Clone the repository
 git clone https://github.com/lennon-li/AgentPorter.git
 cd AgentPorter
-
-# Install package in your Python environment
-pip install -e .
+pip install -e ".[dev]"
 ```
 
----
+## Local configuration
 
-## 3. Configuration Setup
+AgentPorter keeps mutable configuration outside the package under
+`~/.config/agentporter/`.
 
-AgentPorter stores local configuration in `~/.config/agentporter/`:
+### Workspaces
 
-```bash
-mkdir -p ~/.config/agentporter
-```
-
-### A. Register Workspaces (`~/.config/agentporter/workspaces.yaml`)
+Create `~/.config/agentporter/workspaces.yaml`:
 
 ```yaml
 workspaces:
   my-project:
     path: /home/user/projects/my-project
     writable: true
-    description: "Main development workspace"
-
-  reference-repo:
-    path: /home/user/projects/reference
-    writable: false
-    description: "Read-only reference codebase"
+    description: "Development workspace"
+    allow_execute: true
+    allow_git: true
+    allow_artifacts: true
+    allow_agent_dispatch: false
+    local_http_ports: []
 ```
 
-### B. Configure Server Options (`~/.config/agentporter/config.yaml`)
+Enable worker delegation only for projects where host-user CLI execution is an
+acceptable trust boundary. Add exact loopback ports only when an MCP client
+must test a host-local service.
+
+### Server/security
+
+Create `~/.config/agentporter/config.yaml`:
 
 ```yaml
 server:
@@ -59,54 +55,57 @@ server:
   port: 8765
 
 security:
+  auth: "api_key"
   header_name: "X-AgentPorter-Key"
-  legacy_header_name: "X-M3-MCP-Key"
   allowed_hosts:
     - "127.0.0.1"
+    - "127.0.0.1:*"
     - "localhost"
-    - "*.trycloudflare.com"
+    - "localhost:*"
+
+sandbox:
+  backend: "bubblewrap"
+  network: false
+  default_timeout_seconds: 30
+  max_timeout_seconds: 900
+  max_output_bytes: 102400
+  max_job_log_bytes: 10485760
 ```
 
-### C. API Key Setup (`~/.config/agentporter/secrets.env`)
+Remote hostnames and client-specific compatibility headers are opt-in local
+configuration; they are intentionally not package defaults.
 
-If this file does not exist, AgentPorter generates a secure 32-byte key automatically on first launch and secures the file with permissions `0600`.
+### API key
 
-To set your own key manually:
+On first startup AgentPorter creates:
+
+```text
+~/.config/agentporter/secrets.env
+```
+
+with an `AGENTPORTER_API_KEY` and mode `0600`. To provide your own key:
+
 ```bash
-echo "AGENTPORTER_API_KEY=your-secure-random-key" > ~/.config/agentporter/secrets.env
-chmod 0600 ~/.config/agentporter/secrets.env
+printf 'AGENTPORTER_API_KEY=%s\n' 'your-high-entropy-key' \
+  > ~/.config/agentporter/secrets.env
+chmod 600 ~/.config/agentporter/secrets.env
 ```
 
----
-
-## 4. Running the Doctor Check
-
-Verify your installation:
+## Diagnose
 
 ```bash
 agentporter doctor
 ```
 
-Example output:
-```text
-AgentPorter Doctor Diagnostic:
-  Version: 0.1.0.dev0
-  Python: 3.12.3
-  Bubblewrap Sandbox: Available (/usr/bin/bwrap)
-  Config Directory: /home/user/.config/agentporter
-  State Directory: /home/user/.local/state/agentporter
-  Registered Workspaces: 2
-  Detected Worker Agents:
-    • codex: Available (v0.154.0)
-    • claude: Available (v2.1.274)
-    • opencode: Available (v1.18.31)
-    • agy: Available (v1.2.5)
-```
+This reports runtime availability and configuration locations without printing
+the API key.
 
----
-
-## 5. Starting the Server
+## Run
 
 ```bash
 agentporter serve --host 127.0.0.1 --port 8765
 ```
+
+Keep localhost binding as the default. If a cloud MCP client needs access,
+place a separately authenticated/controlled HTTPS tunnel or reverse proxy in
+front of this local listener and explicitly allow that hostname.

@@ -25,16 +25,14 @@ class ServerSettings:
 
 @dataclass
 class SecuritySettings:
-    auth_enabled: bool = True
     header_name: str = "X-AgentPorter-Key"
-    legacy_header_name: str = "X-M3-MCP-Key"
+    # Client-specific compatibility headers are opt-in local configuration.
+    legacy_header_name: str = ""
     allowed_hosts: list[str] = field(default_factory=lambda: [
         "127.0.0.1",
         "127.0.0.1:*",
         "localhost",
         "localhost:*",
-        "*.trycloudflare.com",
-        "*.trycloudflare.com:*",
     ])
     rate_limit_max_requests: int = 120
     rate_limit_window_seconds: float = 60.0
@@ -44,9 +42,12 @@ class SecuritySettings:
 @dataclass
 class SandboxSettings:
     backend: str = "bubblewrap"
+    # Networked direct execution is intentionally unsupported in the alpha.
     network: bool = False
     default_timeout_seconds: int = 30
-    max_output_bytes: int = 100 * 1024  # 100 KB
+    max_timeout_seconds: int = 900
+    max_output_bytes: int = 100 * 1024  # synchronous stdout/stderr cap
+    max_job_log_bytes: int = 10 * 1024 * 1024  # per stream, async jobs
 
 
 class Config:
@@ -68,23 +69,30 @@ class Config:
         self.workspaces: dict[str, dict[str, Any]] = {}
         self.api_key: str = ""
 
-        # Initialize directories and load configurations
         self._ensure_dirs()
         self._load_config_file()
         self._load_workspaces_file()
         self._load_or_generate_api_key()
 
+    @staticmethod
+    def _ensure_private_dir(path: Path) -> None:
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            os.chmod(path, 0o700)
+        except OSError:
+            logger.warning("Could not set private permissions on %s", path)
+
     def _ensure_dirs(self) -> None:
-        """Create config and state directories if they don't exist."""
-        self.config_dir.mkdir(parents=True, exist_ok=True)
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        (self.state_dir / "jobs").mkdir(parents=True, exist_ok=True)
-        (self.state_dir / "logs").mkdir(parents=True, exist_ok=True)
-        (self.state_dir / "etc").mkdir(parents=True, exist_ok=True)
+        """Create config/state directories with private permissions."""
+        self._ensure_private_dir(self.config_dir)
+        self._ensure_private_dir(self.state_dir)
+        self._ensure_private_dir(self.cache_dir)
+        self._ensure_private_dir(self.state_dir / "jobs")
+        self._ensure_private_dir(self.state_dir / "logs")
+        self._ensure_private_dir(self.state_dir / "etc")
 
     def _load_config_file(self) -> None:
-        """Load server options from config.yaml if present."""
+        """Load server/security/sandbox options from config.yaml if present."""
         config_file = self.config_dir / "config.yaml"
         if not config_file.is_file():
             return
@@ -102,31 +110,56 @@ class Config:
                 self.server.name = str(srv["name"])
 
             sec = data.get("security", {})
+            auth_mode = sec.get("auth", "api_key")
+            if auth_mode != "api_key":
+                raise ValueError("Only security.auth='api_key' is supported")
             if "header_name" in sec:
                 self.security.header_name = str(sec["header_name"])
             if "legacy_header_name" in sec:
-                self.security.legacy_header_name = str(sec["legacy_header_name"])
+                self.security.legacy_header_name = str(sec["legacy_header_name"] or "")
             if "allowed_hosts" in sec and isinstance(sec["allowed_hosts"], list):
                 self.security.allowed_hosts = [str(h) for h in sec["allowed_hosts"]]
             if "rate_limit" in sec and isinstance(sec["rate_limit"], dict):
                 rl = sec["rate_limit"]
-                self.security.rate_limit_max_requests = int(rl.get("max_requests", self.security.rate_limit_max_requests))
-                self.security.rate_limit_window_seconds = float(rl.get("window_seconds", self.security.rate_limit_window_seconds))
+                self.security.rate_limit_max_requests = int(
+                    rl.get("max_requests", self.security.rate_limit_max_requests)
+                )
+                self.security.rate_limit_window_seconds = float(
+                    rl.get("window_seconds", self.security.rate_limit_window_seconds)
+                )
             if "max_payload_bytes" in sec:
                 self.security.max_payload_bytes = int(sec["max_payload_bytes"])
 
             sbx = data.get("sandbox", {})
             if "backend" in sbx:
                 self.sandbox.backend = str(sbx["backend"])
+            if self.sandbox.backend != "bubblewrap":
+                raise ValueError("Only sandbox.backend='bubblewrap' is currently supported")
             if "network" in sbx:
                 self.sandbox.network = bool(sbx["network"])
+            if self.sandbox.network:
+                raise ValueError("Direct-execution network access is not supported; set sandbox.network=false")
             if "default_timeout_seconds" in sbx:
                 self.sandbox.default_timeout_seconds = int(sbx["default_timeout_seconds"])
+            if "max_timeout_seconds" in sbx:
+                self.sandbox.max_timeout_seconds = int(sbx["max_timeout_seconds"])
             if "max_output_bytes" in sbx:
                 self.sandbox.max_output_bytes = int(sbx["max_output_bytes"])
+            if "max_job_log_bytes" in sbx:
+                self.sandbox.max_job_log_bytes = int(sbx["max_job_log_bytes"])
+
+            if self.sandbox.default_timeout_seconds <= 0:
+                raise ValueError("sandbox.default_timeout_seconds must be > 0")
+            if self.sandbox.max_timeout_seconds < self.sandbox.default_timeout_seconds:
+                raise ValueError("sandbox.max_timeout_seconds must be >= default_timeout_seconds")
+            if self.sandbox.max_output_bytes <= 0 or self.sandbox.max_job_log_bytes <= 0:
+                raise ValueError("sandbox output limits must be > 0")
+            if self.security.max_payload_bytes <= 0:
+                raise ValueError("security.max_payload_bytes must be > 0")
 
         except Exception as e:
-            logger.warning("Failed to load config file %s: %s", config_file, e)
+            # Invalid security configuration must fail closed rather than be silently ignored.
+            raise ValueError(f"Failed to load config file {config_file}: {e}") from e
 
     def _load_workspaces_file(self) -> None:
         """Load registered workspaces from workspaces.yaml or config.yaml."""
@@ -138,21 +171,17 @@ class Config:
                 self.workspaces = data.get("workspaces", {})
                 return
             except Exception as e:
-                logger.warning("Failed to parse %s: %s", ws_file, e)
+                raise ValueError(f"Failed to parse {ws_file}: {e}") from e
 
-        # Fallback to workspaces key in config.yaml
         config_file = self.config_dir / "config.yaml"
         if config_file.is_file():
-            try:
-                with open(config_file, "r", encoding="utf-8") as f:
-                    data = yaml.safe_load(f) or {}
-                self.workspaces = data.get("workspaces", {})
-            except Exception:
-                pass
+            with open(config_file, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            self.workspaces = data.get("workspaces", {})
 
     def _load_or_generate_api_key(self) -> None:
-        """Retrieve API key from env or secrets.env, generating one if absent."""
-        env_key = os.environ.get("AGENTPORTER_API_KEY") or os.environ.get("M3_MCP_KEY")
+        """Retrieve AgentPorter API key from env or secrets.env, generating one if absent."""
+        env_key = os.environ.get("AGENTPORTER_API_KEY")
         if env_key:
             self.api_key = env_key.strip()
             return
@@ -160,31 +189,22 @@ class Config:
         secrets_file = self.config_dir / "secrets.env"
         if secrets_file.is_file():
             try:
-                with open(secrets_file, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith("AGENTPORTER_API_KEY="):
-                            self.api_key = line.split("=", 1)[1].strip()
+                os.chmod(secrets_file, 0o600)
+            except OSError:
+                logger.warning("Could not enforce 0600 on %s", secrets_file)
+            with open(secrets_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("AGENTPORTER_API_KEY="):
+                        self.api_key = line.split("=", 1)[1].strip()
+                        if self.api_key:
                             return
-                        elif line.startswith("M3_MCP_KEY="):
-                            self.api_key = line.split("=", 1)[1].strip()
-                            return
-                        elif line and not line.startswith("#") and "=" not in line:
-                            self.api_key = line
-                            return
-            except Exception as e:
-                logger.warning("Could not read secrets file %s: %s", secrets_file, e)
+            raise ValueError(f"{secrets_file} exists but contains no AGENTPORTER_API_KEY")
 
-        # Generate a new random 32-byte key
         new_key = secrets.token_urlsafe(32)
-        try:
-            with open(secrets_file, "w", encoding="utf-8") as f:
-                f.write(f"# AgentPorter generated API key\n")
-                f.write(f"AGENTPORTER_API_KEY={new_key}\n")
-                f.write(f"M3_MCP_KEY={new_key}\n")
-            os.chmod(secrets_file, 0o600)
-            logger.info("Generated new API key at %s (mode 0600)", secrets_file)
-        except Exception as e:
-            logger.error("Failed to write secrets file %s: %s", secrets_file, e)
-
+        fd = os.open(secrets_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("# AgentPorter generated API key\n")
+            f.write(f"AGENTPORTER_API_KEY={new_key}\n")
         self.api_key = new_key
+        logger.info("Generated new API key at %s (mode 0600)", secrets_file)

@@ -16,7 +16,7 @@ logger = logging.getLogger("agentporter.agents.broker")
 
 
 class AgentBroker:
-    """Manages agent discovery, health inspection, and asynchronous delegation."""
+    """Manages agent discovery, capability enforcement, and asynchronous delegation."""
 
     def __init__(self, workspace_registry: WorkspaceRegistry, job_manager: JobManager):
         self.workspace_registry = workspace_registry
@@ -32,26 +32,30 @@ class AgentBroker:
         self.adapters[adapter.name.lower()] = adapter
 
     def list_agents(self) -> list[dict]:
-        """List available CLI agent workers, distinguishing configured/default routing from actual model."""
+        """List installed/known CLI workers without claiming unverified runtime models."""
         results = []
         for key, adapter in self.adapters.items():
             detection = adapter.detect()
+            configured_model = detection.get("configured_model") or "unknown"
+            reasoning = detection.get("reasoning_effort") or "unknown"
+            provider = detection.get("provider") or adapter.provider or "unknown"
             results.append({
                 "agent": key,
                 "worker_cli": key,
-                "alias": adapter.alias,
-                "provider": detection["provider"],
-                "configured_model": detection["configured_model"],
-                "default_routing": f"{detection['provider']} -> {detection['configured_model']}",
-                "actual_model_used": "unknown (resolved at runtime per dispatch)",
-                "reasoning_level": detection["reasoning_effort"],
-                "cli_version": detection["cli_version"],
-                "available": detection["is_installed"],
+                "alias": adapter.alias or key,
+                "provider": provider,
+                "configured_model": configured_model,
+                "default_routing": f"{provider} -> {configured_model}",
+                "actual_model_used": "unknown (resolved only from trusted runtime metadata)",
+                "reasoning_level": reasoning,
+                "cli_version": detection.get("cli_version", "unknown"),
+                "available": bool(detection.get("is_installed")),
                 "capabilities": adapter.capabilities(),
                 "description": adapter.description,
-                "isolation_note": "Runs with host user credentials; scoped by cwd and control block.",
-                "effective_model": detection["configured_model"],
-                "default_model": detection["configured_model"],
+                "isolation_note": "Runs with host user credentials; not kernel-isolated by AgentPorter.",
+                "supports_read_only": adapter.supports_read_only,
+                "supports_model_override": adapter.supports_model_override,
+                "supports_reasoning_override": adapter.supports_reasoning_override,
             })
         return results
 
@@ -64,82 +68,112 @@ class AgentBroker:
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
     ) -> dict:
-        """Dispatch an authorized worker agent asynchronously."""
+        """Dispatch an authorized worker agent asynchronously with enforceable controls."""
         agent_key = agent.lower().strip()
         if agent_key not in self.adapters:
-            raise ValueError(f"Unknown agent: '{agent}'. Authorized agents: {list(self.adapters.keys())}")
+            raise ValueError(
+                f"Unknown agent: '{agent}'. Authorized agents: {list(self.adapters.keys())}"
+            )
 
         adapter = self.adapters[agent_key]
         detection = adapter.detect()
-        if not detection["is_installed"]:
+        if not detection.get("is_installed"):
             raise RuntimeError(f"Agent '{agent_key}' is not installed or available on host")
 
         ws = self.workspace_registry.get(workspace_id)
-        ws_path = ws.path
+        if not ws.allow_agent_dispatch:
+            raise PermissionError(f"Workspace '{workspace_id}' does not allow agent dispatch")
+        if not ws.writable and not adapter.supports_read_only:
+            raise PermissionError(
+                f"Agent '{agent_key}' cannot be dispatched to read-only workspace "
+                f"'{workspace_id}' because this adapter cannot enforce read-only execution"
+            )
+        if model and not adapter.supports_model_override:
+            raise ValueError(f"Agent '{agent_key}' does not support enforceable model override")
+        if reasoning_effort and not adapter.supports_reasoning_override:
+            raise ValueError(f"Agent '{agent_key}' does not support enforceable reasoning override")
 
-        # Preflight git check
+        configured_model = detection.get("configured_model") or "unknown"
+        configured_reasoning = detection.get("reasoning_effort") or "unknown"
+        provider = detection.get("provider") or adapter.provider or "unknown"
+        cli_ver = detection.get("cli_version", "unknown")
+
         git_clean = True
-        git_dir = os.path.join(ws_path, ".git")
+        git_dir = os.path.join(ws.path, ".git")
         if os.path.exists(git_dir):
             try:
-                res = subprocess.run(["git", "status", "--short"], cwd=ws_path, capture_output=True, text=True, timeout=5)
-                if res.stdout.strip():
-                    git_clean = False
+                env = os.environ.copy()
+                env.update({
+                    "GIT_CONFIG_NOSYSTEM": "1",
+                    "GIT_CONFIG_GLOBAL": "/dev/null",
+                    "GIT_OPTIONAL_LOCKS": "0",
+                    "GIT_PAGER": "cat",
+                    "GIT_EXTERNAL_DIFF": "",
+                })
+                res = subprocess.run(
+                    ["git", "-c", "core.fsmonitor=false", "status", "--short"],
+                    cwd=ws.path,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    env=env,
+                )
+                git_clean = not bool(res.stdout.strip())
             except Exception:
                 pass
 
-        effective_model = model or detection["configured_model"]
-        effective_effort = reasoning_effort or detection["reasoning_effort"]
-        cli_ver = detection["cli_version"]
-        provider = detection["provider"]
-
-        # Structured control packet
         packet = (
-            f"Permission Level: 1\n"
-            f"Interaction Mode: AUTONOMOUS\n"
+            "Permission Level: 1\n"
+            "Interaction Mode: AUTONOMOUS\n"
             f"Authorization: {'MAY MODIFY FILES WITHIN SCOPE' if ws.writable else 'READ-ONLY'}\n"
-            f"Step budget: 30\n"
-            f"Project Root: {ws_path}\n"
+            "Step budget: 30\n"
+            f"Project Root: {ws.path}\n"
             f"Purpose: {purpose or 'Worker delegation via AgentPorter'}\n"
             f"Task:\n{task}\n"
         )
 
+        # Only explicit caller overrides are passed as overrides. Local CLI defaults/config
+        # remain "configured", not misreported as a request made by AgentPorter.
+        requested_model = (model or "").strip()
+        requested_reasoning = (reasoning_effort or "").strip()
+
         cmd = adapter.build_argv(
-            workspace_path=ws_path,
+            workspace_path=ws.path,
             packet=packet,
-            model=effective_model,
-            reasoning_effort=effective_effort
+            model=requested_model,
+            reasoning_effort=requested_reasoning,
+            writable=ws.writable,
         )
 
         job_id = self.job_manager.start_raw_job(
             workspace_id=workspace_id,
-            workspace_path=ws_path,
+            workspace_path=ws.path,
             cmd=cmd,
             agent=agent_key,
             provider=provider,
-            model=effective_model,
-            requested_model=effective_model,
-            reasoning_level=effective_effort,
+            model=configured_model,
+            requested_model=requested_model,
+            reasoning_level=requested_reasoning or configured_reasoning,
             cli_version=cli_ver,
-            timeout_seconds=900
+            timeout_seconds=900,
         )
 
         return {
             "worker_cli": agent_key,
             "provider": provider,
-            "requested_model": effective_model,
+            "configured_model": configured_model,
+            "requested_model": requested_model,
             "actual_model": "unknown",
-            "reasoning_level": effective_effort,
+            "reasoning_level": requested_reasoning or configured_reasoning,
             "cli_version": cli_ver,
             "job_id": job_id,
             "exit_status": None,
             "duration": 0.0,
-            # Backward compatibility fields
             "status": "running",
             "selected_agent": agent_key,
-            "alias": adapter.alias,
-            "model": effective_model,
-            "thinking_level": effective_effort,
+            "alias": adapter.alias or agent_key,
+            "model": configured_model,
+            "thinking_level": requested_reasoning or configured_reasoning,
             "workspace_id": workspace_id,
             "git_clean_at_dispatch": git_clean,
         }

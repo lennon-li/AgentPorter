@@ -14,6 +14,9 @@ from agentporter.tools.agents import create_agent_tools
 from agentporter.tools.jobs import JobManager
 from agentporter.sandbox.bubblewrap import BubblewrapSandbox
 from agentporter.agents.broker import AgentBroker
+from agentporter.agents.adapters.base import AgentAdapter
+from agentporter.workspaces.registry import WorkspaceRegistry
+from tests._support import BWRAP_USABLE
 
 
 def test_capabilities_and_workspace_info(workspace_registry, tmp_path: Path):
@@ -22,7 +25,7 @@ def test_capabilities_and_workspace_info(workspace_registry, tmp_path: Path):
 
     caps = get_caps()
     assert "supported_tools" in caps
-    assert "bubblewrap_0.9.0" in caps["sandbox"]
+    assert caps["sandbox"]["backend"] == "bubblewrap"
 
     workspaces = list_ws()
     assert any(w["workspace_id"] == "test-ws" for w in workspaces)
@@ -47,6 +50,12 @@ def test_file_operations(workspace_registry):
 
     hits = search_text("test-ws", "compute_mean")
     assert len(hits) >= 2
+
+    # Search must not bypass sensitive-path protections.
+    secret = workspace_registry.get("test-ws").path + "/credential.key"
+    Path(secret).write_text("SEARCH_BYPASS_SENTINEL=do-not-leak")
+    leaked = search_text("test-ws", "SEARCH_BYPASS_SENTINEL")
+    assert leaked == []
 
     # Ranged read
     read_res = read_file("test-ws", "README.md", start_line=1, end_line=2)
@@ -98,7 +107,7 @@ def test_file_operations(workspace_registry):
         apply_patch("test-ws", malicious_patch)
 
 
-@pytest.mark.skipif(not shutil.which("bwrap") or not shutil.which("Rscript"), reason="bwrap or Rscript not available")
+@pytest.mark.skipif(not BWRAP_USABLE or not shutil.which("Rscript"), reason="bwrap or Rscript not available")
 def test_r_execution_and_tests(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     job_mgr = JobManager(tmp_path / "state")
@@ -111,7 +120,7 @@ def test_r_execution_and_tests(workspace_registry, tmp_path: Path):
     assert 31.83 <= val <= 31.84
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_python_execution_and_tests(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     job_mgr = JobManager(tmp_path / "state")
@@ -124,7 +133,7 @@ def test_python_execution_and_tests(workspace_registry, tmp_path: Path):
     assert 31.83 <= val <= 31.84
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_bash_sandbox_execution(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     job_mgr = JobManager(tmp_path / "state")
@@ -136,8 +145,10 @@ def test_bash_sandbox_execution(workspace_registry, tmp_path: Path):
     assert "phase 2" in res["stdout"]
 
 
-def test_git_inspection(workspace_registry):
-    git_status, git_diff, git_log, git_show = create_git_tools(workspace_registry)
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
+def test_git_inspection(workspace_registry, tmp_path: Path):
+    sandbox = BubblewrapSandbox(tmp_path / "state")
+    git_status, git_diff, git_log, git_show = create_git_tools(workspace_registry, sandbox)
 
     st = git_status("test-ws")
     assert "Clean working tree" in st or "master" in st or "main" in st
@@ -159,7 +170,10 @@ def test_local_http_tool(workspace_registry):
     with pytest.raises(ValueError, match="Invalid port number"):
         local_http("test-ws", port=99999)
 
-    # Valid port but no listener running
+    with pytest.raises(PermissionError, match="not allowed"):
+        local_http("test-ws", port=54322)
+
+    # Explicitly allowed port, but no listener is running.
     res = local_http("test-ws", port=54321)
     assert "error" in res
 
@@ -184,7 +198,7 @@ def test_artifact_tools(workspace_registry):
     assert img_art["mime_type"] == "image/png"
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_async_job_lifecycle(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     job_mgr = JobManager(tmp_path / "state")
@@ -206,7 +220,7 @@ def test_async_job_lifecycle(workspace_registry, tmp_path: Path):
     assert "async job finished" in res["stdout"]
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_async_job_cancel(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     job_mgr = JobManager(tmp_path / "state")
@@ -237,29 +251,80 @@ def test_agent_broker_listing(workspace_registry, tmp_path: Path):
         assert "configured_model" in ag
         assert "actual_model_used" in ag
         assert "cli_version" in ag
-        assert ag["actual_model_used"] == "unknown (resolved at runtime per dispatch)"
+        assert ag["actual_model_used"] == "unknown (resolved only from trusted runtime metadata)"
+
+
+class _FakeAgent(AgentAdapter):
+    name = "fake"
+    alias = "Fake"
+    provider = "Test"
+    description = "test adapter"
+    supports_read_only = True
+    supports_model_override = True
+    supports_reasoning_override = True
+
+    def detect(self):
+        return {
+            "executable": "python3",
+            "is_installed": True,
+            "cli_version": "1.0.0",
+            "provider": self.provider,
+            "configured_model": "configured-test-model",
+            "reasoning_effort": "medium",
+        }
+
+    def capabilities(self):
+        return ["verification"]
+
+    def build_argv(
+        self, workspace_path, packet, model="", reasoning_effort="", writable=True
+    ):
+        return ["python3", "-c", "print('fake worker completed')"]
 
 
 def test_dispatch_agent_telemetry(workspace_registry, tmp_path: Path):
     job_mgr = JobManager(tmp_path / "state")
     broker = AgentBroker(workspace_registry, job_mgr)
-    list_ag, dispatch_ag = create_agent_tools(broker)
+    broker.register_adapter(_FakeAgent())
 
-    res = dispatch_ag(
-        agent="codex",
+    res = broker.dispatch_agent(
+        agent="fake",
         task="echo test",
         workspace_id="test-ws",
-        purpose="unit test"
+        purpose="unit test",
+        model="requested-test-model",
+        reasoning_effort="high",
     )
 
-    assert res["worker_cli"] == "codex"
-    assert res["provider"] == "OpenAI"
-    assert res["requested_model"]
+    assert res["worker_cli"] == "fake"
+    assert res["provider"] == "Test"
+    assert res["configured_model"] == "configured-test-model"
+    assert res["requested_model"] == "requested-test-model"
     assert res["actual_model"] == "unknown"
-    assert res["reasoning_level"]
-    assert res["cli_version"] != "unknown"
+    assert res["reasoning_level"] == "high"
     assert res["job_id"].startswith("job_")
-    assert res["exit_status"] is None
-    assert res["duration"] == 0.0
 
-    job_mgr.cancel(res["job_id"])
+    for _ in range(50):
+        st = job_mgr.get_status(res["job_id"])
+        if st["status"] != "running":
+            break
+        time.sleep(0.02)
+    assert st["status"] == "completed"
+    assert st["requested_model"] == "requested-test-model"
+    assert st["configured_model"] == "configured-test-model"
+    assert st["actual_model"] == "unknown"
+
+
+def test_read_only_worker_must_be_enforceable(sample_workspace, tmp_path: Path):
+    reg = WorkspaceRegistry()
+    reg.register("ro", str(sample_workspace), writable=False, allow_agent_dispatch=True)
+    job_mgr = JobManager(tmp_path / "state")
+    broker = AgentBroker(reg, job_mgr)
+
+    class UnsafeFake(_FakeAgent):
+        name = "unsafe"
+        supports_read_only = False
+
+    broker.register_adapter(UnsafeFake())
+    with pytest.raises(PermissionError, match="cannot enforce read-only"):
+        broker.dispatch_agent("unsafe", "review only", "ro")
