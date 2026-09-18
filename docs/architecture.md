@@ -1,74 +1,70 @@
 # AgentPorter Architecture
 
-## 1. System Overview
-
-AgentPorter is an MCP gateway designed to provide AI orchestration clients (such as Microsoft Copilot Studio, Claude Desktop, or custom MCP agents) with safe, auditable access to local development workspaces.
+AgentPorter is a local-first MCP gateway between AI clients and controlled
+development capabilities.
 
 ```text
-┌────────────────────────────────────────────────────────┐
-│                   MCP Client Application               │
-│          (Copilot Studio, Claude Desktop, etc.)        │
-└───────────────────────────┬────────────────────────────┘
-                            │ HTTPS / Streamable HTTP
-                            │ (Header Auth: X-AgentPorter-Key / X-M3-MCP-Key)
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│                  AgentPorter Server                    │
-│                                                        │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │              Security Middleware                 │  │
-│  │   • Host Validation    • API-Key Auth (HMAC)     │  │
-│  │   • Rate Limiting      • Payload Ceiling         │  │
-│  └──────────────────────────┬───────────────────────┘  │
-│                             ▼                          │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │                 Tool Routers                     │  │
-│  │  • System/Workspace    • Files & Search          │  │
-│  │  • Git Inspection      • Artifacts               │  │
-│  │  • Execution & Jobs    • Agent Broker            │  │
-│  └──────────────┬──────────────────────┬────────────┘  │
-└─────────────────┼──────────────────────┼───────────────┘
-                  │                      │
-       Direct Code Execution      Worker Agent Dispatch
-                  │                      │
-                  ▼                      ▼
-    ┌────────────────────────┐  ┌────────────────────────┐
-    │   Bubblewrap Sandbox   │  │   Agent Adapter CLI    │
-    │                        │  │                        │
-    │ • Zero network access  │  │ • Runs as host user    │
-    │ • Cleaned environment  │  │ • Accesses auth tokens │
-    │ • Read-only system OS  │  │ • Scoped by directory  │
-    │ • Workspace RW/RO      │  │ • Structured telemetry │
-    └────────────────────────┘  └────────────────────────┘
+MCP client
+   |
+   v
+HTTP security boundary
+   |
+   +--> workspace file/search tools
+   +--> bounded Git/artifact tools
+   +--> direct execution --> Bubblewrap sandbox
+   +--> loopback HTTP --> explicit per-workspace port allowlist
+   +--> worker broker --> host-user CLI adapter
 ```
 
----
+## Workspaces
 
-## 2. Core Subsystems
+Clients never supply arbitrary host roots. They select a registered
+`workspace_id`. Each workspace has a local path plus independent capability
+flags for execution, Git, artifacts, worker dispatch, and loopback ports.
+`writable` controls file mutation and the direct sandbox mount mode.
 
-### A. Workspaces (`src/agentporter/workspaces/`)
-Instead of allowing arbitrary filesystem paths, clients reference registered workspace identifiers (e.g. `workspace_id: "analytics"`).
-- `registry.py`: Loads workspace definitions from local configuration.
-- `paths.py`: Normalizes project-relative paths, prevents path traversal (`..`), detects symlink escapes outside the workspace root, and blocks access to sensitive directories (`.git`, `.ssh`, `.env`, keyfiles).
+File paths are project-relative and validated against traversal, symlink escape,
+and sensitive-path rules. Text search applies the same disclosure boundary.
 
-### B. Sandboxed Execution (`src/agentporter/sandbox/`)
-Arbitrary script execution presents significant risk (subshells, network exfiltration, credential harvesting).
-- `base.py`: Defines the `SandboxBackend` abstract interface.
-- `bubblewrap.py`: Linux `bwrap` unprivileged namespace isolation:
-  - `--unshare-all`, `--unshare-net` (no outbound networking).
-  - Memory `/tmpfs` for temporary files.
-  - Mounts target workspace at `/workspace`.
-  - Synthetic `/etc/passwd` and `/etc/group`.
-  - `--clearenv` to scrub all host secrets.
+## Direct execution
 
-### C. Asynchronous Jobs (`src/agentporter/tools/jobs.py`)
-Long-running commands (e.g. test suites or agent reviews) run asynchronously.
-- Backed by an SQLite database (`jobs.db`) located in `$XDG_STATE_HOME/agentporter/`.
-- Non-blocking execution with process groups for reliable SIGTERM/SIGKILL termination.
-- Incremental output cursors for log streaming.
+`exec_run` and `exec_start` use Bubblewrap with:
 
-### D. Agent Broker & Adapters (`src/agentporter/agents/`)
-Specialized AI coding assistants (Codex, Claude, OpenCode, Agy) are integrated via clean adapter contracts.
-- `broker.py`: Handles agent listing, preflight checks, control packet creation, and dispatch.
-- `adapters/`: Individual CLI wrappers that handle CLI arguments, configuration parsing, and model/version detection.
-- Provenance telemetry records worker CLI, provider, requested model, actual model, reasoning level, CLI version, and duration.
+- no network;
+- cleared environment;
+- private `/tmp`;
+- omitted host home/credential locations;
+- workspace mounted RW or RO;
+- bounded time/output.
+
+Async jobs use a private SQLite/log state directory and enforce per-stream log
+limits.
+
+## Worker adapters
+
+Worker CLIs are intentionally separate from direct execution. They run as the
+host user so they can access their provider credentials and network.
+
+Adapters declare which controls they can enforce:
+
+- read-only execution;
+- model override;
+- reasoning override.
+
+The broker rejects a request when the requested security/control property
+cannot actually be enforced. Personal aliases and preferred model routing are
+local deployment concerns, not package defaults.
+
+## Runtime provenance
+
+Configured routing, explicit requested overrides, and verified actual runtime
+model are distinct fields. Worker stdout/stderr is untrusted and cannot prove
+which model executed a job. Until an adapter has a trusted provenance channel,
+`actual_model` is `unknown`.
+
+## Package/local boundary
+
+Generic source lives in this repository. Machine-specific workspace
+registrations, credentials, runtime state, provider routing, and client-specific
+deployment policy live outside the package under local configuration/state or a
+separate private deployment repository.
