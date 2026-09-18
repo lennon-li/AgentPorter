@@ -19,6 +19,8 @@ def test_config_generates_api_key_and_private_paths(tmp_path: Path):
     assert oct(secrets_file.stat().st_mode & 0o777) == "0o600"
     assert oct((tmp_path / "cfg").stat().st_mode & 0o777) == "0o700"
     assert oct((tmp_path / "st").stat().st_mode & 0o777) == "0o700"
+    assert cfg.security.legacy_header_name == ""
+    assert not any("trycloudflare" in host for host in cfg.security.allowed_hosts)
 
 
 def test_config_custom_workspaces(tmp_path: Path):
