@@ -15,6 +15,8 @@ from agentporter.tools.jobs import JobManager
 from agentporter.sandbox.bubblewrap import BubblewrapSandbox
 from agentporter.agents.broker import AgentBroker
 from agentporter.agents.adapters.base import AgentAdapter
+from agentporter.workspaces.registry import WorkspaceRegistry
+from tests._support import BWRAP_USABLE
 
 
 def test_capabilities_and_workspace_info(workspace_registry, tmp_path: Path):
@@ -105,7 +107,7 @@ def test_file_operations(workspace_registry):
         apply_patch("test-ws", malicious_patch)
 
 
-@pytest.mark.skipif(not shutil.which("bwrap") or not shutil.which("Rscript"), reason="bwrap or Rscript not available")
+@pytest.mark.skipif(not BWRAP_USABLE or not shutil.which("Rscript"), reason="bwrap or Rscript not available")
 def test_r_execution_and_tests(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     job_mgr = JobManager(tmp_path / "state")
@@ -118,7 +120,7 @@ def test_r_execution_and_tests(workspace_registry, tmp_path: Path):
     assert 31.83 <= val <= 31.84
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_python_execution_and_tests(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     job_mgr = JobManager(tmp_path / "state")
@@ -131,7 +133,7 @@ def test_python_execution_and_tests(workspace_registry, tmp_path: Path):
     assert 31.83 <= val <= 31.84
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_bash_sandbox_execution(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     job_mgr = JobManager(tmp_path / "state")
@@ -143,7 +145,7 @@ def test_bash_sandbox_execution(workspace_registry, tmp_path: Path):
     assert "phase 2" in res["stdout"]
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_git_inspection(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     git_status, git_diff, git_log, git_show = create_git_tools(workspace_registry, sandbox)
@@ -196,7 +198,7 @@ def test_artifact_tools(workspace_registry):
     assert img_art["mime_type"] == "image/png"
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_async_job_lifecycle(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     job_mgr = JobManager(tmp_path / "state")
@@ -218,7 +220,7 @@ def test_async_job_lifecycle(workspace_registry, tmp_path: Path):
     assert "async job finished" in res["stdout"]
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_async_job_cancel(workspace_registry, tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     job_mgr = JobManager(tmp_path / "state")
