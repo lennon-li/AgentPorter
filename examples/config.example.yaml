@@ -1,5 +1,5 @@
 # AgentPorter Server Configuration Example
-# Place active configurations in: ~/.config/agentporter/config.yaml
+# Copy to ~/.config/agentporter/config.yaml and customize locally.
 
 server:
   host: "127.0.0.1"
@@ -8,37 +8,25 @@ server:
 
 security:
   auth: "api_key"
-  # Primary header for API key authentication
   header_name: "X-AgentPorter-Key"
-  # Legacy header name accepted for compatibility
-  legacy_header_name: "X-M3-MCP-Key"
-  # Allowed hosts for DNS rebinding protection
+  # Client-specific compatibility headers are opt-in, for example:
+  # legacy_header_name: "X-Your-Existing-Header"
   allowed_hosts:
     - "127.0.0.1"
     - "127.0.0.1:*"
     - "localhost"
     - "localhost:*"
-    - "*.trycloudflare.com"
-    - "*.trycloudflare.com:*"
+  # When you intentionally expose AgentPorter through a tunnel, add only the
+  # specific tunnel hostname you control instead of a broad wildcard.
   rate_limit:
     max_requests: 120
     window_seconds: 60.0
-  max_payload_bytes: 10485760  # 10 MB
+  max_payload_bytes: 10485760
 
 sandbox:
   backend: "bubblewrap"
   network: false
   default_timeout_seconds: 30
-  max_output_bytes: 102400  # 100 KB
-
-agents:
-  enabled: true
-  adapters:
-    codex:
-      enabled: true
-    claude:
-      enabled: true
-    opencode:
-      enabled: true
-    agy:
-      enabled: true
+  max_timeout_seconds: 900
+  max_output_bytes: 102400
+  max_job_log_bytes: 10485760
