@@ -118,7 +118,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         _apply_patch, _mkdir, _move_path, _trash_path
     ) = create_file_tools(registry)
     _exec_run, _exec_start = create_execution_tools(registry, sandbox, job_manager)
-    _git_status, _git_diff, _git_log, _git_show = create_git_tools(registry)
+    _git_status, _git_diff, _git_log, _git_show = create_git_tools(registry, sandbox)
     _list_artifacts, _read_artifact = create_artifact_tools(registry)
     _local_http_request = create_local_http_tool(registry)
     _list_agents, _dispatch_agent = create_agent_tools(agent_broker)
