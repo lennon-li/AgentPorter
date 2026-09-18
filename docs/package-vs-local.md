@@ -21,7 +21,7 @@
 
 ## 2. Package Scope (What Goes in Git)
 
-The GitHub repository `lennon-li/AgentPorter` contains exclusively:
+The repository contains exclusively:
 
 1. **Python Source Code (`src/agentporter/`)**:
    - Generic MCP tool implementations (`files`, `git`, `execution`, `jobs`, `artifacts`, `local_http`, `agents`).
@@ -29,7 +29,7 @@ The GitHub repository `lennon-li/AgentPorter` contains exclusively:
    - Abstract worker-agent adapter contracts (`codex`, `claude`, `opencode`, `agy`).
    - Authentication and security middleware (constant-time API key verification, host validation, rate limiting).
    - Provenance telemetry extractors.
-   - CLI command definitions (`agentporter serve`, `doctor`, etc.).
+   - CLI command definitions (`agentporter serve`, `doctor`, `key`, etc.).
 
 2. **Packaging & Tooling**:
    - `pyproject.toml`, `.gitignore`, build specifications.
@@ -44,9 +44,9 @@ The GitHub repository `lennon-li/AgentPorter` contains exclusively:
 
 ### Strict Negative Invariants: What MUST NEVER Enter the Package
 
-- ❌ Host API keys or bearer tokens (`M3_MCP_KEY`, `AGENTPORTER_API_KEY`).
-- ❌ Cloudflare Quick Tunnel credentials, domains, or PID files.
-- ❌ Hardcoded `/home/yeli` or user-specific home paths.
+- ❌ Host API keys or bearer tokens.
+- ❌ Tunnel credentials, domains, or token strings.
+- ❌ Hardcoded usernames, home paths, or private hostnames.
 - ❌ Real workspace registrations containing private paths.
 - ❌ Host SSH keys (`id_rsa`, `id_ed25519`, `known_hosts`).
 - ❌ LLM CLI provider auth tokens or caches (`~/.codex`, `~/.claude`, `~/.config/opencode`).
@@ -55,9 +55,9 @@ The GitHub repository `lennon-li/AgentPorter` contains exclusively:
 
 ---
 
-## 3. Local Installation Scope (Lennon's Host or Any End User)
+## 3. Local Installation Scope
 
-When installed on a machine (such as `wsl-pho`), AgentPorter conforms to the standard Linux XDG directory conventions:
+When installed on a target host, AgentPorter conforms to the standard Linux XDG directory conventions:
 
 ### Config Directory (`$XDG_CONFIG_HOME/agentporter` or `~/.config/agentporter`)
 
@@ -65,10 +65,10 @@ When installed on a machine (such as `wsl-pho`), AgentPorter conforms to the sta
 - `workspaces.yaml`: Registered workspace IDs mapping to local paths:
   ```yaml
   workspaces:
-    m3-poc:
-      path: /home/yeli/m3-agent-poc
+    sample-project:
+      path: /home/user/projects/sample-project
       writable: true
-      description: "Acceptance test workspace"
+      description: "Development workspace"
   ```
 - `secrets.env`: Permissions `0600`. Contains the generated API authentication key:
   ```env
@@ -89,10 +89,8 @@ When installed on a machine (such as `wsl-pho`), AgentPorter conforms to the sta
 
 ---
 
-## 4. Preservation of Existing M3 Gateway
+## 4. Coexistence with Existing Services
 
-During the bootstrapping and development of AgentPorter:
-- The existing gateway at `~/m3-agent-gateway` remains completely untouched, operating on port 8000.
-- The active Cloudflare tunnel and Copilot Studio connection continue pointing to `~/m3-agent-gateway`.
-- AgentPorter runs independently on a separate port (e.g. 8765) with its own state and configurations.
-- Migration will only occur in a future, explicitly scheduled phase after complete parity acceptance.
+AgentPorter can run alongside other gateways or services without conflict:
+- Runs by default on its own dedicated port (e.g. 8765) with its own XDG state and configuration trees.
+- Keeps sandbox state completely separated from any external processes.
