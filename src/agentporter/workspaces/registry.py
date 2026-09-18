@@ -24,7 +24,7 @@ class WorkspaceRegistry:
                     allow_execute=data.get("allow_execute", True),
                     allow_git=data.get("allow_git", True),
                     allow_artifacts=data.get("allow_artifacts", True),
-                    allow_agent_dispatch=data.get("allow_agent_dispatch", True),
+                    allow_agent_dispatch=data.get("allow_agent_dispatch", False),
                     local_http_ports=data.get("local_http_ports", []),
                 )
 
@@ -37,7 +37,7 @@ class WorkspaceRegistry:
         allow_execute: bool = True,
         allow_git: bool = True,
         allow_artifacts: bool = True,
-        allow_agent_dispatch: bool = True,
+        allow_agent_dispatch: bool = False,
         local_http_ports: Optional[list[int]] = None,
     ) -> None:
         real_path = os.path.realpath(os.path.expanduser(path))
