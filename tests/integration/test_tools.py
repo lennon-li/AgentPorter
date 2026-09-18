@@ -143,8 +143,10 @@ def test_bash_sandbox_execution(workspace_registry, tmp_path: Path):
     assert "phase 2" in res["stdout"]
 
 
-def test_git_inspection(workspace_registry):
-    git_status, git_diff, git_log, git_show = create_git_tools(workspace_registry)
+@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+def test_git_inspection(workspace_registry, tmp_path: Path):
+    sandbox = BubblewrapSandbox(tmp_path / "state")
+    git_status, git_diff, git_log, git_show = create_git_tools(workspace_registry, sandbox)
 
     st = git_status("test-ws")
     assert "Clean working tree" in st or "master" in st or "main" in st
