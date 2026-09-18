@@ -1,6 +1,6 @@
 """Data models and schemas for AgentPorter."""
 
-from typing import Optional, Any
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -9,6 +9,11 @@ class WorkspaceDefinition(BaseModel):
     path: str
     writable: bool = True
     description: str = ""
+    allow_execute: bool = True
+    allow_git: bool = True
+    allow_artifacts: bool = True
+    allow_agent_dispatch: bool = True
+    local_http_ports: list[int] = Field(default_factory=list)
 
 
 class GitContext(BaseModel):
@@ -34,10 +39,11 @@ class JobStatus(BaseModel):
     worker_cli: str
     agent: str
     provider: str
-    requested_model: str
-    actual_model: str
-    reasoning_level: str
-    cli_version: str
+    configured_model: str = ""
+    requested_model: str = ""
+    actual_model: str = "unknown"
+    reasoning_level: str = ""
+    cli_version: str = ""
     status: str
     exit_status: Optional[int] = None
     exit_code: Optional[int] = None
@@ -45,7 +51,7 @@ class JobStatus(BaseModel):
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
     duration: float = 0.0
-    model: str
+    model: str = ""
 
 
 class AgentMetadata(BaseModel):
@@ -55,23 +61,25 @@ class AgentMetadata(BaseModel):
     provider: str
     configured_model: str
     default_routing: str
-    actual_model_used: str = "unknown (resolved at runtime per dispatch)"
+    actual_model_used: str = "unknown (resolved only from trusted runtime metadata)"
     reasoning_level: str
     cli_version: str
     available: bool
     capabilities: list[str] = Field(default_factory=list)
     description: str
-    isolation_note: str = "Runs with host user credentials; scoped by cwd and control block."
-    effective_model: str
-    default_model: str
+    isolation_note: str = "Runs with host user credentials; not kernel-isolated by AgentPorter."
+    supports_read_only: bool = False
+    supports_model_override: bool = False
+    supports_reasoning_override: bool = False
 
 
 class AgentDispatchResult(BaseModel):
     worker_cli: str
     provider: str
-    requested_model: str
+    configured_model: str = ""
+    requested_model: str = ""
     actual_model: str = "unknown"
-    reasoning_level: str
+    reasoning_level: str = ""
     cli_version: str
     job_id: str
     exit_status: Optional[int] = None
@@ -79,7 +87,7 @@ class AgentDispatchResult(BaseModel):
     status: str = "running"
     selected_agent: str
     alias: str
-    model: str
-    thinking_level: str
+    model: str = ""
+    thinking_level: str = ""
     workspace_id: str
     git_clean_at_dispatch: bool
