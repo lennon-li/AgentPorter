@@ -29,3 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Systemd user service unit template (`examples/agentporter.service`).
 - Comprehensive documentation: Architecture, Security Model, Package vs. Local separation, Local Setup, MCP Clients, Copilot Studio integration, and Dogfooding Lessons Learned.
 
+### Changed
+- Added 10 MB maximum file size ceiling to `read_file` to guard against unbounded memory consumption.
+- Enhanced patch header parsing in `apply_patch` to robustly handle git diffs with timestamp and multi-space delimiters.
+- Expanded workspace path sensitive denylist to explicitly protect user shell configuration files (`.bashrc`, `.bash_profile`, `.profile`, `.zshrc`) and `.gnupg`.
+- Genericized author metadata in `pyproject.toml` to contributor collective.
+

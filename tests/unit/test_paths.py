@@ -31,7 +31,8 @@ def test_sensitive_files_blocked(tmp_path: Path):
     for sensitive in [
         ".git/config", ".Git/config", ".ssh/id_rsa", ".SSH/id_rsa",
         ".env", ".ENV", ".env.local", "secrets.env", "SECRETS.ENV",
-        "server.key", "cert.pem"
+        "server.key", "cert.pem",
+        ".bashrc", ".bash_profile", ".profile", ".zshrc", ".gnupg"
     ]:
         with pytest.raises(ValueError, match="sensitive or internal"):
             validate_workspace_path(str(tmp_path), sensitive)

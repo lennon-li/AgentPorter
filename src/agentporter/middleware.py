@@ -1,6 +1,5 @@
 """Security middleware enforcing host validation, rate limits, payload limits, and auth."""
 
-import hashlib
 import logging
 from starlette.types import ASGIApp, Scope, Receive, Send
 from starlette.responses import JSONResponse

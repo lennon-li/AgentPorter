@@ -1,6 +1,7 @@
 """File and search operations scoped to workspaces."""
 
 import os
+import re
 import time
 import shutil
 import hashlib
@@ -76,6 +77,11 @@ def create_file_tools(registry: WorkspaceRegistry):
         if not os.path.isfile(full_path):
             raise FileNotFoundError(f"File not found: '{path}'")
 
+        file_size = os.path.getsize(full_path)
+        max_size = 10 * 1024 * 1024  # 10 MB ceiling
+        if file_size > max_size:
+            raise ValueError(f"File '{path}' exceeds maximum readable size of 10 MB ({file_size} bytes)")
+
         with open(full_path, "rb") as f:
             data = f.read()
 
@@ -148,7 +154,7 @@ def create_file_tools(registry: WorkspaceRegistry):
         has_ab_prefix = False
         for line in patch.splitlines():
             if line.startswith(("--- ", "+++ ")):
-                target_token = line[4:].strip().split("\t", 1)[0]
+                target_token = re.split(r'[\t\s]{2,}|\t', line[4:].strip())[0].strip()
                 if target_token.startswith(("a/", "b/")):
                     clean_target = target_token[2:]
                     has_ab_prefix = True

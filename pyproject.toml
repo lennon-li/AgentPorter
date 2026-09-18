@@ -9,7 +9,7 @@ description = "A secure, local-first MCP gateway for workspace-scoped code execu
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-    { name = "Lennon Li" }
+    { name = "AgentPorter Contributors" }
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

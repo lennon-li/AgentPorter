@@ -34,7 +34,7 @@ def test_capabilities_and_workspace_info(workspace_registry, tmp_path: Path):
     assert info["git"]["is_repo"] is True
 
 
-def test_file_operations(workspace_registry):
+def test_file_operations(workspace_registry, sample_workspace: Path):
     (
         list_files, search_text, read_file, write_file,
         apply_patch, mkdir, move_path, trash_path
@@ -96,6 +96,32 @@ def test_file_operations(workspace_registry):
     )
     with pytest.raises(ValueError, match="sensitive or internal"):
         apply_patch("test-ws", malicious_patch)
+
+    # Patch with timestamp / multi-space delimiters in header
+    timestamp_patch = (
+        "--- README.md  2026-09-18 12:00:00.000000000 +0000\n"
+        "+++ README.md  2026-09-18 12:01:00.000000000 +0000\n"
+        "@@ -1,3 +1,4 @@\n"
+        " # AgentPorter Test Workspace\n"
+        " Patched line here\n"
+        "+Another patched line\n"
+        " Line 2 content\n"
+    )
+    p_ts_res = apply_patch("test-ws", timestamp_patch)
+    assert p_ts_res["status"] == "applied"
+    assert "Another patched line" in read_file("test-ws", "README.md")["content"]
+
+    # Reject reading files exceeding the 10 MB ceiling
+    large_file = sample_workspace / "large_file.dat"
+    with open(large_file, "wb") as f:
+        f.seek(11 * 1024 * 1024)
+        f.write(b"\0")
+    try:
+        with pytest.raises(ValueError, match="exceeds maximum readable size of 10 MB"):
+            read_file("test-ws", "large_file.dat")
+    finally:
+        if large_file.exists():
+            large_file.unlink()
 
 
 @pytest.mark.skipif(not shutil.which("bwrap") or not shutil.which("Rscript"), reason="bwrap or Rscript not available")
