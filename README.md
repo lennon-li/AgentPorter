@@ -92,6 +92,16 @@ agentporter serve --host 127.0.0.1 --port 8765
 
 On initial startup, an API key is generated and stored securely in `~/.config/agentporter/secrets.env` (file mode `0600`).
 
+### 4. Manage API Keys
+
+```bash
+# View active API key and accepted header names
+agentporter key show
+
+# Rotate API key
+agentporter key rotate
+```
+
 ---
 
 ## Documentation

@@ -95,11 +95,16 @@ def test_middleware_rate_limiting():
 def test_middleware_health_endpoint():
     app = create_test_app()
     client = TestClient(app, base_url="http://testserver")
-    # Health endpoint requires valid API key and allowed host
-    resp = client.get("/health", headers={"X-AgentPorter-Key": "valid-key-123"})
+    # Health endpoint succeeds without API key (for public uptime/tunnel probes)
+    resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "healthy"
     assert resp.json()["service"] == "agentporter"
+
+    # Health endpoint still enforces host header validation
+    client_bad_host = TestClient(app, base_url="http://attacker.com")
+    resp_bad = client_bad_host.get("/health")
+    assert resp_bad.status_code == 403
 
 
 def test_middleware_root_path_rewrite():

@@ -21,4 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extensible AI agent broker and adapter framework supporting Codex, Claude Code, OpenCode, and Antigravity.
 - Real-time agent provenance telemetry: distinguishes configured routing from resolved runtime model and reports `"unknown"` when the underlying CLI does not expose it.
 - Minimal CLI entrypoint: `agentporter serve`, `agentporter doctor`, `agentporter workspaces`, `agentporter agents`.
-- Comprehensive documentation: Architecture, Security Model, Package vs. Local separation, Local Setup, MCP Clients, and Copilot Studio integration.
+- Key management CLI commands: `agentporter key show` and `agentporter key rotate`.
+- Public unauthenticated `/health` endpoint for uptime monitoring and tunnel health checks.
+- Transparent root path `/` to `/mcp` rewrite for Microsoft Copilot Studio Streamable HTTP compatibility.
+- Expanded default host whitelist for tunnel providers (`*.devtunnels.ms`, `*.lhr.life`, `*.pinggy.net`, `*.ts.net`) and `ALLOWED_HOSTS` environment variable support.
+- Full test suite covering unit, security, integration, and CLI entrypoints (52 passing tests).
+- Systemd user service unit template (`examples/agentporter.service`).
+- Comprehensive documentation: Architecture, Security Model, Package vs. Local separation, Local Setup, MCP Clients, Copilot Studio integration, and Dogfooding Lessons Learned.
+

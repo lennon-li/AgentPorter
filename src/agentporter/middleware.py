@@ -79,7 +79,13 @@ class SecurityMiddleware:
                 await resp(scope, receive, send)
                 return
 
-        # 4. API Key validation
+        # 4. Health endpoint (publicly accessible for tunnel/uptime probes, protected by host and rate limiting)
+        if scope.get("path") == "/health":
+            resp = JSONResponse({"status": "healthy", "service": "agentporter", "version": "1.0.0"})
+            await resp(scope, receive, send)
+            return
+
+        # 5. API Key validation
         raw_header = headers.get(self.header_bytes)
         if raw_header is None and self.legacy_header_bytes:
             raw_header = headers.get(self.legacy_header_bytes)
@@ -88,12 +94,6 @@ class SecurityMiddleware:
         if not verify_api_key(provided_key, self.api_key):
             self._log_rejection_diagnostic(headers, "invalid_or_missing_key")
             resp = JSONResponse({"error": "Unauthorized: invalid or missing API key header"}, status_code=401)
-            await resp(scope, receive, send)
-            return
-
-        # 5. Health endpoint
-        if scope.get("path") == "/health":
-            resp = JSONResponse({"status": "healthy", "service": "agentporter", "version": "1.0.0"})
             await resp(scope, receive, send)
             return
 

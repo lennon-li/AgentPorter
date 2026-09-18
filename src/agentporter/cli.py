@@ -1,7 +1,9 @@
 """Command-line interface for AgentPorter."""
 
+import os
 import sys
 import shutil
+import secrets
 import subprocess
 import click
 import uvicorn
@@ -130,5 +132,42 @@ def agents(config_dir):
         click.echo()
 
 
+@main.group()
+def key():
+    """Manage AgentPorter API authentication keys."""
+    pass
+
+
+@key.command(name="show")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def key_show(config_dir):
+    """Display the active API key and accepted header names."""
+    cfg = Config(config_dir=config_dir)
+    click.echo(f"Primary Header: {cfg.security.header_name}")
+    click.echo(f"Legacy Header:  {cfg.security.legacy_header_name}")
+    click.echo(f"API Key:        {cfg.api_key}")
+
+
+@key.command(name="rotate")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+@click.option("--yes", "-y", is_flag=True, help="Confirm key rotation without prompt")
+def key_rotate(config_dir, yes):
+    """Rotate the API key and update secrets.env."""
+    if not yes:
+        click.confirm("Are you sure you want to rotate the API key? Existing clients will be disconnected.", abort=True)
+    cfg = Config(config_dir=config_dir)
+    new_key = secrets.token_urlsafe(32)
+    secrets_file = cfg.config_dir / "secrets.env"
+    cfg.config_dir.mkdir(parents=True, exist_ok=True)
+    with open(secrets_file, "w", encoding="utf-8") as f:
+        f.write("# AgentPorter generated API key\n")
+        f.write(f"AGENTPORTER_API_KEY={new_key}\n")
+        f.write(f"M3_MCP_KEY={new_key}\n")
+    os.chmod(secrets_file, 0o600)
+    click.echo("API key successfully rotated.")
+    click.echo(f"New Key: {new_key}")
+
+
 if __name__ == "__main__":
     main()
+
