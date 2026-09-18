@@ -1,0 +1,44 @@
+# AgentPorter Server Configuration Example
+# Place active configurations in: ~/.config/agentporter/config.yaml
+
+server:
+  host: "127.0.0.1"
+  port: 8765
+  name: "AgentPorter"
+
+security:
+  auth: "api_key"
+  # Primary header for API key authentication
+  header_name: "X-AgentPorter-Key"
+  # Legacy header name accepted for compatibility
+  legacy_header_name: "X-M3-MCP-Key"
+  # Allowed hosts for DNS rebinding protection
+  allowed_hosts:
+    - "127.0.0.1"
+    - "127.0.0.1:*"
+    - "localhost"
+    - "localhost:*"
+    - "*.trycloudflare.com"
+    - "*.trycloudflare.com:*"
+  rate_limit:
+    max_requests: 120
+    window_seconds: 60.0
+  max_payload_bytes: 10485760  # 10 MB
+
+sandbox:
+  backend: "bubblewrap"
+  network: false
+  default_timeout_seconds: 30
+  max_output_bytes: 102400  # 100 KB
+
+agents:
+  enabled: true
+  adapters:
+    codex:
+      enabled: true
+    claude:
+      enabled: true
+    opencode:
+      enabled: true
+    agy:
+      enabled: true

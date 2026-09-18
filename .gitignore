@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets and local configuration
+.env
+.env.*
+secrets.env
+*.key
+*.pem
+*.local.yaml
+workspaces.local.yaml
+config.local.yaml
+
+# Local runtime state and databases
+*.db
+*.sqlite
+*.sqlite3
+runtime/
+state/
+logs/
+artifacts/
+
+# System / editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

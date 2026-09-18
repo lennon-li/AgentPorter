@@ -1,0 +1,12 @@
+# AgentPorter Workspace Registration Example
+# Place active configurations in: ~/.config/agentporter/workspaces.yaml
+workspaces:
+  demo-project:
+    path: /home/user/projects/demo
+    writable: true
+    description: "Primary Python / R analytics workspace"
+
+  docs-site:
+    path: /home/user/projects/docs
+    writable: false
+    description: "Read-only documentation repository"
