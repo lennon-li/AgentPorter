@@ -1,12 +1,24 @@
 # AgentPorter Workspace Registration Example
-# Place active configurations in: ~/.config/agentporter/workspaces.yaml
+# Copy to ~/.config/agentporter/workspaces.yaml and use local paths.
+
 workspaces:
   demo-project:
     path: /home/user/projects/demo
     writable: true
-    description: "Primary Python / R analytics workspace"
+    description: "Primary development project"
+    allow_execute: true
+    allow_git: true
+    allow_artifacts: true
+    allow_agent_dispatch: true
+    # Host-side loopback HTTP is disabled unless exact ports are listed.
+    local_http_ports: []
 
   docs-site:
     path: /home/user/projects/docs
     writable: false
     description: "Read-only documentation repository"
+    allow_execute: false
+    allow_git: true
+    allow_artifacts: false
+    allow_agent_dispatch: false
+    local_http_ports: []
