@@ -13,6 +13,7 @@ import uvicorn
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
+from agentporter import __version__
 from agentporter.config import Config
 from agentporter.auth import RateLimiter
 from agentporter.middleware import SecurityMiddleware
@@ -39,8 +40,14 @@ def setup_logging(state_dir) -> None:
 
     root_logger = logging.getLogger("agentporter")
     root_logger.setLevel(logging.INFO)
+    if root_logger.handlers:
+        return
 
     file_handler = RotatingFileHandler(str(log_file), maxBytes=10 * 1024 * 1024, backupCount=5)
+    try:
+        os.chmod(log_file, 0o600)
+    except OSError:
+        pass
     file_formatter = logging.Formatter('{"time":"%(asctime)s", "level":"%(levelname)s", "event":%(message)s}')
     file_handler.setFormatter(file_formatter)
     root_logger.addHandler(file_handler)
@@ -92,8 +99,16 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     mcp = MCPServer(config.server.name)
     registry = WorkspaceRegistry(config.workspaces)
-    sandbox = BubblewrapSandbox(config.state_dir)
-    job_manager = JobManager(config.state_dir)
+    sandbox = BubblewrapSandbox(
+        config.state_dir,
+        default_timeout_seconds=config.sandbox.default_timeout_seconds,
+        max_timeout_seconds=config.sandbox.max_timeout_seconds,
+        max_output_bytes=config.sandbox.max_output_bytes,
+    )
+    job_manager = JobManager(
+        config.state_dir,
+        max_log_bytes=config.sandbox.max_job_log_bytes,
+    )
     agent_broker = AgentBroker(registry, job_manager)
 
     # Instantiate tool sets
