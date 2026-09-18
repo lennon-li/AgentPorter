@@ -8,10 +8,6 @@ from agentporter.auth import verify_api_key, is_host_allowed, RateLimiter
 logger = logging.getLogger("agentporter.middleware")
 
 
-class _PayloadTooLarge(Exception):
-    pass
-
-
 class SecurityMiddleware:
     """ASGI middleware enforcing API-key auth and bounded HTTP ingress."""
 
@@ -93,22 +89,38 @@ class SecurityMiddleware:
             )(scope, receive, send)
             return
 
-        received_bytes = 0
+        # Buffer request bodies only for methods that can carry MCP payloads. This
+        # enforces the ceiling even when Content-Length is absent/chunked and
+        # ensures rejection happens before the downstream app starts a response.
+        if scope.get("method", "GET").upper() in {"POST", "PUT", "PATCH"}:
+            buffered: list[Message] = []
+            total = 0
+            while True:
+                message = await receive()
+                buffered.append(message)
+                if message["type"] == "http.request":
+                    total += len(message.get("body", b""))
+                    if total > self.max_payload_bytes:
+                        await JSONResponse({"error": "Payload Too Large"}, status_code=413)(
+                            scope, receive, send
+                        )
+                        return
+                    if not message.get("more_body", False):
+                        break
+                elif message["type"] == "http.disconnect":
+                    break
 
-        async def limited_receive() -> Message:
-            nonlocal received_bytes
-            message = await receive()
-            if message["type"] == "http.request":
-                received_bytes += len(message.get("body", b""))
-                if received_bytes > self.max_payload_bytes:
-                    raise _PayloadTooLarge
-            return message
+            index = 0
 
-        try:
-            await self.app(scope, limited_receive, send)
-        except _PayloadTooLarge:
-            # The MCP request parser consumes the body before starting a response,
-            # so this path safely rejects chunked/streamed over-limit requests.
-            await JSONResponse({"error": "Payload Too Large"}, status_code=413)(
-                scope, receive, send
-            )
+            async def replay_receive() -> Message:
+                nonlocal index
+                if index < len(buffered):
+                    msg = buffered[index]
+                    index += 1
+                    return msg
+                return {"type": "http.request", "body": b"", "more_body": False}
+
+            await self.app(scope, replay_receive, send)
+            return
+
+        await self.app(scope, receive, send)
