@@ -1,55 +1,44 @@
-"""Read-only Git inspection tools with hostile Git configuration disabled."""
+"""Read-only Git inspection tools executed inside the Bubblewrap sandbox."""
 
-import os
-import subprocess
 from agentporter.workspaces.registry import WorkspaceRegistry
+from agentporter.sandbox.bubblewrap import BubblewrapSandbox
 
 MAX_GIT_OUTPUT = 200_000
 
 
-def create_git_tools(registry: WorkspaceRegistry):
-    def _run_git(ws_path: str, args: list[str], timeout: int = 10) -> str:
-        env = {
-            "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
-            "HOME": "/nonexistent",
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_CONFIG_GLOBAL": "/dev/null",
-            "GIT_OPTIONAL_LOCKS": "0",
-            "GIT_PAGER": "cat",
-            "PAGER": "cat",
-            "GIT_EXTERNAL_DIFF": "",
-        }
-        res = subprocess.run(
-            [
-                "git",
-                "-c", "core.fsmonitor=false",
-                "-c", "core.untrackedCache=false",
-                "-c", "diff.external=",
-                "-c", "pager.status=false",
-                "-c", "pager.diff=false",
-                "-c", "pager.log=false",
-                "-c", "pager.show=false",
-                *args,
-            ],
-            cwd=ws_path,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-        )
-        if res.returncode != 0:
-            msg = res.stderr.strip()[:MAX_GIT_OUTPUT]
-            return f"Git error (exit {res.returncode}): {msg}"
-        out = res.stdout
-        if len(out) > MAX_GIT_OUTPUT:
-            out = out[:MAX_GIT_OUTPUT] + "\n... [GIT OUTPUT TRUNCATED]"
-        return out
-
+def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
     def _workspace(workspace_id: str):
         ws = registry.get(workspace_id)
         if not ws.allow_git:
             raise PermissionError(f"Workspace '{workspace_id}' does not allow Git inspection")
         return ws
+
+    def _run_git(ws_path: str, args: list[str], timeout: int = 10) -> str:
+        # Repository-local Git configuration is treated as untrusted input.
+        # Run Git inside the no-network sandbox with the workspace mounted RO,
+        # and override common executable helper mechanisms.
+        argv = [
+            "git",
+            "-c", "core.fsmonitor=false",
+            "-c", "core.untrackedCache=false",
+            "-c", "diff.external=",
+            "-c", "pager.status=false",
+            "-c", "pager.diff=false",
+            "-c", "pager.log=false",
+            "-c", "pager.show=false",
+            *args,
+        ]
+        res = sandbox.run(
+            workspace_path=ws_path,
+            argv=argv,
+            timeout_seconds=timeout,
+            writable=False,
+            max_output_bytes=MAX_GIT_OUTPUT,
+        )
+        if res["exit_code"] != 0:
+            msg = res["stderr"].strip()[:MAX_GIT_OUTPUT]
+            return f"Git error (exit {res['exit_code']}): {msg}"
+        return res["stdout"]
 
     def git_status(workspace_id: str) -> str:
         ws = _workspace(workspace_id)
