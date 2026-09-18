@@ -102,6 +102,7 @@ On initial startup, an API key is generated and stored securely in `~/.config/ag
 - [Local Installation & Setup Guide](docs/local-setup.md)
 - [Connecting MCP Clients](docs/mcp-clients.md)
 - [Microsoft Copilot Studio Setup](docs/copilot-studio.md)
+- [Dogfooding Lessons Learned](docs/lessons-learned.md)
 
 ---
 

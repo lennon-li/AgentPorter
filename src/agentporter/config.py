@@ -35,10 +35,21 @@ class SecuritySettings:
         "localhost:*",
         "*.trycloudflare.com",
         "*.trycloudflare.com:*",
+        "*.devtunnels.ms",
+        "*.devtunnels.ms:*",
+        "*.lhr.life",
+        "*.lhr.life:*",
+        "*.pinggy.link",
+        "*.pinggy.link:*",
+        "*.pinggy.net",
+        "*.pinggy.net:*",
+        "*.ts.net",
+        "*.ts.net:*",
     ])
     rate_limit_max_requests: int = 120
     rate_limit_window_seconds: float = 60.0
     max_payload_bytes: int = 10 * 1024 * 1024  # 10 MB
+
 
 
 @dataclass
@@ -108,6 +119,14 @@ class Config:
                 self.security.legacy_header_name = str(sec["legacy_header_name"])
             if "allowed_hosts" in sec and isinstance(sec["allowed_hosts"], list):
                 self.security.allowed_hosts = [str(h) for h in sec["allowed_hosts"]]
+
+            env_hosts = os.environ.get("ALLOWED_HOSTS", "")
+            if env_hosts:
+                for h in env_hosts.split(","):
+                    h_clean = h.strip()
+                    if h_clean and h_clean not in self.security.allowed_hosts:
+                        self.security.allowed_hosts.append(h_clean)
+
             if "rate_limit" in sec and isinstance(sec["rate_limit"], dict):
                 rl = sec["rate_limit"]
                 self.security.rate_limit_max_requests = int(rl.get("max_requests", self.security.rate_limit_max_requests))

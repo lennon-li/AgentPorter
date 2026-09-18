@@ -91,5 +91,18 @@ class SecurityMiddleware:
             await resp(scope, receive, send)
             return
 
+        # 5. Health endpoint
+        if scope.get("path") == "/health":
+            resp = JSONResponse({"status": "healthy", "service": "agentporter", "version": "1.0.0"})
+            await resp(scope, receive, send)
+            return
+
+        # 6. Rewrite root path '/' to '/mcp' for Streamable HTTP compatibility (e.g. Copilot Studio)
+        if scope.get("path") in ("/", ""):
+            scope["path"] = "/mcp"
+            if "raw_path" in scope:
+                scope["raw_path"] = b"/mcp"
+
         # Authorized, continue downstream
         await self.app(scope, receive, send)
+

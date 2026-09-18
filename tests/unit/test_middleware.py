@@ -14,7 +14,10 @@ async def homepage(request):
 
 
 def create_test_app(api_key="valid-key-123", max_payload=1024, rate_max=5):
-    inner_app = Starlette(routes=[Route("/", homepage, methods=["GET", "POST"])])
+    inner_app = Starlette(routes=[
+        Route("/", homepage, methods=["GET", "POST"]),
+        Route("/mcp", homepage, methods=["GET", "POST"]),
+    ])
     limiter = RateLimiter(max_requests=rate_max, window_seconds=10.0)
     return SecurityMiddleware(
         app=inner_app,
@@ -87,3 +90,33 @@ def test_middleware_rate_limiting():
     # 4th request exceeds rate limit
     resp = client.get("/", headers=headers)
     assert resp.status_code == 429
+
+
+def test_middleware_health_endpoint():
+    app = create_test_app()
+    client = TestClient(app, base_url="http://testserver")
+    # Health endpoint requires valid API key and allowed host
+    resp = client.get("/health", headers={"X-AgentPorter-Key": "valid-key-123"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "healthy"
+    assert resp.json()["service"] == "agentporter"
+
+
+def test_middleware_root_path_rewrite():
+    # Verify that requests to '/' are rewritten to '/mcp'
+    async def mcp_endpoint(request):
+        return JSONResponse({"path": request.scope["path"]})
+
+    inner_app = Starlette(routes=[Route("/mcp", mcp_endpoint, methods=["POST"])])
+    limiter = RateLimiter(max_requests=10, window_seconds=10.0)
+    app = SecurityMiddleware(
+        app=inner_app,
+        api_key="valid-key-123",
+        allowed_hosts=["testserver"],
+        rate_limiter=limiter,
+    )
+    client = TestClient(app, base_url="http://testserver")
+    resp = client.post("/", headers={"X-AgentPorter-Key": "valid-key-123"})
+    assert resp.status_code == 200
+    assert resp.json() == {"path": "/mcp"}
+
