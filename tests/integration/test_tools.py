@@ -317,7 +317,7 @@ def test_dispatch_agent_telemetry(workspace_registry, tmp_path: Path):
 
 def test_read_only_worker_must_be_enforceable(sample_workspace, tmp_path: Path):
     reg = WorkspaceRegistry()
-    reg.register("ro", str(sample_workspace), writable=False)
+    reg.register("ro", str(sample_workspace), writable=False, allow_agent_dispatch=True)
     job_mgr = JobManager(tmp_path / "state")
     broker = AgentBroker(reg, job_mgr)
 
