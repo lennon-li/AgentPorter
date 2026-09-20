@@ -87,6 +87,7 @@ agentporter serve --host 127.0.0.1 --port 8765
 - [Local setup](docs/local-setup.md)
 - [MCP clients](docs/mcp-clients.md)
 - [Microsoft Copilot Studio](docs/copilot-studio.md)
+- [Roadmap / TODO](TODO.md)
 
 ## Development
 
