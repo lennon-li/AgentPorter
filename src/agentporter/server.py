@@ -358,6 +358,16 @@ def create_asgi_app(config: Config) -> ASGIApp:
                 for item in obj:
                     fix_objects(item)
         fix_objects(schema)
+        if "components" not in schema:
+            schema["components"] = {}
+        schema["components"]["securitySchemes"] = {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "description": "API key bearer token"
+            }
+        }
+        schema["security"] = [{"BearerAuth": []}]
         app.openapi_schema = schema
         return app.openapi_schema
     app.openapi = custom_openapi
