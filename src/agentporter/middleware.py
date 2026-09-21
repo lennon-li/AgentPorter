@@ -18,7 +18,7 @@ class SecurityMiddleware:
         allowed_hosts: list[str],
         header_name: str = "X-AgentPorter-Key",
         legacy_header_name: str = "X-M3-MCP-Key",
-        rate_limiter: RateLimiter = None,
+        rate_limiter: RateLimiter | None = None,
         max_payload_bytes: int = 10 * 1024 * 1024,
     ):
         self.app = app
@@ -78,18 +78,29 @@ class SecurityMiddleware:
                 await resp(scope, receive, send)
                 return
 
-        # 4. Health endpoint (publicly accessible for tunnel/uptime probes, protected by host and rate limiting)
-        if scope.get("path") == "/health":
-            resp = JSONResponse({"status": "healthy", "service": "agentporter", "version": "1.0.0"})
-            await resp(scope, receive, send)
-            return
+        # 4. Publicly accessible endpoints (protected by host and rate limiting)
+        public_paths = {"/health", "/openapi.json", "/docs", "/redoc"}
+        if scope.get("path") in public_paths:
+            if scope.get("path") == "/health":
+                resp = JSONResponse({"status": "healthy", "service": "agentporter", "version": "1.0.0"})
+                await resp(scope, receive, send)
+                return
+            else:
+                await self.app(scope, receive, send)
+                return
 
         # 5. API Key validation
         raw_header = headers.get(self.header_bytes)
         if raw_header is None and self.legacy_header_bytes:
             raw_header = headers.get(self.legacy_header_bytes)
-
+            
         provided_key = raw_header.decode("utf-8", errors="replace") if raw_header is not None else ""
+
+        if not provided_key:
+            auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="replace")
+            if auth_header.lower().startswith("bearer "):
+                provided_key = auth_header[7:].strip()
+
         if not verify_api_key(provided_key, self.api_key):
             self._log_rejection_diagnostic(headers, "invalid_or_missing_key")
             resp = JSONResponse({"error": "Unauthorized: invalid or missing API key header"}, status_code=401)

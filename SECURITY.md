@@ -65,9 +65,9 @@ AgentPorter strictly distinguishes between two execution boundaries:
 ## 2. Ingress & Transport Security
 
 1. **Local-First Default**:
-   AgentPorter binds strictly to `127.0.0.1`. Remote access should only occur through controlled, authenticated tunnels (e.g., Cloudflare Tunnel, Tailscale).
+   AgentPorter binds strictly to `127.0.0.1`. Remote access should only occur through controlled, authenticated tunnels (e.g., Microsoft Dev Tunnels, Tailscale).
 2. **Strict Host Header Validation**:
-   Requests must match configured allowed hosts (e.g. `127.0.0.1`, `localhost`, `*.trycloudflare.com`). Unrecognized `Host` headers are rejected with `403 Forbidden` to prevent DNS rebinding attacks.
+   Requests must match configured allowed hosts (e.g. `127.0.0.1`, `localhost`, `*.devtunnels.ms`). Unrecognized `Host` headers are rejected with `403 Forbidden` to prevent DNS rebinding attacks.
 3. **API Key Authentication**:
    - Every request must provide a valid API key via header (`X-AgentPorter-Key` or legacy `X-M3-MCP-Key`).
    - Comparisons are performed in constant time using `hmac.compare_digest`.

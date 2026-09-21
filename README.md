@@ -12,7 +12,8 @@ It was designed to bridge interactive orchestrators (such as Microsoft Copilot S
 
 ### Key Capabilities
 
-- **Local-First & Client-Agnostic**: Implements the standard Model Context Protocol over Streamable HTTP with API-key authentication and strict Host-header validation.
+- **Dual-Protocol Gateway (MCP & REST)**: Serves standard Model Context Protocol over Streamable HTTP at `/mcp` AND standard REST API with OpenAPI 3.1 schema at `/api/v1` for clients without native MCP support (such as ChatGPT Plus Web Custom Actions).
+- **Local-First & Client-Agnostic**: Compatible with ChatGPT Web, Microsoft 365 Copilot Studio, Claude Desktop, Cursor, and custom orchestrators.
 - **Controlled Workspace Access**: Replaces raw filesystem access with registered workspace identifiers. Operations enforce project-relative paths, block traversal sequences (`..`), prevent symlink escapes, and prohibit access to sensitive credentials (`.ssh`, `.env`, `.git`).
 - **Sandboxed Direct Execution**: Executes code (Bash, Python, R) within unprivileged Linux `bubblewrap` (bwrap) sandboxes with memory-backed private `/tmp`, unshared network namespaces (zero outbound network), and scrubbed environments.
 - **Asynchronous Jobs & Output Tailing**: Manages long-running commands and test suites asynchronously with SQLite tracking, incremental output cursors, and clean process-group cancellation.
@@ -115,6 +116,7 @@ agentporter key rotate
 - [Package vs. Local Separation](docs/package-vs-local.md)
 - [Local Installation & Setup Guide](docs/local-setup.md)
 - [Connecting MCP Clients](docs/mcp-clients.md)
+- [ChatGPT Web Custom Actions Setup](docs/chatgpt-web-integration-plan.md)
 - [Microsoft Copilot Studio Setup](docs/copilot-studio.md)
 - [Dogfooding Lessons Learned](docs/lessons-learned.md)
 

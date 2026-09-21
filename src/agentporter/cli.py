@@ -5,6 +5,7 @@ import sys
 import shutil
 import secrets
 import subprocess
+from pathlib import Path
 import click
 import uvicorn
 
@@ -68,7 +69,20 @@ def doctor(config_dir):
     else:
         click.echo(f"Sandbox Backend:      bubblewrap NOT FOUND. Install via: sudo apt install bubblewrap [WARN]")
 
-    # 3. Path Diagnostics
+    # 3. Ingress Tunnel Backend (Microsoft Dev Tunnels)
+    devtunnel_path = shutil.which("devtunnel") or shutil.which("devtunnel", path=str(Path.home() / "bin"))
+    if devtunnel_path:
+        dt_user = "Not logged in"
+        try:
+            res = subprocess.run([devtunnel_path, "user", "show"], capture_output=True, text=True, timeout=3)
+            dt_user = res.stdout.strip() or dt_user
+        except Exception:
+            pass
+        click.echo(f"Ingress Backend:      devtunnel ({devtunnel_path}) [{dt_user}]")
+    else:
+        click.echo("Ingress Backend:      devtunnel not found (optional, see docs/copilot-studio.md)")
+
+    # 4. Path Diagnostics
     click.echo(f"Config Directory:     {cfg.config_dir} (exists: {cfg.config_dir.exists()})")
     click.echo(f"State Directory:      {cfg.state_dir} (exists: {cfg.state_dir.exists()})")
     click.echo(f"Secrets File:         {cfg.config_dir / 'secrets.env'} (exists: {(cfg.config_dir / 'secrets.env').exists()})")

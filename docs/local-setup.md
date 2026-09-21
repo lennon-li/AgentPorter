@@ -64,7 +64,8 @@ security:
   allowed_hosts:
     - "127.0.0.1"
     - "localhost"
-    - "*.trycloudflare.com"
+    - "*.devtunnels.ms"
+    - "*.devtunnels.ms:*"
 ```
 
 ### C. API Key Setup (`~/.config/agentporter/secrets.env`)

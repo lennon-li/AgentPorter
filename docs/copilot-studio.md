@@ -11,7 +11,7 @@ Microsoft Copilot Studio (Cloud)
              │
              │ HTTPS (Streamable HTTP / SSE)
              ▼
-   Cloudflare Quick Tunnel (Public HTTPS Ingress)
+   Microsoft Dev Tunnels (Azure Relay Ingress)
              │
              │ HTTP (localhost)
              ▼
@@ -25,28 +25,59 @@ Bubblewrap Sandbox   CLI Agent Workers
 
 ---
 
-## 2. Ingress & Tunnel Setup
+## 2. Ingress & Tunnel Setup (Microsoft Dev Tunnels)
 
-Because Copilot Studio runs in Microsoft cloud infrastructure, it cannot connect directly to `localhost`. A secure tunnel is required:
+Because Copilot Studio runs in Microsoft cloud infrastructure, it cannot connect directly to `localhost`. We use **Microsoft Dev Tunnels** (`devtunnel` CLI). This routes traffic natively through Microsoft Azure relays (`*.devtunnels.ms`), ensuring data stays entirely within the Microsoft/GitHub enterprise trust boundary (no third-party commercial CDNs like Cloudflare).
+
+### Step A: Authenticate to Dev Tunnels
+Choose one of three supported identity options based on your environment:
+
+1. **Option 1: GitHub Personal (`devtunnel user login -d -g`)**
+   - Ideal for individual developers; zero enterprise approval required.
+   - Run: `devtunnel user login -d -g` and enter the 8-character code at `https://github.com/login/device`.
+2. **Option 2: GitHub Enterprise (`devtunnel user login -d -g`)**
+   - Ideal for corporate environments with institutional compliance requirements.
+   - Covered under Microsoft/GitHub Enterprise Data Protection Agreements (DPA).
+   - Sign in with your GitHub Enterprise work account and authorize the device code.
+3. **Option 3: Microsoft Entra ID / Azure (`devtunnel user login -d -e`)**
+   - Direct sign-in using your corporate Microsoft 365 / Azure work account.
+   - *Note: If your IT organization enforces Conditional Access policy restrictions on the Dev Tunnels app (Error 53003), use Option 1 or 2 instead.*
+
+### Step B: Create a Persistent Tunnel (One-Time Setup)
+Create a reusable, named tunnel that permits anonymous connection at the tunnel boundary (AgentPorter validates the API key on arrival):
 
 ```bash
-# 1. Start AgentPorter locally
-agentporter serve --port 8765
+# 1. Create a named tunnel with anonymous connect allowed
+devtunnel create agentporter-tunnel --allow-anonymous
 
-# 2. Expose the port via Cloudflare Quick Tunnel
-cloudflared tunnel --url http://127.0.0.1:8765
+# 2. Map the AgentPorter gateway port (8765)
+devtunnel port create agentporter-tunnel -p 8765
 ```
 
-The tunnel provides a public HTTPS endpoint such as `https://random-words.trycloudflare.com`.
+### Step C: Host the Tunnel & Start AgentPorter
+
+```bash
+# 1. Start AgentPorter
+agentporter serve --port 8765
+
+# 2. In another terminal, host the Dev Tunnel:
+devtunnel host agentporter-tunnel
+```
+
+The CLI outputs your permanent HTTPS URL:
+```text
+Hosting port: 8765 -> https://<tunnel-id>-8765.use.devtunnels.ms
+```
+Unlike temporary tunnels, this subdomain is **persistent across restarts**.
 
 ---
 
 ## 3. Configuring Copilot Studio
 
 1. Open **Microsoft Copilot Studio** and navigate to your Copilot agent.
-2. Under **Actions**, click **Add an action** and choose **Model Context Protocol (MCP)**.
+2. Under **Actions**, click **Add an action** (or edit your existing action) and choose **Model Context Protocol (MCP)**.
 3. Configure the MCP connection:
-   - **Server URL**: `https://<your-subdomain>.trycloudflare.com`
+   - **Server URL**: `https://<tunnel-id>-8765.use.devtunnels.ms` (or `https://<tunnel-id>-8000.use.devtunnels.ms` for M3 port 8000)
    - **Authentication Type**: `API Key`
    - **Parameter Location**: `Header`
    - **Header Name**: `X-AgentPorter-Key` (or legacy `X-M3-MCP-Key`)
