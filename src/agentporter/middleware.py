@@ -29,20 +29,18 @@ class SecurityMiddleware:
         self.rate_limiter = rate_limiter or RateLimiter()
         self.max_payload_bytes = max_payload_bytes
 
-    def _log_rejection_diagnostic(self, headers: dict, reason: str):
-        # Safely extract header info without logging key
-        raw_header = headers.get(self.header_bytes)
-        if raw_header is None and self.legacy_header_bytes:
-            raw_header = headers.get(self.legacy_header_bytes)
-
-        is_present = raw_header is not None
-        val_len = len(raw_header) if is_present else 0
+    def _log_rejection_diagnostic(self, headers: dict, reason: str, provided_key: str = ""):
+        header_keys = [k.decode("latin-1", errors="replace") for k in headers.keys()]
+        auth_raw = headers.get(b"authorization", b"").decode("utf-8", errors="replace")
 
         logger.warning(
-            "AUTH_REJECTION: reason=%s | key_present=%s | header_len=%d",
+            "AUTH_REJECTION: reason=%s | headers_received=%s | auth_header_len=%d | auth_starts_bearer=%s | provided_key_len=%d | expected_key_len=%d",
             reason,
-            is_present,
-            val_len,
+            header_keys,
+            len(auth_raw),
+            auth_raw.lower().startswith("bearer "),
+            len(provided_key),
+            len(self.api_key),
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
@@ -102,7 +100,7 @@ class SecurityMiddleware:
                 provided_key = auth_header[7:].strip()
 
         if not verify_api_key(provided_key, self.api_key):
-            self._log_rejection_diagnostic(headers, "invalid_or_missing_key")
+            self._log_rejection_diagnostic(headers, "invalid_or_missing_key", provided_key)
             resp = JSONResponse({"error": "Unauthorized: invalid or missing API key header"}, status_code=401)
             await resp(scope, receive, send)
             return
