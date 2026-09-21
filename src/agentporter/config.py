@@ -196,10 +196,13 @@ class Config:
 
     def _load_or_generate_api_key(self) -> None:
         """Retrieve API key from env or secrets.env, generating one if absent."""
-        env_key = os.environ.get("AGENTPORTER_API_KEY") or os.environ.get("M3_MCP_KEY")
-        if env_key:
-            self.api_key = env_key.strip()
-            return
+        self.api_keys = []
+        env_key = os.environ.get("AGENTPORTER_API_KEY")
+        if env_key and env_key.strip():
+            self.api_keys.append(env_key.strip())
+        env_m3 = os.environ.get("M3_MCP_KEY")
+        if env_m3 and env_m3.strip() and env_m3.strip() not in self.api_keys:
+            self.api_keys.append(env_m3.strip())
 
         secrets_file = self.config_dir / "secrets.env"
         if secrets_file.is_file():
@@ -208,27 +211,31 @@ class Config:
                     for line in f:
                         line = line.strip()
                         if line.startswith("AGENTPORTER_API_KEY="):
-                            self.api_key = line.split("=", 1)[1].strip()
-                            return
+                            k = line.split("=", 1)[1].strip()
+                            if k and k not in self.api_keys:
+                                self.api_keys.append(k)
                         elif line.startswith("M3_MCP_KEY="):
-                            self.api_key = line.split("=", 1)[1].strip()
-                            return
+                            k = line.split("=", 1)[1].strip()
+                            if k and k not in self.api_keys:
+                                self.api_keys.append(k)
                         elif line and not line.startswith("#") and "=" not in line:
-                            self.api_key = line
-                            return
+                            if line not in self.api_keys:
+                                self.api_keys.append(line)
             except Exception as e:
                 logger.warning("Could not read secrets file %s: %s", secrets_file, e)
 
-        # Generate a new random 32-byte key
-        new_key = secrets.token_urlsafe(32)
-        try:
-            with open(secrets_file, "w", encoding="utf-8") as f:
-                f.write(f"# AgentPorter generated API key\n")
-                f.write(f"AGENTPORTER_API_KEY={new_key}\n")
-                f.write(f"M3_MCP_KEY={new_key}\n")
-            os.chmod(secrets_file, 0o600)
-            logger.info("Generated new API key at %s (mode 0600)", secrets_file)
-        except Exception as e:
-            logger.error("Failed to write secrets file %s: %s", secrets_file, e)
+        if not self.api_keys:
+            # Generate a new random 32-byte key
+            new_key = secrets.token_urlsafe(32)
+            try:
+                with open(secrets_file, "w", encoding="utf-8") as f:
+                    f.write(f"# AgentPorter generated API key\n")
+                    f.write(f"AGENTPORTER_API_KEY={new_key}\n")
+                    f.write(f"M3_MCP_KEY={new_key}\n")
+                os.chmod(secrets_file, 0o600)
+                logger.info("Generated new API key at %s (mode 0600)", secrets_file)
+            except Exception as e:
+                logger.error("Failed to write secrets file %s: %s", secrets_file, e)
+            self.api_keys.append(new_key)
 
-        self.api_key = new_key
+        self.api_key = self.api_keys[0]

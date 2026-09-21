@@ -14,7 +14,7 @@ class SecurityMiddleware:
     def __init__(
         self,
         app: ASGIApp,
-        api_key: str,
+        api_key: str | list[str],
         allowed_hosts: list[str],
         header_name: str = "X-AgentPorter-Key",
         legacy_header_name: str = "X-M3-MCP-Key",
@@ -34,13 +34,12 @@ class SecurityMiddleware:
         auth_raw = headers.get(b"authorization", b"").decode("utf-8", errors="replace")
 
         logger.warning(
-            "AUTH_REJECTION: reason=%s | headers_received=%s | auth_header_len=%d | auth_starts_bearer=%s | provided_key_len=%d | expected_key_len=%d",
+            "AUTH_REJECTION: reason=%s | headers_received=%s | auth_header_len=%d | auth_starts_bearer=%s | provided_key_len=%d",
             reason,
             header_keys,
             len(auth_raw),
             auth_raw.lower().startswith("bearer "),
             len(provided_key),
-            len(self.api_key),
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):

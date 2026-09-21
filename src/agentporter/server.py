@@ -378,7 +378,7 @@ def create_asgi_app(config: Config) -> ASGIApp:
     )
     return SecurityMiddleware(
         app=app,
-        api_key=config.api_key,
+        api_key=config.api_keys,
         allowed_hosts=config.security.allowed_hosts,
         header_name=config.security.header_name,
         legacy_header_name=config.security.legacy_header_name,
