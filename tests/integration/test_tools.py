@@ -292,3 +292,28 @@ def test_dispatch_agent_telemetry(workspace_registry, tmp_path: Path):
     assert res["duration"] == 0.0
 
     job_mgr.cancel(res["job_id"])
+
+
+def test_dispatch_agent_reports_execution_policy(workspace_registry, tmp_path: Path):
+    job_mgr = JobManager(tmp_path / "state")
+    broker = AgentBroker(workspace_registry, job_mgr)
+
+    res = broker.dispatch_agent(agent="codex", task="echo test", workspace_id="test-ws")
+
+    assert res["execution_policy"]["workspace_write"] is True
+    assert res["execution_policy"]["git_commit"] is False
+    assert res["execution_policy"]["git_push"] is False
+    job_mgr.cancel(res["job_id"])
+
+
+def test_dispatch_agent_confirmed_commit_and_push(workspace_registry, tmp_path: Path):
+    job_mgr = JobManager(tmp_path / "state")
+    broker = AgentBroker(workspace_registry, job_mgr)
+
+    res = broker.dispatch_agent(
+        agent="codex", task="echo test", workspace_id="test-ws", allow_commit=True, allow_push=True
+    )
+
+    assert res["execution_policy"]["git_commit"] is True
+    assert res["execution_policy"]["git_push"] is True
+    job_mgr.cancel(res["job_id"])

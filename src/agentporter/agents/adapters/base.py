@@ -7,6 +7,8 @@ import subprocess
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from agentporter.agents.policy import ExecutionPolicy
+
 
 class AgentAdapter(ABC):
     """Abstract contract for an AI coding agent CLI worker."""
@@ -52,7 +54,8 @@ class AgentAdapter(ABC):
         workspace_path: str,
         packet: str,
         model: str,
-        reasoning_effort: str
+        reasoning_effort: str,
+        policy: Optional[ExecutionPolicy] = None,
     ) -> list[str]:
-        """Construct process command arguments for execution."""
+        """Construct process command arguments enforcing the execution policy."""
         pass

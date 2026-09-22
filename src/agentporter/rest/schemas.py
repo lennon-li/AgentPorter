@@ -198,4 +198,6 @@ class DispatchAgentRequest(BaseModel):
     purpose: str = Field(default="", description="Context or purpose for the dispatch.")
     model: Optional[str] = Field(None, description="Specific LLM model to use (if applicable).")
     reasoning_effort: Optional[str] = Field(None, description="Reasoning effort level (e.g., 'high', 'low').")
+    allow_commit: bool = Field(False, description="Human confirmation that the agent may run git commit.")
+    allow_push: bool = Field(False, description="Human confirmation that the agent may git push to existing remotes.")
 

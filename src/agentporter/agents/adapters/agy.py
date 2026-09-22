@@ -52,11 +52,12 @@ class AgyAdapter(AgentAdapter):
             "reasoning_effort": self.reasoning_effort,
         }
 
-    def build_argv(self, workspace_path: str, packet: str, model: str, reasoning_effort: str) -> list[str]:
+    def build_argv(self, workspace_path: str, packet: str, model: str, reasoning_effort: str, policy=None) -> list[str]:
         exe = self.find_executable(["agy", "~/.local/bin/agy", "/usr/local/bin/agy"])
         if not exe:
             raise RuntimeError("Agy CLI executable not found on host")
 
+        # Plan mode is read-only, which is already inside every ExecutionPolicy.
         cmd = [exe, "--mode", "plan", "--sandbox"]
         if model:
             cmd.extend(["--model", model])

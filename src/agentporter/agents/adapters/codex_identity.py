@@ -5,6 +5,7 @@ import re
 import subprocess
 
 from agentporter.agents.adapters.codex import CodexAdapter
+from agentporter.agents.policy import ExecutionPolicy
 
 
 class NamedCodexAdapter(CodexAdapter):
@@ -72,10 +73,15 @@ class NamedCodexAdapter(CodexAdapter):
             "identity_ready": identity_ready,
         }
 
-    def build_argv(self, workspace_path: str, packet: str, model: str, reasoning_effort: str) -> list[str]:
+    def build_argv(self, workspace_path: str, packet: str, model: str, reasoning_effort: str, policy=None) -> list[str]:
         exe = self.find_executable(["codex", "~/.npm-global/bin/codex", "~/.local/bin/codex"])
         if not exe:
             raise RuntimeError("Codex CLI executable not found on host")
+
+        policy = policy or ExecutionPolicy()
+        sandbox = "workspace-write" if policy.workspace_write else "read-only"
+        # The workspace-write sandbox has no network, so a confirmed push needs it enabled.
+        network = ["-c", "sandbox_workspace_write.network_access=true"] if policy.git_push else []
 
         return [
             "env",
@@ -84,10 +90,11 @@ class NamedCodexAdapter(CodexAdapter):
             "exec",
             "--ephemeral",
             "--sandbox",
-            "workspace-write",
+            sandbox,
             "--skip-git-repo-check",
             "-c",
             "approval_policy=never",
+            *network,
             "-m",
             model,
             "-c",

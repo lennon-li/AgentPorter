@@ -11,6 +11,7 @@ from agentporter.agents.adapters.copilot import CopilotAdapter
 from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
+from agentporter.agents.policy import ExecutionPolicy
 from agentporter.workspaces.registry import WorkspaceRegistry
 from agentporter.tools.jobs import JobManager
 
@@ -68,6 +69,9 @@ class AgentBroker:
         purpose: str = "",
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
+        allow_commit: bool = False,
+        allow_push: bool = False,
+        policy: Optional[ExecutionPolicy] = None,
     ) -> dict:
         """Dispatch an authorized worker agent asynchronously."""
         agent_key = agent.lower().strip()
@@ -97,6 +101,7 @@ class AgentBroker:
         effective_effort = reasoning_effort or detection["reasoning_effort"]
         cli_ver = detection["cli_version"]
         provider = detection["provider"]
+        policy = policy or ExecutionPolicy.for_workspace(ws.writable, allow_commit, allow_push)
 
         # Structured control packet
         packet = (
@@ -106,6 +111,7 @@ class AgentBroker:
             f"Step budget: 30\n"
             f"Project Root: {ws_path}\n"
             f"Purpose: {purpose or 'Worker delegation via AgentPorter'}\n"
+            f"{policy.packet_text()}"
             f"Task:\n{task}\n"
         )
 
@@ -113,8 +119,10 @@ class AgentBroker:
             workspace_path=ws_path,
             packet=packet,
             model=effective_model,
-            reasoning_effort=effective_effort
+            reasoning_effort=effective_effort,
+            policy=policy,
         )
+        logger.info("Dispatching %s in %s with policy %s", agent_key, ws_path, policy.as_dict())
 
         job_id = self.job_manager.start_raw_job(
             workspace_id=workspace_id,
@@ -148,4 +156,5 @@ class AgentBroker:
             "thinking_level": effective_effort,
             "workspace_id": workspace_id,
             "git_clean_at_dispatch": git_clean,
+            "execution_policy": policy.as_dict(),
         }

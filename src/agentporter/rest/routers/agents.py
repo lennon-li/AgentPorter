@@ -16,5 +16,7 @@ def dispatch_agent(workspace_id: str, req: DispatchAgentRequest, request: Reques
         workspace_id=workspace_id,
         purpose=req.purpose,
         model=req.model,
-        reasoning_effort=req.reasoning_effort
+        reasoning_effort=req.reasoning_effort,
+        allow_commit=req.allow_commit,
+        allow_push=req.allow_push,
     )
