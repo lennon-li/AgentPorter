@@ -1,5 +1,7 @@
 """Antigravity (agy) CLI agent adapter."""
 
+import os
+import json
 import re
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
@@ -9,7 +11,7 @@ class AgyAdapter(AgentAdapter):
     name = "agy"
     alias = "Argie"
     provider = "Google AI Pro"
-    default_model = "gemini-2.5-pro"
+    default_model = "Gemini 3.8 Flash (Medium)"
     reasoning_effort = "medium"
     description = "Antigravity CLI for research, synthesis, and audit consulting"
 
@@ -30,12 +32,23 @@ class AgyAdapter(AgentAdapter):
             except Exception:
                 cli_version = "unknown"
 
+        configured_model = self.default_model
+        cfg_path = os.path.expanduser("~/.gemini/antigravity-cli/settings.json")
+        if os.path.exists(cfg_path):
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if "model" in data and data["model"]:
+                    configured_model = data["model"]
+            except Exception:
+                pass
+
         return {
             "executable": exe,
             "is_installed": is_installed,
             "cli_version": cli_version,
             "provider": self.provider,
-            "configured_model": self.default_model,
+            "configured_model": configured_model,
             "reasoning_effort": self.reasoning_effort,
         }
 
@@ -44,4 +57,11 @@ class AgyAdapter(AgentAdapter):
         if not exe:
             raise RuntimeError("Agy CLI executable not found on host")
 
-        return [exe, "-p", packet]
+        cmd = [exe, "--mode", "plan", "--sandbox"]
+        if model:
+            cmd.extend(["--model", model])
+        if reasoning_effort and not any(f"({lvl})" in (model or "") for lvl in ["Low", "Medium", "High"]):
+            cmd.extend(["--effort", reasoning_effort.lower()])
+        cmd.extend(["-p", packet])
+        return cmd
+

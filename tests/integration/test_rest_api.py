@@ -111,3 +111,23 @@ def test_exec_run_rest(client, test_config):
     assert response.status_code == 200
     data = response.json()
     assert "rest_exec" in data["stdout"]
+
+def test_dispatch_agent_rest(client, test_config):
+    headers = {"Authorization": f"Bearer {test_config.api_key}"}
+
+    dispatch_req = {
+        "agent": "codex",
+        "task": "echo rest dispatch test",
+        "purpose": "unit test",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "high"
+    }
+    response = client.post("/api/v1/workspaces/test-workspace/agents/dispatch", json=dispatch_req, headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "dispatch_id" in data
+    assert "job_id" in data
+    assert data["dispatch_id"] == data["job_id"]
+    assert data["status"] == "running"
+    assert data["worker_cli"] == "codex"
+

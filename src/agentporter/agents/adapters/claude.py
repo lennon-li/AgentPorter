@@ -44,4 +44,8 @@ class ClaudeAdapter(AgentAdapter):
         if not exe:
             raise RuntimeError("Claude Code CLI executable not found on host")
 
-        return [exe, "-p", packet]
+        cmd = [exe]
+        if model:
+            cmd.extend(["--model", model])
+        cmd.extend(["-p", packet])
+        return cmd

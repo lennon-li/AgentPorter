@@ -22,7 +22,12 @@ def job_status(job_id: str, request: Request):
 
 @jobs_router.post("/{job_id}/output", response_model=JobOutputResponse)
 def job_output(job_id: str, req: JobOutputRequest, request: Request):
-    return request.app.state.tools["job_output"](job_id=job_id, cursor=req.cursor, max_bytes=req.max_bytes)
+    res = request.app.state.tools["job_output"](job_id=job_id, cursor=req.cursor, max_bytes=req.max_bytes)
+    if "output" not in res or not res["output"]:
+        res["output"] = res.get("stdout", "") or res.get("stderr", "")
+    if "eof" not in res:
+        res["eof"] = res.get("status") in ("completed", "failed", "cancelled")
+    return res
 
 @jobs_router.post("/{job_id}/result", response_model=JobResultResponse)
 def job_result(job_id: str, req: JobOutputRequest, request: Request):

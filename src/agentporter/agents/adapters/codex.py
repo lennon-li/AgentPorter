@@ -66,6 +66,7 @@ class CodexAdapter(AgentAdapter):
         return [
             exe, "exec",
             "--sandbox", "workspace-write",
+            "--skip-git-repo-check",
             "-c", "approval_policy=never",
             "-m", model,
             "-c", f"model_reasoning_effort={reasoning_effort}",

@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+
 
 # --- Responses ---
 
@@ -58,11 +59,18 @@ class JobStatusResponse(BaseModel):
     duration_seconds: Optional[float] = Field(None)
 
 class JobOutputResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     job_id: str = Field(description="Job ID.")
     status: str = Field(description="Current status.")
-    output: str = Field(description="Incremental or full output.")
-    next_cursor: int = Field(description="Cursor for next read.")
-    eof: bool = Field(description="True if EOF reached.")
+    output: Optional[str] = Field(default="", description="Incremental or full output.")
+    stdout: Optional[str] = Field(default="", description="Incremental stdout.")
+    stderr: Optional[str] = Field(default="", description="Incremental stderr.")
+    cursor: Optional[int] = Field(default=0, description="Start offset.")
+    next_cursor: int = Field(default=0, description="Cursor for next read.")
+    eof: Optional[bool] = Field(default=False, description="True if EOF reached.")
+    exit_code: Optional[int] = Field(None, description="Exit code if finished.")
+
 
 class JobResultResponse(BaseModel):
     job_id: str = Field(description="Job ID.")
@@ -87,7 +95,7 @@ class ArtifactContentResponse(BaseModel):
     truncated: Optional[bool] = Field(None, description="Whether content was truncated.")
 
 class AgentInfo(BaseModel):
-    agent: Optional[str] = Field(None, description="Agent identifier (e.g., codex, claude, opencode, agy).")
+    agent: Optional[str] = Field(None, description="Agent identifier (e.g., codex, jax, liz, claude, opencode, copilot, agy).")
     name: Optional[str] = Field(None, description="Agent name.")
     worker_cli: Optional[str] = Field(None, description="Worker CLI binary name.")
     alias: Optional[str] = Field(None, description="Agent persona or alias.")
@@ -105,9 +113,24 @@ class AgentInfo(BaseModel):
     default_model: Optional[str] = Field(None)
 
 class DispatchResponse(BaseModel):
-    dispatch_id: str = Field(description="Unique ID for the agent dispatch.")
+    model_config = ConfigDict(extra="allow")
+
+    dispatch_id: Optional[str] = Field(default=None, description="Unique ID for the agent dispatch.")
     job_id: str = Field(description="Underlying background job ID.")
-    status: str = Field(description="Status of dispatch.")
+    status: str = Field(default="running", description="Status of dispatch.")
+    worker_cli: Optional[str] = Field(None, description="Worker CLI binary name.")
+    provider: Optional[str] = Field(None, description="Model provider.")
+    selected_agent: Optional[str] = Field(None, description="Selected agent key.")
+    alias: Optional[str] = Field(None, description="Agent persona or alias.")
+    requested_model: Optional[str] = Field(None, description="Requested model.")
+    actual_model: Optional[str] = Field(None, description="Actual model used.")
+    model: Optional[str] = Field(None, description="Model name.")
+    reasoning_level: Optional[str] = Field(None, description="Reasoning effort level.")
+    thinking_level: Optional[str] = Field(None, description="Thinking level.")
+    cli_version: Optional[str] = Field(None, description="CLI version.")
+    workspace_id: Optional[str] = Field(None, description="Target workspace ID.")
+    git_clean_at_dispatch: Optional[bool] = Field(None, description="Whether git tree was clean.")
+
 
 # --- Requests ---
 

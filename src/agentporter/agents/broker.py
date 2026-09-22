@@ -6,6 +6,8 @@ import logging
 from typing import Optional, Dict
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
+from agentporter.agents.adapters.codex_identity import JaxAdapter, LizAdapter
+from agentporter.agents.adapters.copilot import CopilotAdapter
 from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
@@ -23,8 +25,11 @@ class AgentBroker:
         self.job_manager = job_manager
         self.adapters: Dict[str, AgentAdapter] = {
             "codex": CodexAdapter(),
+            "jax": JaxAdapter(),
+            "liz": LizAdapter(),
             "claude": ClaudeAdapter(),
             "opencode": OpenCodeAdapter(),
+            "copilot": CopilotAdapter(),
             "agy": AgyAdapter(),
         }
 
@@ -125,13 +130,14 @@ class AgentBroker:
         )
 
         return {
+            "dispatch_id": job_id,
+            "job_id": job_id,
             "worker_cli": agent_key,
             "provider": provider,
             "requested_model": effective_model,
             "actual_model": "unknown",
             "reasoning_level": effective_effort,
             "cli_version": cli_ver,
-            "job_id": job_id,
             "exit_status": None,
             "duration": 0.0,
             # Backward compatibility fields

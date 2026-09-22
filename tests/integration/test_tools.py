@@ -255,8 +255,11 @@ def test_agent_broker_listing(workspace_registry, tmp_path: Path):
     agent_names = [a["agent"] for a in agents]
 
     assert "codex" in agent_names
+    assert "jax" in agent_names
+    assert "liz" in agent_names
     assert "claude" in agent_names
     assert "opencode" in agent_names
+    assert "copilot" in agent_names
     assert "agy" in agent_names
 
     for ag in agents:
