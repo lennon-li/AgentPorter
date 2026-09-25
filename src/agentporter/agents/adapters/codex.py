@@ -80,7 +80,11 @@ class CodexAdapter(AgentAdapter):
         else:
             policy = ExecutionPolicy.for_workspace(writable=bool(writable))
         sandbox = "workspace-write" if policy.workspace_write else "read-only"
-        network = ["-c", "sandbox_workspace_write.network_access=true"] if policy.git_push else []
+        network = (
+            ["-c", "sandbox_workspace_write.network_access=true"]
+            if policy.workspace_write and policy.git_push
+            else []
+        )
         cmd = [
             exe,
             "exec",

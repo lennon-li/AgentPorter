@@ -2,6 +2,7 @@
 
 import re
 import json
+import sys
 import shlex
 import subprocess
 from pathlib import Path
@@ -69,7 +70,7 @@ class ClaudeAdapter(AgentAdapter):
                     "matcher": "Bash",
                     "hooks": [{
                         "type": "command",
-                        "command": f"python3 {shlex.quote(str(guard))} {shlex.quote(denied)}",
+                        "command": f"{shlex.quote(sys.executable)} {shlex.quote(str(guard))} {shlex.quote(denied)}",
                     }],
                 }]
             }
