@@ -1,4 +1,4 @@
-"""Local HTTP client tool for testing loopback services."""
+"""Local HTTP client tool for explicitly allowed loopback services."""
 
 from typing import Optional
 import httpx
@@ -11,35 +11,46 @@ def create_local_http_tool(registry: WorkspaceRegistry):
         port: int,
         method: str = "GET",
         path: str = "/",
-        body: Optional[str] = None
+        body: Optional[str] = None,
     ) -> dict:
-        """Send an HTTP request strictly to a local application running on loopback (127.0.0.1)."""
-        registry.get(workspace_id)
+        """Request a loopback service only when the workspace explicitly allows the port."""
+        ws = registry.get(workspace_id)
 
         if not (1 <= port <= 65535):
             raise ValueError(f"Invalid port number: {port}")
+        if port not in ws.local_http_ports:
+            raise PermissionError(
+                f"Loopback port {port} is not allowed for workspace '{workspace_id}'. "
+                "Add it to local_http_ports in local configuration."
+            )
 
         clean_path = "/" + path.lstrip("/")
-        url = f"http://127.0.0.1:{port}{clean_path}"
+        if len(clean_path) > 4096:
+            raise ValueError("HTTP path is too long")
+        if body is not None and len(body.encode("utf-8")) > 1024 * 1024:
+            raise ValueError("HTTP request body exceeds 1 MiB")
 
+        url = f"http://127.0.0.1:{port}{clean_path}"
         headers = {"User-Agent": "AgentPorter-LocalClient/0.1"}
         try:
-            with httpx.Client(timeout=10.0) as client:
+            with httpx.Client(timeout=10.0, follow_redirects=False) as client:
                 resp = client.request(
                     method=method.upper(),
                     url=url,
                     headers=headers,
-                    content=body.encode("utf-8") if body else None
+                    content=body.encode("utf-8") if body else None,
                 )
+                text = resp.text
                 return {
                     "status_code": resp.status_code,
-                    "headers": dict(resp.headers),
-                    "body": resp.text[:100000],
-                    "truncated": len(resp.text) > 100000
+                    "headers": {
+                        k: v for k, v in resp.headers.items()
+                        if k.lower() not in {"set-cookie", "authorization", "proxy-authorization"}
+                    },
+                    "body": text[:100000],
+                    "truncated": len(text) > 100000,
                 }
         except Exception as e:
-            return {
-                "error": f"Failed to connect to local service on 127.0.0.1:{port}: {e}"
-            }
+            return {"error": f"Failed to connect to allowed loopback port {port}: {e}"}
 
     return local_http_request

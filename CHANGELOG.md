@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0.dev0] - 2026-09-18
 
 ### Added
-- Bootstrap generic AgentPorter architecture extracted from proven M3 gateway reference implementation.
+- Bootstrap generic AgentPorter architecture extracted from a proven private gateway deployment.
 - Standard Streamable HTTP Model Context Protocol (MCP) server implementation.
 - API Key authentication middleware supporting constant-time verification and custom header support.
 - Host-header validation for DNS rebinding protection and request rate limiting.
@@ -17,21 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Workspace-scoped filesystem operations with path traversal, symlink escape, and sensitive credential protection.
 - Read-only Git inspection tools (`git_status`, `git_diff`, `git_log`, `git_show`).
 - Artifact discovery and retrieval (supporting text and base64 images).
-- Loopback-only local HTTP client for testing local web services.
+- Opt-in loopback HTTP client with per-workspace exact-port allowlists.
 - Extensible AI agent broker and adapter framework supporting Codex, Claude Code, OpenCode, and Antigravity.
-- Real-time agent provenance telemetry: distinguishes configured routing from resolved runtime model and reports `"unknown"` when the underlying CLI does not expose it.
-- Comprehensive CLI: `agentporter serve`, `agentporter doctor`, `agentporter init`, `agentporter workspaces (list/add/remove)`, `agentporter agents`.
-- Key management CLI commands: `agentporter key show` and `agentporter key rotate`.
-- Public unauthenticated `/health` endpoint for uptime monitoring and tunnel health checks.
-- Transparent root path `/` to `/mcp` rewrite for Microsoft Copilot Studio Streamable HTTP compatibility.
-- Expanded default host whitelist for tunnel providers (`*.devtunnels.ms`, `*.lhr.life`, `*.pinggy.net`, `*.ts.net`) and `ALLOWED_HOSTS` environment variable support.
-- Full test suite covering unit, security, integration, and CLI entrypoints (61 passing tests).
-- Systemd user service unit template (`examples/agentporter.service`).
-- Comprehensive documentation: Architecture, Security Model, Package vs. Local separation, Local Setup, MCP Clients, Copilot Studio integration, and Dogfooding Lessons Learned.
+- Agent provenance telemetry that separates configured routing, explicit requested overrides, and verified runtime model; unverified runtime model remains `"unknown"`.
+- Minimal CLI entrypoint: `agentporter serve`, `agentporter doctor`, `agentporter workspaces`, `agentporter agents`.
+- Comprehensive documentation: Architecture, Security Model, Package vs. Local separation, Local Setup, MCP Clients, and Copilot Studio integration.
 
-### Changed
-- Added 10 MB maximum file size ceiling to `read_file` to guard against unbounded memory consumption.
-- Enhanced patch header parsing in `apply_patch` to robustly handle git diffs with timestamp and multi-space delimiters.
-- Expanded workspace path sensitive denylist to explicitly protect user shell configuration files (`.bashrc`, `.bash_profile`, `.profile`, `.zshrc`) and `.gnupg`.
-- Genericized author metadata in `pyproject.toml` to contributor collective.
 
+### Security hardening
+- Closed the sensitive-file disclosure path through text search.
+- Made host-level worker delegation opt-in and required enforceable read-only support for read-only workspaces.
+- Removed personal aliases/model-routing defaults from reusable adapters.
+- Added per-workspace execution, Git, artifact, agent-dispatch, and loopback-port controls.
+- Enforced streamed request-body size limits.
+- Bounded file, artifact, Git, synchronous execution, and async job output.
+- Hardened state/log/database permissions.
+- Stopped treating worker-generated stdout/stderr as trusted model provenance.
+- Moved Git inspection into the read-only Bubblewrap sandbox.
+- Added Python 3.11/3.12 CI and security regression coverage.

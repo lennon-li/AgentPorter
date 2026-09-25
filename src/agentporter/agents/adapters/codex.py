@@ -4,16 +4,17 @@ import os
 import re
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
-from agentporter.agents.policy import ExecutionPolicy
 
 
 class CodexAdapter(AgentAdapter):
     name = "codex"
-    alias = "Jax / Vision"
+    alias = "Codex"
     provider = "OpenAI"
-    default_model = "gpt-5.6-luna"
-    reasoning_effort = "high"
-    description = "OpenAI Codex CLI agent for bounded implementation and review"
+    description = "OpenAI Codex CLI worker"
+
+    supports_read_only = True
+    supports_model_override = True
+    supports_reasoning_override = True
 
     def capabilities(self) -> list[str]:
         return ["code_generation", "code_review", "refactoring", "debugging", "verification"]
@@ -27,24 +28,26 @@ class CodexAdapter(AgentAdapter):
             try:
                 res = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)
                 raw = (res.stdout + res.stderr).strip()
-                m = re.search(r'(\d+\.\d+\.\d+)', raw)
+                m = re.search(r"(\d+\.\d+\.\d+)", raw)
                 cli_version = m.group(1) if m else (raw.splitlines()[0] if raw else "unknown")
             except Exception:
-                cli_version = "unknown"
+                pass
 
-        configured_model = self.default_model
-        reasoning_effort = self.reasoning_effort
-
-        # Inspect local ~/.codex/config.toml
+        configured_model = "unknown"
+        reasoning_effort = "unknown"
         cfg_path = os.path.expanduser("~/.codex/config.toml")
         if os.path.exists(cfg_path):
             try:
                 with open(cfg_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                m = re.search(r'^\s*model\s*=\s*[\"\']([^\"\']+)[\"\']', content, re.M)
+                    cfg = f.read()
+                m = re.search(r'^\s*model\s*=\s*["\']([^"\']+)["\']', cfg, re.M)
                 if m:
                     configured_model = m.group(1)
-                eff = re.search(r'^\s*model_reasoning_effort\s*=\s*[\"\']([^\"\']+)[\"\']', content, re.M)
+                eff = re.search(
+                    r'^\s*model_reasoning_effort\s*=\s*["\']([^"\']+)["\']',
+                    cfg,
+                    re.M,
+                )
                 if eff:
                     reasoning_effort = eff.group(1)
             except Exception:
@@ -59,22 +62,29 @@ class CodexAdapter(AgentAdapter):
             "reasoning_effort": reasoning_effort,
         }
 
-    def build_argv(self, workspace_path: str, packet: str, model: str, reasoning_effort: str, policy=None) -> list[str]:
+    def build_argv(
+        self,
+        workspace_path: str,
+        packet: str,
+        model: str = "",
+        reasoning_effort: str = "",
+        writable: bool = True,
+    ) -> list[str]:
         exe = self.find_executable(["codex", "~/.npm-global/bin/codex", "~/.local/bin/codex"])
         if not exe:
             raise RuntimeError("Codex CLI executable not found on host")
 
-        policy = policy or ExecutionPolicy()
-        sandbox = "workspace-write" if policy.workspace_write else "read-only"
-        # The workspace-write sandbox has no network, so a confirmed push needs it enabled.
-        network = ["-c", "sandbox_workspace_write.network_access=true"] if policy.git_push else []
-
-        return [
-            exe, "exec",
-            "--sandbox", sandbox,
-            "--skip-git-repo-check",
-            "-c", "approval_policy=never", *network,
-            "-m", model,
-            "-c", f"model_reasoning_effort={reasoning_effort}",
-            packet
+        cmd = [
+            exe,
+            "exec",
+            "--sandbox",
+            "workspace-write" if writable else "read-only",
+            "-c",
+            "approval_policy=never",
         ]
+        if model:
+            cmd.extend(["-m", model])
+        if reasoning_effort:
+            cmd.extend(["-c", f"model_reasoning_effort={reasoning_effort}"])
+        cmd.append(packet)
+        return cmd

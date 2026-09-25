@@ -1,96 +1,74 @@
-# Package vs. Local Separation Architecture
+# Package vs. Local Separation
 
-> **Core Tenet**: The software repository (package) contains only generic, reusable code and safe configuration schemas. Mutable state, machine-specific configurations, credentials, runtime databases, logs, and user workspaces live strictly in local filesystem hierarchies.
+AgentPorter separates reusable software from machine-specific deployment state.
 
----
+## Package / Git repository
 
-## 1. The Separation Matrix
+Tracked in Git:
 
-| Component | Location | Role / Scope | Git Tracking |
-| :--- | :--- | :--- | :--- |
-| **AgentPorter Core Software** | `src/agentporter/` | Generic MCP server, tools, sandbox logic, agent adapters, CLI | Tracked in Git |
-| **Test Suites & Fixtures** | `tests/` | Unit, integration, and security tests with mock workspaces | Tracked in Git |
-| **Example Configurations** | `examples/` | Sanitized templates (`config.example.yaml`, `workspaces.example.yaml`) | Tracked in Git |
-| **Documentation** | `docs/`, `*.md` | Specifications, guides, threat model, API contracts | Tracked in Git |
-| **Local Configuration** | `~/.config/agentporter/` | Active `config.yaml`, `workspaces.yaml`, `secrets.env` | **NEVER TRACKED** |
-| **Local Runtime State** | `~/.local/state/agentporter/` | SQLite `jobs.db`, job logs, server PID, synthetic passwd/group | **NEVER TRACKED** |
-| **Local Caching / Artifacts** | `~/.cache/agentporter/` | Ephemeral caches, temporary downloads | **NEVER TRACKED** |
-| **User Workspaces** | e.g. `~/repos/*`, `~/projects/*` | Actual source code repositories registered by the host user | Outside AgentPorter |
+- `src/agentporter/`: generic MCP server, tools, sandbox, adapters, CLI.
+- `tests/`: isolated unit, integration, and security regression tests.
+- `examples/`: sanitized configuration templates.
+- `docs/`: generic architecture, security, and client-integration documentation.
+- `pyproject.toml` and build metadata.
 
----
+The package must not contain:
 
-## 2. Package Scope (What Goes in Git)
+- API keys, bearer tokens, or provider credentials.
+- Real tunnel hostnames or tunnel credentials.
+- User-specific home paths or real workspace registrations.
+- Provider CLI authentication caches.
+- SQLite job databases, execution logs, PID files, or generated artifacts.
+- Personal agent aliases, preferred model routing, or machine-specific provider choices.
 
-The repository contains exclusively:
+## Local installation
 
-1. **Python Source Code (`src/agentporter/`)**:
-   - Generic MCP tool implementations (`files`, `git`, `execution`, `jobs`, `artifacts`, `local_http`, `agents`).
-   - Abstract sandbox contracts and the unprivileged Bubblewrap backend.
-   - Abstract worker-agent adapter contracts (`codex`, `claude`, `opencode`, `agy`).
-   - Authentication and security middleware (constant-time API key verification, host validation, rate limiting).
-   - Provenance telemetry extractors.
-   - CLI command definitions (`agentporter serve`, `doctor`, `key`, etc.).
+Mutable deployment state belongs under standard XDG locations:
 
-2. **Packaging & Tooling**:
-   - `pyproject.toml`, `.gitignore`, build specifications.
+### `~/.config/agentporter/`
 
-3. **Tests & Safe Fixtures (`tests/`)**:
-   - Unit tests running in isolated `pytest` `tmp_path` fixtures.
-   - Security regression tests verifying that path traversal, shell escapes, environment leakage, and sensitive file accesses are blocked.
+- `config.yaml`: server/security/sandbox configuration.
+- `workspaces.yaml`: local workspace registrations and permissions.
+- `secrets.env`: AgentPorter API key, mode `0600`.
 
-4. **Sanitized Examples & Documentation (`examples/`, `docs/`)**:
-   - Generic examples with placeholder paths (`/home/user/my-project`).
-   - Setup guides for clients (Copilot Studio, Claude Desktop).
+### `~/.local/state/agentporter/`
 
-### Strict Negative Invariants: What MUST NEVER Enter the Package
+- `jobs.db`: job metadata.
+- `jobs/*.stdout.log`, `jobs/*.stderr.log`: bounded job output.
+- `logs/agentporter.log`: server/security audit log.
+- `etc/passwd`, `etc/group`: synthetic sandbox identity files.
 
-- ❌ Host API keys or bearer tokens.
-- ❌ Tunnel credentials, domains, or token strings.
-- ❌ Hardcoded usernames, home paths, or private hostnames.
-- ❌ Real workspace registrations containing private paths.
-- ❌ Host SSH keys (`id_rsa`, `id_ed25519`, `known_hosts`).
-- ❌ LLM CLI provider auth tokens or caches (`~/.codex`, `~/.claude`, `~/.config/opencode`).
-- ❌ SQLite job databases (`jobs.db`), stdout/stderr execution logs, or PID files.
-- ❌ Generated artifacts or project plots.
+State/config directories are created with private permissions where supported.
 
----
+### `~/.cache/agentporter/`
 
-## 3. Local Installation Scope
+Reserved for disposable cache data. It is never part of the source package.
 
-When installed on a target host, AgentPorter conforms to the standard Linux XDG directory conventions:
+## User workspaces
 
-### Config Directory (`$XDG_CONFIG_HOME/agentporter` or `~/.config/agentporter`)
+Actual projects remain outside AgentPorter, for example:
 
-- `config.yaml`: Global server parameters (bind address, port, rate limits, enabled adapters).
-- `workspaces.yaml`: Registered workspace IDs mapping to local paths:
-  ```yaml
-  workspaces:
-    sample-project:
-      path: /home/user/projects/sample-project
-      writable: true
-      description: "Development workspace"
-  ```
-- `secrets.env`: Permissions `0600`. Contains the generated API authentication key:
-  ```env
-  AGENTPORTER_API_KEY=vX48...
-  ```
+```yaml
+workspaces:
+  project-a:
+    path: /home/user/projects/project-a
+    writable: true
+    allow_execute: true
+    allow_git: true
+    allow_artifacts: true
+    allow_agent_dispatch: false
+    local_http_ports: []
+```
 
-### State Directory (`$XDG_STATE_HOME/agentporter` or `~/.local/state/agentporter`)
+A workspace registration is an authorization boundary. The package never assumes
+a user's home path, repository names, preferred agents, or provider routing.
 
-- `jobs.db`: SQLite database storing job execution metadata, timings, exit statuses, and telemetry.
-- `jobs/<job_id>.stdout.log` & `jobs/<job_id>.stderr.log`: Dedicated log streams for every command and agent dispatch.
-- `logs/agentporter.log`: Rotating server audit logs capturing tool invocations, durations, and security rejections.
-- `agentporter.pid`: Process ID file for daemon management.
-- `etc/passwd` and `etc/group`: Synthetic minimal user identities for the Bubblewrap sandbox.
+## Client-specific deployment repositories
 
-### Cache Directory (`$XDG_CACHE_HOME/agentporter` or `~/.cache/agentporter`)
+Users may keep a separate private deployment/configuration repository for a
+specific MCP client or agent system. Such a repo can contain sanitized setup
+scripts, client instructions, and local policy templates, but secrets and
+mutable runtime state should still remain outside Git.
 
-- Ephemeral files, scratch artifacts, or temporary downloads.
-
----
-
-## 4. Coexistence with Existing Services
-
-AgentPorter can run alongside other gateways or services without conflict:
-- Runs by default on its own dedicated port (e.g. 8765) with its own XDG state and configuration trees.
-- Keeps sandbox state completely separated from any external processes.
+This allows AgentPorter itself to remain client-agnostic while personal
+deployments can be opinionated.

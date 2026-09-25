@@ -10,6 +10,7 @@ from agentporter.workspaces.registry import WorkspaceRegistry
 from agentporter.sandbox.bubblewrap import BubblewrapSandbox
 from agentporter.agents.broker import AgentBroker
 from agentporter.tools.jobs import JobManager
+from tests._support import BWRAP_USABLE
 
 
 def test_auth_rejection():
@@ -62,7 +63,7 @@ def test_unknown_agent_blocked(tmp_path: Path):
         broker.dispatch_agent("malicious-agent", "do harm", "ws")
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_sandbox_python_ssh_blocked(tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     code = (
@@ -76,7 +77,7 @@ def test_sandbox_python_ssh_blocked(tmp_path: Path):
     assert "SSH_EXISTS: False" in res["stdout"]
 
 
-@pytest.mark.skipif(not shutil.which("bwrap") or not shutil.which("Rscript"), reason="bwrap or Rscript not available")
+@pytest.mark.skipif(not BWRAP_USABLE or not shutil.which("Rscript"), reason="bwrap or Rscript not available")
 def test_sandbox_r_ssh_blocked(tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     code = 'cat("R_SSH_EXISTS:", dir.exists(path.expand("~/.ssh")) || dir.exists("/home"))'
@@ -85,7 +86,7 @@ def test_sandbox_r_ssh_blocked(tmp_path: Path):
     assert "R_SSH_EXISTS: FALSE" in res["stdout"]
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_sandbox_mnt_c_blocked(tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     res = sandbox.run(str(tmp_path), ["bash", "-c", "ls -d /mnt/c 2>/dev/null || echo NOT_MOUNTED"])
@@ -93,7 +94,7 @@ def test_sandbox_mnt_c_blocked(tmp_path: Path):
     assert "NOT_MOUNTED" in res["stdout"]
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_sandbox_docker_socket_blocked(tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     res = sandbox.run(str(tmp_path), ["bash", "-c", "ls /var/run/docker.sock 2>/dev/null || echo NO_DOCKER"])
@@ -101,7 +102,7 @@ def test_sandbox_docker_socket_blocked(tmp_path: Path):
     assert "NO_DOCKER" in res["stdout"]
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_sandbox_network_blocked(tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     code = (
@@ -117,7 +118,7 @@ def test_sandbox_network_blocked(tmp_path: Path):
     assert "NETWORK_BLOCKED: OSError" in res["stdout"] or "Network is unreachable" in res["stdout"] or "NETWORK_BLOCKED" in res["stdout"]
 
 
-@pytest.mark.skipif(not shutil.which("bwrap"), reason="Bubblewrap not available")
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
 def test_sandbox_environment_clean(tmp_path: Path):
     sandbox = BubblewrapSandbox(tmp_path / "state")
     os.environ["SECRET_HOST_TOKEN_TEST"] = "super_secret_12345"

@@ -1,46 +1,43 @@
-# AgentPorter Security Model & Threat Matrix
+# AgentPorter Security Model
 
-This document provides the security analysis and threat mitigation matrix for AgentPorter.
+See the repository-level [SECURITY.md](../SECURITY.md) for the normative trust-boundary description.
 
----
+## Threat matrix
 
-## 1. Threat Matrix
+| Threat | Mitigation | Residual risk |
+| --- | --- | --- |
+| DNS rebinding / unintended hostnames | Localhost-only default Host allowlist; explicit remote hostname configuration | Reverse proxy/tunnel must still be configured correctly |
+| API-key guessing/timing | High-entropy generated key, constant-time comparison, rate limiting | Shared API key is bearer authentication; protect it |
+| Oversized HTTP bodies | Content-Length check plus actual ASGI body-byte counting | Application-level DoS is reduced, not eliminated |
+| Filesystem traversal/symlink escape | Registered workspace IDs, relative-path validation, canonical-path checks | Registered workspace itself is trusted |
+| Sensitive-file disclosure | Sensitive components blocked in reads/writes **and search** | Novel secret filenames not covered by denylist remain workspace data |
+| Arbitrary direct code | Bubblewrap mount/network/environment isolation | No cgroup CPU/memory quotas yet |
+| Runaway async output | Timeout and per-stream log-size limit | Host disk/resource pressure remains possible below limits |
+| Worker-agent overreach | Per-workspace dispatch permission; adapter capability checks; enforceable read-only required for RO workspaces | Worker CLIs run as host user and are not kernel-isolated by AgentPorter |
+| Loopback service access | Per-workspace exact-port allowlist; redirects disabled | Allowed loopback service is trusted |
+| Malicious Git helpers | Global/system config disabled; external diff/fsmonitor/pagers suppressed; output bounded | Repository-local Git config is still present |
+| Model provenance spoofing | Worker prose/stdout is not trusted as provenance | Actual model remains `unknown` unless a trusted adapter channel is added |
 
-| Threat Category | Potential Attack Vector | AgentPorter Mitigation |
-| :--- | :--- | :--- |
-| **Network Ingress** | DNS rebinding from malicious websites | Strict `Host` header validation against `allowed_hosts`. |
-| **Authentication** | Brute force or timing attacks on API key | High-entropy random key (32 bytes urlsafe), constant-time `hmac.compare_digest`, sliding-window rate limiting. |
-| **Filesystem Escape** | Path traversal sequences (`../../etc/passwd`), absolute paths (`/mnt/c`) | Strict rejection of absolute paths; canonical path resolution ensuring target starts with workspace root; blocking `..`. |
-| **Credential Theft** | Reading SSH keys, environment files, or git tokens in workspace | Hardcoded block on `.git`, `.ssh`, `.env`, `id_rsa`, `id_ed25519`, `secrets.env`. |
-| **Malicious Code Execution** | Reverse shell, outbound network socket in Python/R/bash | Linux Bubblewrap sandbox with `--unshare-net` (network completely unreachable). |
-| **Environment Leakage** | Reading parent process environment variables containing API keys | Bubblewrap `--clearenv` discards entire environment; sets minimal synthetic `PATH`, `HOME=/tmp`, `USER=sandbox`. |
-| **Host System Access** | Accessing host root filesystem, Docker socket, or Windows drives under WSL | Only system runtime libraries (`/usr`, `/lib`, `/bin`) are mounted read-only. `/home`, `/mnt/c`, `/var/run/docker.sock` are excluded. |
-| **Denial of Service** | Oversized payloads or runaway background jobs | 10 MB payload ceiling; per-client rate limiting; process group timeout and `job_cancel` killing child subtrees. |
-| **Worker Agent Over-Reach** | Unintended mutations by dispatched worker CLIs | Explicit control packets (`Permission Level: 1`, `Step budget`, `READ-ONLY` if workspace non-writable); preflight git dirty checks. |
+## Boundary summary
 
----
+```text
+MCP client
+   |
+   v
+AgentPorter ingress
+   |
+   +--> workspace file/Git/artifact tools
+   |
+   +--> Bubblewrap direct execution
+   |       - no network
+   |       - scrubbed environment
+   |       - workspace RW/RO
+   |
+   +--> loopback HTTP (explicit port allowlist, host-side)
+   |
+   +--> worker CLI delegation (host-user boundary)
+```
 
-## 2. In-Depth Boundary Analysis: Sandbox vs. Worker Agents
-
-### The Direct Execution Boundary
-Commands executed through `exec_run` and `exec_start` run directly inside an OS-level Linux namespace sandbox managed by Bubblewrap (`bwrap`).
-
-1. **Kernel Enforcement**: User namespaces, mount namespaces, IPC namespaces, and network namespaces are unshared.
-2. **Network Isolation**: Direct execution has zero network access. Any attempt to resolve DNS or establish TCP/UDP connections fails with `ENETUNREACH`.
-3. **Synthetic Identity**: The process executes as user `sandbox` (UID 1000) using a synthetic in-memory `/etc/passwd` and `/etc/group`.
-
-### The Worker Agent Delegation Boundary
-Dispatched AI agents (e.g. OpenAI Codex, Anthropic Claude Code) are **not** run inside the Bubblewrap sandbox.
-
-**Why?**
-Modern AI CLI agents must:
-- Connect to internet endpoints (e.g. `api.openai.com`, `api.anthropic.com`, Google Vertex AI).
-- Read their user authentication credentials stored in `~/.codex/`, `~/.claude/`, etc.
-
-**Implications**:
-- Dispatched worker agents execute with the host user's privileges.
-- Bounding is enforced at the application layer via:
-  - Working directory (`cwd`) scoping.
-  - Formatted control blocks in the prompt (`Authorization`, `Step budget`, `Scope`).
-  - Preflight Git checks and execution logging.
-- Users should only dispatch worker agents to workspaces they trust and monitor agent output.
+The worker-agent path is intentionally a different trust boundary from direct
+execution. AgentPorter does not claim that host-level coding-agent CLIs are
+sandboxed merely because they were dispatched through the MCP gateway.
