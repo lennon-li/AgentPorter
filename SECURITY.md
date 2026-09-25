@@ -31,7 +31,6 @@ those programs normally require provider credentials and network access.
 
 Consequences:
 
-<<<<<<< HEAD
 - worker CLIs are **not** contained by AgentPorter's Bubblewrap sandbox;
 - worker processes may access whatever the host account and their own CLI
   sandbox/policy allow;
@@ -40,19 +39,6 @@ Consequences:
 - prompt wording is not treated as a security boundary;
 - model/reasoning overrides are accepted only when the adapter can actually
   enforce them.
-=======
-1. **Local-First Default**:
-   AgentPorter binds strictly to `127.0.0.1`. Remote access should only occur through controlled, authenticated tunnels (e.g., Microsoft Dev Tunnels, Tailscale).
-2. **Strict Host Header Validation**:
-   Requests must match configured allowed hosts (e.g. `127.0.0.1`, `localhost`, `*.devtunnels.ms`). Unrecognized `Host` headers are rejected with `403 Forbidden` to prevent DNS rebinding attacks.
-3. **API Key Authentication**:
-   - Every request must provide a valid API key via header (`X-AgentPorter-Key` or legacy `X-M3-MCP-Key`).
-   - Comparisons are performed in constant time using `hmac.compare_digest`.
-   - Keys are stored in `~/.config/agentporter/secrets.env` with file permissions `0600`.
-4. **Rate Limiting & Payload Ceiling**:
-   - In-memory sliding window rate limiter (default: 120 requests/minute per client).
-   - Maximum HTTP request payload size: 10 MB.
->>>>>>> origin/main
 
 Users should only enable `allow_agent_dispatch` for workspaces where this
 host-level trust is acceptable.

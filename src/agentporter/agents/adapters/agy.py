@@ -1,7 +1,5 @@
 """Antigravity (agy) CLI agent adapter."""
 
-import os
-import json
 import re
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
@@ -9,7 +7,6 @@ from agentporter.agents.adapters.base import AgentAdapter
 
 class AgyAdapter(AgentAdapter):
     name = "agy"
-<<<<<<< HEAD
     alias = "Antigravity"
     provider = "Antigravity"
     description = "Antigravity CLI worker; upstream provider/model depend on local configuration"
@@ -17,13 +14,6 @@ class AgyAdapter(AgentAdapter):
     supports_read_only = False
     supports_model_override = False
     supports_reasoning_override = False
-=======
-    alias = "Argie"
-    provider = "Google AI Pro"
-    default_model = "Gemini 3.8 Flash (Medium)"
-    reasoning_effort = "medium"
-    description = "Antigravity CLI for research, synthesis, and audit consulting"
->>>>>>> origin/main
 
     def capabilities(self) -> list[str]:
         return ["survey", "synthesis", "audit", "exploration"]
@@ -39,29 +29,12 @@ class AgyAdapter(AgentAdapter):
                 m = re.search(r"(\d+\.\d+\.\d+)", raw)
                 cli_version = m.group(1) if m else (raw.splitlines()[0] if raw else "unknown")
             except Exception:
-<<<<<<< HEAD
                 pass
-=======
-                cli_version = "unknown"
-
-        configured_model = self.default_model
-        cfg_path = os.path.expanduser("~/.gemini/antigravity-cli/settings.json")
-        if os.path.exists(cfg_path):
-            try:
-                with open(cfg_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if "model" in data and data["model"]:
-                    configured_model = data["model"]
-            except Exception:
-                pass
-
->>>>>>> origin/main
         return {
             "executable": exe,
             "is_installed": is_installed,
             "cli_version": cli_version,
             "provider": self.provider,
-<<<<<<< HEAD
             "configured_model": "unknown",
             "reasoning_effort": "unknown",
         }
@@ -82,23 +55,3 @@ class AgyAdapter(AgentAdapter):
         if model or reasoning_effort:
             raise RuntimeError("Agy adapter does not yet enforce model/reasoning overrides")
         return [exe, "-p", packet]
-=======
-            "configured_model": configured_model,
-            "reasoning_effort": self.reasoning_effort,
-        }
-
-    def build_argv(self, workspace_path: str, packet: str, model: str, reasoning_effort: str, policy=None) -> list[str]:
-        exe = self.find_executable(["agy", "~/.local/bin/agy", "/usr/local/bin/agy"])
-        if not exe:
-            raise RuntimeError("Agy CLI executable not found on host")
-
-        # Plan mode is read-only, which is already inside every ExecutionPolicy.
-        cmd = [exe, "--mode", "plan", "--sandbox"]
-        if model:
-            cmd.extend(["--model", model])
-        if reasoning_effort and not any(f"({lvl})" in (model or "") for lvl in ["Low", "Medium", "High"]):
-            cmd.extend(["--effort", reasoning_effort.lower()])
-        cmd.extend(["-p", packet])
-        return cmd
-
->>>>>>> origin/main

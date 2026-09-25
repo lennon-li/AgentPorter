@@ -6,12 +6,9 @@ import logging
 from typing import Optional, Dict
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
-from agentporter.agents.adapters.codex_identity import JaxAdapter, LizAdapter
-from agentporter.agents.adapters.copilot import CopilotAdapter
 from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
-from agentporter.agents.policy import ExecutionPolicy
 from agentporter.workspaces.registry import WorkspaceRegistry
 from agentporter.tools.jobs import JobManager
 
@@ -26,11 +23,8 @@ class AgentBroker:
         self.job_manager = job_manager
         self.adapters: Dict[str, AgentAdapter] = {
             "codex": CodexAdapter(),
-            "jax": JaxAdapter(),
-            "liz": LizAdapter(),
             "claude": ClaudeAdapter(),
             "opencode": OpenCodeAdapter(),
-            "copilot": CopilotAdapter(),
             "agy": AgyAdapter(),
         }
 
@@ -73,9 +67,6 @@ class AgentBroker:
         purpose: str = "",
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
-        allow_commit: bool = False,
-        allow_push: bool = False,
-        policy: Optional[ExecutionPolicy] = None,
     ) -> dict:
         """Dispatch an authorized worker agent asynchronously with enforceable controls."""
         agent_key = agent.lower().strip()
@@ -131,16 +122,6 @@ class AgentBroker:
             except Exception:
                 pass
 
-<<<<<<< HEAD
-=======
-        effective_model = model or detection["configured_model"]
-        effective_effort = reasoning_effort or detection["reasoning_effort"]
-        cli_ver = detection["cli_version"]
-        provider = detection["provider"]
-        policy = policy or ExecutionPolicy.for_workspace(ws.writable, allow_commit, allow_push)
-
-        # Structured control packet
->>>>>>> origin/main
         packet = (
             "Permission Level: 1\n"
             "Interaction Mode: AUTONOMOUS\n"
@@ -148,7 +129,6 @@ class AgentBroker:
             "Step budget: 30\n"
             f"Project Root: {ws.path}\n"
             f"Purpose: {purpose or 'Worker delegation via AgentPorter'}\n"
-            f"{policy.packet_text()}"
             f"Task:\n{task}\n"
         )
 
@@ -160,17 +140,10 @@ class AgentBroker:
         cmd = adapter.build_argv(
             workspace_path=ws.path,
             packet=packet,
-<<<<<<< HEAD
             model=requested_model,
             reasoning_effort=requested_reasoning,
             writable=ws.writable,
-=======
-            model=effective_model,
-            reasoning_effort=effective_effort,
-            policy=policy,
->>>>>>> origin/main
         )
-        logger.info("Dispatching %s in %s with policy %s", agent_key, ws_path, policy.as_dict())
 
         job_id = self.job_manager.start_raw_job(
             workspace_id=workspace_id,
@@ -186,8 +159,6 @@ class AgentBroker:
         )
 
         return {
-            "dispatch_id": job_id,
-            "job_id": job_id,
             "worker_cli": agent_key,
             "provider": provider,
             "configured_model": configured_model,
@@ -195,6 +166,7 @@ class AgentBroker:
             "actual_model": "unknown",
             "reasoning_level": requested_reasoning or configured_reasoning,
             "cli_version": cli_ver,
+            "job_id": job_id,
             "exit_status": None,
             "duration": 0.0,
             "status": "running",
@@ -204,5 +176,4 @@ class AgentBroker:
             "thinking_level": requested_reasoning or configured_reasoning,
             "workspace_id": workspace_id,
             "git_clean_at_dispatch": git_clean,
-            "execution_policy": policy.as_dict(),
         }

@@ -37,7 +37,7 @@ def test_capabilities_and_workspace_info(workspace_registry, tmp_path: Path):
     assert info["git"]["is_repo"] is True
 
 
-def test_file_operations(workspace_registry, sample_workspace: Path):
+def test_file_operations(workspace_registry):
     (
         list_files, search_text, read_file, write_file,
         apply_patch, mkdir, move_path, trash_path
@@ -105,32 +105,6 @@ def test_file_operations(workspace_registry, sample_workspace: Path):
     )
     with pytest.raises(ValueError, match="sensitive or internal"):
         apply_patch("test-ws", malicious_patch)
-
-    # Patch with timestamp / multi-space delimiters in header
-    timestamp_patch = (
-        "--- README.md  2026-09-18 12:00:00.000000000 +0000\n"
-        "+++ README.md  2026-09-18 12:01:00.000000000 +0000\n"
-        "@@ -1,3 +1,4 @@\n"
-        " # AgentPorter Test Workspace\n"
-        " Patched line here\n"
-        "+Another patched line\n"
-        " Line 2 content\n"
-    )
-    p_ts_res = apply_patch("test-ws", timestamp_patch)
-    assert p_ts_res["status"] == "applied"
-    assert "Another patched line" in read_file("test-ws", "README.md")["content"]
-
-    # Reject reading files exceeding the 10 MB ceiling
-    large_file = sample_workspace / "large_file.dat"
-    with open(large_file, "wb") as f:
-        f.seek(11 * 1024 * 1024)
-        f.write(b"\0")
-    try:
-        with pytest.raises(ValueError, match="exceeds maximum readable size of 10 MB"):
-            read_file("test-ws", "large_file.dat")
-    finally:
-        if large_file.exists():
-            large_file.unlink()
 
 
 @pytest.mark.skipif(not BWRAP_USABLE or not shutil.which("Rscript"), reason="bwrap or Rscript not available")
@@ -269,11 +243,8 @@ def test_agent_broker_listing(workspace_registry, tmp_path: Path):
     agent_names = [a["agent"] for a in agents]
 
     assert "codex" in agent_names
-    assert "jax" in agent_names
-    assert "liz" in agent_names
     assert "claude" in agent_names
     assert "opencode" in agent_names
-    assert "copilot" in agent_names
     assert "agy" in agent_names
 
     for ag in agents:
@@ -333,7 +304,6 @@ def test_dispatch_agent_telemetry(workspace_registry, tmp_path: Path):
     assert res["reasoning_level"] == "high"
     assert res["job_id"].startswith("job_")
 
-<<<<<<< HEAD
     for _ in range(50):
         st = job_mgr.get_status(res["job_id"])
         if st["status"] != "running":
@@ -358,31 +328,3 @@ def test_read_only_worker_must_be_enforceable(sample_workspace, tmp_path: Path):
     broker.register_adapter(UnsafeFake())
     with pytest.raises(PermissionError, match="cannot enforce read-only"):
         broker.dispatch_agent("unsafe", "review only", "ro")
-=======
-    job_mgr.cancel(res["job_id"])
-
-
-def test_dispatch_agent_reports_execution_policy(workspace_registry, tmp_path: Path):
-    job_mgr = JobManager(tmp_path / "state")
-    broker = AgentBroker(workspace_registry, job_mgr)
-
-    res = broker.dispatch_agent(agent="codex", task="echo test", workspace_id="test-ws")
-
-    assert res["execution_policy"]["workspace_write"] is True
-    assert res["execution_policy"]["git_commit"] is False
-    assert res["execution_policy"]["git_push"] is False
-    job_mgr.cancel(res["job_id"])
-
-
-def test_dispatch_agent_confirmed_commit_and_push(workspace_registry, tmp_path: Path):
-    job_mgr = JobManager(tmp_path / "state")
-    broker = AgentBroker(workspace_registry, job_mgr)
-
-    res = broker.dispatch_agent(
-        agent="codex", task="echo test", workspace_id="test-ws", allow_commit=True, allow_push=True
-    )
-
-    assert res["execution_policy"]["git_commit"] is True
-    assert res["execution_policy"]["git_push"] is True
-    job_mgr.cancel(res["job_id"])
->>>>>>> origin/main

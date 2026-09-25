@@ -5,7 +5,6 @@ import re
 import json
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
-from agentporter.agents.policy import ExecutionPolicy
 
 
 class OpenCodeAdapter(AgentAdapter):
@@ -57,7 +56,6 @@ class OpenCodeAdapter(AgentAdapter):
             "reasoning_effort": "unknown",
         }
 
-<<<<<<< HEAD
     def build_argv(
         self,
         workspace_path: str,
@@ -78,33 +76,3 @@ class OpenCodeAdapter(AgentAdapter):
             cmd.extend(["-m", model])
         cmd.append(packet)
         return cmd
-=======
-    def build_argv(self, workspace_path: str, packet: str, model: str, reasoning_effort: str, policy=None) -> list[str]:
-        exe = self.find_executable(["opencode", "~/.npm-global/bin/opencode", "~/.local/bin/opencode"])
-        if not exe:
-            raise RuntimeError("OpenCode CLI executable not found on host")
-
-        policy = policy or ExecutionPolicy()
-        # Inline config is deep-merged over the user's opencode.json. `opencode
-        # run` rejects "ask" rules, so routine actions must be explicit allows.
-        bash = {"*": "allow", "rm *": "allow"} if policy.shell else {"*": "deny"}
-        for prefix in policy.denied_commands():
-            bash.update({prefix: "deny", f"{prefix} *": "deny"})
-        config = {
-            "permission": {
-                "edit": "allow" if policy.workspace_write else "deny",
-                "bash": bash,
-            }
-        }
-        return [
-            "env",
-            f"OPENCODE_CONFIG_CONTENT={json.dumps(config)}",
-            exe,
-            "run",
-            "--dir",
-            workspace_path,
-            "-m",
-            model,
-            packet,
-        ]
->>>>>>> origin/main
