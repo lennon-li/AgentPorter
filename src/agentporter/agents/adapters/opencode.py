@@ -5,6 +5,7 @@ import re
 import json
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
+from agentporter.agents.policy import ExecutionPolicy
 
 
 class OpenCodeAdapter(AgentAdapter):
@@ -13,9 +14,9 @@ class OpenCodeAdapter(AgentAdapter):
     provider = "OpenCode"
     description = "OpenCode CLI worker; provider/model depend on local OpenCode configuration"
 
-    supports_read_only = False
+    supports_read_only = True
     supports_model_override = True
-    supports_reasoning_override = False
+    supports_reasoning_override = True
 
     def capabilities(self) -> list[str]:
         return ["code_generation", "code_search", "testing", "code_review"]
@@ -67,12 +68,28 @@ class OpenCodeAdapter(AgentAdapter):
         exe = self.find_executable(["opencode", "~/.npm-global/bin/opencode", "~/.local/bin/opencode"])
         if not exe:
             raise RuntimeError("OpenCode CLI executable not found on host")
-        if not writable:
-            raise RuntimeError("OpenCode adapter does not yet enforce read-only execution")
-        if reasoning_effort:
-            raise RuntimeError("OpenCode adapter does not yet enforce reasoning overrides")
-        cmd = [exe, "run"]
+
+        if isinstance(writable, ExecutionPolicy):
+            policy = writable
+        else:
+            policy = ExecutionPolicy.for_workspace(writable=bool(writable))
+
+        bash_rules = {"*": "allow"}
+        for denied in policy.denied_commands():
+            bash_rules[denied] = "deny"
+            if not denied.endswith("*"):
+                bash_rules[f"{denied} *"] = "deny"
+        config = {
+            "permission": {
+                "edit": "allow" if policy.workspace_write else "deny",
+                "bash": bash_rules,
+            }
+        }
+
+        cmd = ["env", f"OPENCODE_CONFIG_CONTENT={json.dumps(config, separators=(',', ':'))}", exe, "run", "--dir", workspace_path]
         if model:
             cmd.extend(["-m", model])
+        if reasoning_effort in {"low", "medium", "high"}:
+            cmd.extend(["--reasoning-effort", reasoning_effort])
         cmd.append(packet)
         return cmd

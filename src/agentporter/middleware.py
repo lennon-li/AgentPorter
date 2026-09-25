@@ -47,6 +47,11 @@ class SecurityMiddleware:
             await self.app(scope, receive, send)
             return
 
+        path = scope.get("path", "")
+        if path == "/health":
+            await self.app(scope, receive, send)
+            return
+
         headers = dict(scope.get("headers", []))
 
         host = headers.get(b"host", b"").decode("utf-8", errors="replace")
@@ -78,9 +83,11 @@ class SecurityMiddleware:
         raw_header = headers.get(self.header_bytes)
         if raw_header is None and self.legacy_header_bytes:
             raw_header = headers.get(self.legacy_header_bytes)
-        provided_key = (
-            raw_header.decode("utf-8", errors="replace") if raw_header is not None else ""
-        )
+        if raw_header is None:
+            raw_header = headers.get(b"authorization")
+        provided_key = raw_header.decode("utf-8", errors="replace").strip() if raw_header is not None else ""
+        if provided_key.lower().startswith("bearer "):
+            provided_key = provided_key[7:].strip()
         if not verify_api_key(provided_key, self.api_key):
             self._log_rejection_diagnostic(headers, "invalid_or_missing_key")
             await JSONResponse(
