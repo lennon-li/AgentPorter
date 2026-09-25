@@ -6,6 +6,7 @@ import time
 import json
 import logging
 import functools
+from contextlib import asynccontextmanager
 from typing import Optional, Any
 from logging.handlers import RotatingFileHandler
 from starlette.types import ASGIApp
@@ -328,6 +329,11 @@ def create_asgi_app(config: Config) -> ASGIApp:
     streamable_app = mcp.streamable_http_app(
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)
     )
+
+    @asynccontextmanager
+    async def lifespan(app):
+        async with streamable_app.router.lifespan_context(streamable_app):
+            yield
     
     server_list = [
         {"url": "https://5mvx3k0t-8765.use.devtunnels.ms", "description": "Asgard Dev Tunnel Gateway"}
@@ -338,13 +344,18 @@ def create_asgi_app(config: Config) -> ASGIApp:
         version="0.1.0",
         description="AgentPorter Local Tools and Subagent Gateway for ChatGPT and MCP clients",
         servers=server_list,
-        generate_unique_id_function=custom_generate_unique_id
+        generate_unique_id_function=custom_generate_unique_id,
+        lifespan=lifespan,
     )
     
     app.state.tools = context["tools"]
     
     app.include_router(api_router, prefix="/api/v1")
-    app.mount("/mcp", streamable_app)
+    # streamable_http_app already serves its endpoint at /mcp. Mounting it at
+    # /mcp would expose the effective route as /mcp/mcp and leave /mcp returning
+    # a redirect followed by 404s. Mount at the root after the REST routes so
+    # the MCP app keeps its canonical /mcp path.
+    app.mount("/", streamable_app)
 
     # ChatGPT Actions strict validation: every object schema must have 'properties'
     original_openapi = app.openapi
