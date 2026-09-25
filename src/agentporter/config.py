@@ -203,7 +203,9 @@ class Config:
                         self.api_key = line.split("=", 1)[1].strip()
                         if self.api_key:
                             return
-            raise ValueError(f"{secrets_file} exists but contains no AGENTPORTER_API_KEY")
+            raise ValueError(
+                f"{secrets_file} exists but contains neither AGENTPORTER_API_KEY nor API_KEY"
+            )
 
         new_key = secrets.token_urlsafe(32)
         fd = os.open(secrets_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

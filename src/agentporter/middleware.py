@@ -85,9 +85,9 @@ class SecurityMiddleware:
             raw_header = headers.get(self.legacy_header_bytes)
         if raw_header is None:
             raw_header = headers.get(b"authorization")
-        provided_key = (
-            raw_header.decode("utf-8", errors="replace") if raw_header is not None else ""
-        )
+        provided_key = raw_header.decode("utf-8", errors="replace").strip() if raw_header is not None else ""
+        if provided_key.lower().startswith("bearer "):
+            provided_key = provided_key[7:].strip()
         if not verify_api_key(provided_key, self.api_key):
             self._log_rejection_diagnostic(headers, "invalid_or_missing_key")
             await JSONResponse(
