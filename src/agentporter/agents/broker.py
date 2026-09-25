@@ -3,7 +3,7 @@
 import os
 import subprocess
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict, TYPE_CHECKING
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
 from agentporter.agents.adapters.claude import ClaudeAdapter
@@ -11,7 +11,9 @@ from agentporter.agents.adapters.opencode import OpenCodeAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
 from agentporter.agents.policy import ExecutionPolicy
 from agentporter.workspaces.registry import WorkspaceRegistry
-from agentporter.tools.jobs import JobManager
+
+if TYPE_CHECKING:
+    from agentporter.tools.jobs import JobManager
 
 logger = logging.getLogger("agentporter.agents.broker")
 
@@ -19,7 +21,7 @@ logger = logging.getLogger("agentporter.agents.broker")
 class AgentBroker:
     """Manages agent discovery, capability enforcement, and asynchronous delegation."""
 
-    def __init__(self, workspace_registry: WorkspaceRegistry, job_manager: JobManager):
+    def __init__(self, workspace_registry: WorkspaceRegistry, job_manager: "JobManager"):
         self.workspace_registry = workspace_registry
         self.job_manager = job_manager
         self.adapters: Dict[str, AgentAdapter] = {

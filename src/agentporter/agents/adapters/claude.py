@@ -2,6 +2,7 @@
 
 import re
 import json
+import shlex
 import subprocess
 from pathlib import Path
 from agentporter.agents.adapters.base import AgentAdapter
@@ -68,11 +69,17 @@ class ClaudeAdapter(AgentAdapter):
                     "matcher": "Bash",
                     "hooks": [{
                         "type": "command",
-                        "command": f"python3 {guard} '{denied}'",
+                        "command": f"python3 {shlex.quote(str(guard))} {shlex.quote(denied)}",
                     }],
                 }]
             }
         }
+
+        allowed_tools = ["Bash"]
+        if not policy.git_push:
+            allowed_tools.append("Bash(git push *)")
+        if not policy.git_commit:
+            allowed_tools.append("Bash(git commit *)")
 
         args = [
             exe,
@@ -81,9 +88,7 @@ class ClaudeAdapter(AgentAdapter):
             "--permission-prompts",
             "none",
             "--allowedTools",
-            "Bash",
-            "Bash(git push *)",
-            "Bash(git commit *)",
+            *allowed_tools,
             "--settings",
             json.dumps(settings),
         ]

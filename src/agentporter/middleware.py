@@ -48,7 +48,11 @@ class SecurityMiddleware:
             return
 
         path = scope.get("path", "")
-        if path in {"/health", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}:
+        if (
+            path in {"/health", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+            or path.startswith("/docs/")
+            or path.startswith("/redoc/")
+        ):
             await self.app(scope, receive, send)
             return
 

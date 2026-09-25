@@ -240,7 +240,7 @@ class Config:
             "allow_git": bool(allow_git),
             "allow_artifacts": bool(allow_artifacts),
             "allow_agent_dispatch": bool(allow_agent_dispatch),
-            "local_http_ports": sorted({int(p) for p in (local_http_ports or []) if 1 <= int(p) <= 65535}),
+            "local_http_ports": self._normalize_ports(local_http_ports),
         }
         self._write_workspaces_file()
 
@@ -250,3 +250,12 @@ class Config:
         del self.workspaces[ws_id]
         self._write_workspaces_file()
         return True
+
+    @staticmethod
+    def _normalize_ports(local_http_ports: Optional[list[int]]) -> list[int]:
+        ports: set[int] = set()
+        for port in local_http_ports or []:
+            port_int = int(port)
+            if 1 <= port_int <= 65535:
+                ports.add(port_int)
+        return sorted(ports)
