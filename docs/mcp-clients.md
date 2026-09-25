@@ -18,6 +18,7 @@ X-AgentPorter-Key: <key>
 
 The key is stored in `~/.config/agentporter/secrets.env`.
 
+<<<<<<< HEAD
 If a client only supports stdio, use a compatible stdio-to-HTTP MCP bridge.
 AgentPorter does not require a specific bridge implementation.
 
@@ -47,3 +48,21 @@ security:
 
 Client-specific legacy header names can be configured locally with
 `security.legacy_header_name`; they are not enabled by default.
+=======
+## 3. Remote Ingress via Microsoft Dev Tunnels (Azure Relay)
+
+When connecting an external cloud orchestrator (e.g., Microsoft Copilot Studio, ChatGPT Actions) to a local AgentPorter instance running inside WSL2:
+
+1. Log in via your preferred identity provider:
+   - **GitHub Personal**: `devtunnel user login -d -g`
+   - **GitHub Enterprise**: `devtunnel user login -d -g` (with your enterprise work account)
+   - **Microsoft Entra ID / Azure**: `devtunnel user login -d -e`
+2. Create and host a persistent tunnel:
+   ```bash
+   devtunnel create agentporter-tunnel --allow-anonymous
+   devtunnel port create agentporter-tunnel -p 8765
+   devtunnel host agentporter-tunnel
+   ```
+3. Use the resulting permanent HTTPS URL (`https://<tunnel-id>-8765.use.devtunnels.ms`) as the MCP server endpoint in your remote client with the `X-AgentPorter-Key` header.
+
+>>>>>>> origin/main

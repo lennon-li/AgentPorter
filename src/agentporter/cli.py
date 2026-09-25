@@ -1,8 +1,11 @@
 """Command-line interface for AgentPorter."""
 
+import os
 import sys
 import shutil
+import secrets
 import subprocess
+from pathlib import Path
 import click
 import uvicorn
 
@@ -66,7 +69,20 @@ def doctor(config_dir):
     else:
         click.echo(f"Sandbox Backend:      bubblewrap NOT FOUND. Install via: sudo apt install bubblewrap [WARN]")
 
-    # 3. Path Diagnostics
+    # 3. Ingress Tunnel Backend (Microsoft Dev Tunnels)
+    devtunnel_path = shutil.which("devtunnel") or shutil.which("devtunnel", path=str(Path.home() / "bin"))
+    if devtunnel_path:
+        dt_user = "Not logged in"
+        try:
+            res = subprocess.run([devtunnel_path, "user", "show"], capture_output=True, text=True, timeout=3)
+            dt_user = res.stdout.strip() or dt_user
+        except Exception:
+            pass
+        click.echo(f"Ingress Backend:      devtunnel ({devtunnel_path}) [{dt_user}]")
+    else:
+        click.echo("Ingress Backend:      devtunnel not found (optional, see docs/copilot-studio.md)")
+
+    # 4. Path Diagnostics
     click.echo(f"Config Directory:     {cfg.config_dir} (exists: {cfg.config_dir.exists()})")
     click.echo(f"State Directory:      {cfg.state_dir} (exists: {cfg.state_dir.exists()})")
     click.echo(f"Secrets File:         {cfg.config_dir / 'secrets.env'} (exists: {(cfg.config_dir / 'secrets.env').exists()})")
@@ -102,14 +118,93 @@ def doctor(config_dir):
 
 @main.command()
 @click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
-def workspaces(config_dir):
-    """List registered workspaces."""
+@click.option("--workspace", default=None, type=click.Path(), help="Optional initial workspace path")
+@click.option("--name", default=None, help="Workspace ID for the initial workspace")
+def init(config_dir, workspace, name):
+    """Initialize AgentPorter configuration, directories, and API keys."""
+    cfg = Config(config_dir=config_dir)
+    cfg.config_dir.mkdir(parents=True, exist_ok=True)
+    cfg.state_dir.mkdir(parents=True, exist_ok=True)
+
+    click.echo("AgentPorter initialized successfully:")
+    click.echo(f"  Config:  {cfg.config_dir}")
+    click.echo(f"  State:   {cfg.state_dir}")
+    click.echo(f"  API Key: {cfg.config_dir / 'secrets.env'}")
+
+    ws_file = cfg.config_dir / "workspaces.yaml"
+    if not ws_file.exists():
+        if workspace:
+            real_ws = os.path.realpath(os.path.expanduser(workspace))
+            ws_id = name or os.path.basename(real_ws) or "default"
+            cfg.add_workspace(ws_id, real_ws, writable=True, description="Initial workspace")
+            click.echo(f"  Workspace: '{ws_id}' -> {real_ws}")
+        else:
+            with open(ws_file, "w", encoding="utf-8") as f:
+                f.write("# AgentPorter Workspace Registry\nworkspaces: {}\n")
+            click.echo(f"  Workspace Registry: {ws_file}")
+
+
+@main.group(invoke_without_command=True)
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+@click.pass_context
+def workspaces(ctx, config_dir):
+    """Manage registered workspaces."""
+    if ctx.invoked_subcommand is None:
+        cfg = Config(config_dir=config_dir)
+        registry = WorkspaceRegistry(cfg.workspaces)
+        ws_list = registry.list_all()
+        click.echo(f"Registered Workspaces ({len(ws_list)}):")
+        if not ws_list:
+            click.echo("  (None registered. Use: agentporter workspaces add <id> <path>)")
+        for ws in ws_list:
+            click.echo(f"  • {ws['workspace_id']:<15} path={ws['path']} writable={ws['writable']}")
+
+
+@workspaces.command(name="list")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def workspaces_list(config_dir):
+    """List all registered workspaces."""
     cfg = Config(config_dir=config_dir)
     registry = WorkspaceRegistry(cfg.workspaces)
     ws_list = registry.list_all()
     click.echo(f"Registered Workspaces ({len(ws_list)}):")
     for ws in ws_list:
         click.echo(f"  • {ws['workspace_id']:<15} path={ws['path']} writable={ws['writable']}")
+
+
+@workspaces.command(name="add")
+@click.argument("workspace_id")
+@click.argument("path")
+@click.option("--read-only", is_flag=True, help="Configure workspace as read-only")
+@click.option("--description", default="", help="Optional description of the workspace")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def workspaces_add(workspace_id, path, read_only, description, config_dir):
+    """Register a new workspace."""
+    cfg = Config(config_dir=config_dir)
+    real_path = os.path.realpath(os.path.expanduser(path))
+    if not os.path.exists(real_path):
+        click.echo(f"Warning: path '{real_path}' does not currently exist", err=True)
+    cfg.add_workspace(
+        ws_id=workspace_id,
+        path=real_path,
+        writable=not read_only,
+        description=description,
+    )
+    click.echo(f"Added workspace '{workspace_id}' -> {real_path} (writable={not read_only})")
+
+
+@workspaces.command(name="remove")
+@click.argument("workspace_id")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def workspaces_remove(workspace_id, config_dir):
+    """Remove a registered workspace."""
+    cfg = Config(config_dir=config_dir)
+    if cfg.remove_workspace(workspace_id):
+        click.echo(f"Removed workspace '{workspace_id}'")
+    else:
+        click.echo(f"Error: Workspace '{workspace_id}' not found", err=True)
+        sys.exit(1)
+
 
 
 @main.command()
@@ -130,5 +225,42 @@ def agents(config_dir):
         click.echo()
 
 
+@main.group()
+def key():
+    """Manage AgentPorter API authentication keys."""
+    pass
+
+
+@key.command(name="show")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def key_show(config_dir):
+    """Display the active API key and accepted header names."""
+    cfg = Config(config_dir=config_dir)
+    click.echo(f"Primary Header: {cfg.security.header_name}")
+    click.echo(f"Legacy Header:  {cfg.security.legacy_header_name}")
+    click.echo(f"API Key:        {cfg.api_key}")
+
+
+@key.command(name="rotate")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+@click.option("--yes", "-y", is_flag=True, help="Confirm key rotation without prompt")
+def key_rotate(config_dir, yes):
+    """Rotate the API key and update secrets.env."""
+    if not yes:
+        click.confirm("Are you sure you want to rotate the API key? Existing clients will be disconnected.", abort=True)
+    cfg = Config(config_dir=config_dir)
+    new_key = secrets.token_urlsafe(32)
+    secrets_file = cfg.config_dir / "secrets.env"
+    cfg.config_dir.mkdir(parents=True, exist_ok=True)
+    with open(secrets_file, "w", encoding="utf-8") as f:
+        f.write("# AgentPorter generated API key\n")
+        f.write(f"AGENTPORTER_API_KEY={new_key}\n")
+        f.write(f"M3_MCP_KEY={new_key}\n")
+    os.chmod(secrets_file, 0o600)
+    click.echo("API key successfully rotated.")
+    click.echo(f"New Key: {new_key}")
+
+
 if __name__ == "__main__":
     main()
+

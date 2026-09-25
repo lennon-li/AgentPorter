@@ -6,12 +6,14 @@ import time
 import json
 import logging
 import functools
+from contextlib import asynccontextmanager
 from typing import Optional, Any
 from logging.handlers import RotatingFileHandler
 from starlette.types import ASGIApp
 import uvicorn
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
+from fastapi import FastAPI
 
 from agentporter import __version__
 from agentporter.config import Config
@@ -282,7 +284,9 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         workspace_id: str,
         purpose: str = "",
         model: Optional[str] = None,
-        reasoning_effort: Optional[str] = None
+        reasoning_effort: Optional[str] = None,
+        allow_commit: bool = False,
+        allow_push: bool = False,
     ) -> dict:
         """Dispatch an authorized CLI agent worker asynchronously."""
         return _dispatch_agent(
@@ -291,7 +295,9 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             workspace_id=workspace_id,
             purpose=purpose,
             model=model,
-            reasoning_effort=reasoning_effort
+            reasoning_effort=reasoning_effort,
+            allow_commit=allow_commit,
+            allow_push=allow_push,
         )
 
     context = {
@@ -299,23 +305,110 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         "sandbox": sandbox,
         "job_manager": job_manager,
         "agent_broker": agent_broker,
+        "tools": {
+            "list_workspaces": list_workspaces,
+            "workspace_info": workspace_info,
+            "list_files": list_files,
+            "search_text": search_text,
+            "read_file": read_file,
+            "write_file": write_file,
+            "apply_patch": apply_patch,
+            "mkdir": mkdir,
+            "move_path": move_path,
+            "trash_path": trash_path,
+            "exec_run": exec_run,
+            "exec_start": exec_start,
+            "job_status": job_status,
+            "job_output": job_output,
+            "job_result": job_result,
+            "job_cancel": job_cancel,
+            "git_status": git_status,
+            "git_diff": git_diff,
+            "git_log": git_log,
+            "git_show": git_show,
+            "list_artifacts": list_artifacts,
+            "read_artifact": read_artifact,
+            "list_agents": list_agents,
+            "dispatch_agent": dispatch_agent,
+        }
     }
     return mcp, context
 
 
+from agentporter.rest.api import api_router, custom_generate_unique_id
+
 def create_asgi_app(config: Config) -> ASGIApp:
     """Create Starlette ASGI application with Streamable HTTP and Security Middleware."""
-    mcp, _ = build_mcp_server(config)
+    mcp, context = build_mcp_server(config)
+    
     streamable_app = mcp.streamable_http_app(
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)
     )
+
+    @asynccontextmanager
+    async def lifespan(app):
+        async with streamable_app.router.lifespan_context(streamable_app):
+            yield
+    
+    server_list = [
+        {"url": "https://5mvx3k0t-8765.use.devtunnels.ms", "description": "Asgard Dev Tunnel Gateway"}
+    ]
+
+    app = FastAPI(
+        title="AgentPorter API",
+        version="0.1.0",
+        description="AgentPorter Local Tools and Subagent Gateway for ChatGPT and MCP clients",
+        servers=server_list,
+        generate_unique_id_function=custom_generate_unique_id,
+        lifespan=lifespan,
+    )
+    
+    app.state.tools = context["tools"]
+    
+    app.include_router(api_router, prefix="/api/v1")
+    # streamable_http_app already serves its endpoint at /mcp. Mounting it at
+    # /mcp would expose the effective route as /mcp/mcp and leave /mcp returning
+    # a redirect followed by 404s. Mount at the root after the REST routes so
+    # the MCP app keeps its canonical /mcp path.
+    app.mount("/", streamable_app)
+
+    # ChatGPT Actions strict validation: every object schema must have 'properties'
+    original_openapi = app.openapi
+    def custom_openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = original_openapi()
+        def fix_objects(obj):
+            if isinstance(obj, dict):
+                if obj.get("type") == "object" and "properties" not in obj:
+                    obj["properties"] = {}
+                for v in obj.values():
+                    fix_objects(v)
+            elif isinstance(obj, list):
+                for item in obj:
+                    fix_objects(item)
+        fix_objects(schema)
+        if "components" not in schema:
+            schema["components"] = {}
+        schema["components"]["securitySchemes"] = {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "description": "API key bearer token"
+            }
+        }
+        schema["security"] = [{"BearerAuth": []}]
+        app.openapi_schema = schema
+        return app.openapi_schema
+    app.openapi = custom_openapi
+
     rate_limiter = RateLimiter(
         max_requests=config.security.rate_limit_max_requests,
         window_seconds=config.security.rate_limit_window_seconds
     )
     return SecurityMiddleware(
-        app=streamable_app,
-        api_key=config.api_key,
+        app=app,
+        api_key=config.api_keys,
         allowed_hosts=config.security.allowed_hosts,
         header_name=config.security.header_name,
         legacy_header_name=config.security.legacy_header_name,

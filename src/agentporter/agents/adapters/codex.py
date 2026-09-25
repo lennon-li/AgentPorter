@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
+from agentporter.agents.policy import ExecutionPolicy
 
 
 class CodexAdapter(AgentAdapter):
@@ -62,6 +63,7 @@ class CodexAdapter(AgentAdapter):
             "reasoning_effort": reasoning_effort,
         }
 
+<<<<<<< HEAD
     def build_argv(
         self,
         workspace_path: str,
@@ -70,10 +72,14 @@ class CodexAdapter(AgentAdapter):
         reasoning_effort: str = "",
         writable: bool = True,
     ) -> list[str]:
+=======
+    def build_argv(self, workspace_path: str, packet: str, model: str, reasoning_effort: str, policy=None) -> list[str]:
+>>>>>>> origin/main
         exe = self.find_executable(["codex", "~/.npm-global/bin/codex", "~/.local/bin/codex"])
         if not exe:
             raise RuntimeError("Codex CLI executable not found on host")
 
+<<<<<<< HEAD
         cmd = [
             exe,
             "exec",
@@ -81,6 +87,21 @@ class CodexAdapter(AgentAdapter):
             "workspace-write" if writable else "read-only",
             "-c",
             "approval_policy=never",
+=======
+        policy = policy or ExecutionPolicy()
+        sandbox = "workspace-write" if policy.workspace_write else "read-only"
+        # The workspace-write sandbox has no network, so a confirmed push needs it enabled.
+        network = ["-c", "sandbox_workspace_write.network_access=true"] if policy.git_push else []
+
+        return [
+            exe, "exec",
+            "--sandbox", sandbox,
+            "--skip-git-repo-check",
+            "-c", "approval_policy=never", *network,
+            "-m", model,
+            "-c", f"model_reasoning_effort={reasoning_effort}",
+            packet
+>>>>>>> origin/main
         ]
         if model:
             cmd.extend(["-m", model])

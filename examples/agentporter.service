@@ -1,0 +1,31 @@
+# Systemd User Unit File for AgentPorter
+#
+# Installation:
+#   mkdir -p ~/.config/systemd/user
+#   cp examples/agentporter.service ~/.config/systemd/user/agentporter.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now agentporter
+#
+# Status & Logs:
+#   systemctl --user status agentporter
+#   journalctl --user-unit agentporter -f
+
+[Unit]
+Description=AgentPorter MCP Streamable HTTP Gateway
+After=network.target
+
+[Service]
+Type=simple
+# If installed in virtualenv or via pipx/uv, adjust executable path accordingly:
+ExecStart=%h/.local/bin/agentporter serve --host 127.0.0.1 --port 8765
+Restart=always
+RestartSec=5
+KillMode=process
+TimeoutStopSec=15
+
+# Security hardening for host service
+PrivateTmp=true
+NoNewPrivileges=false
+
+[Install]
+WantedBy=default.target

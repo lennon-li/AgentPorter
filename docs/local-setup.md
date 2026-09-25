@@ -61,6 +61,7 @@ security:
     - "127.0.0.1"
     - "127.0.0.1:*"
     - "localhost"
+<<<<<<< HEAD
     - "localhost:*"
 
 sandbox:
@@ -70,6 +71,10 @@ sandbox:
   max_timeout_seconds: 900
   max_output_bytes: 102400
   max_job_log_bytes: 10485760
+=======
+    - "*.devtunnels.ms"
+    - "*.devtunnels.ms:*"
+>>>>>>> origin/main
 ```
 
 Remote hostnames and client-specific compatibility headers are opt-in local

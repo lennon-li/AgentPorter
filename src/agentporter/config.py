@@ -33,10 +33,26 @@ class SecuritySettings:
         "127.0.0.1:*",
         "localhost",
         "localhost:*",
+<<<<<<< HEAD
+=======
+        "*.trycloudflare.com",
+        "*.trycloudflare.com:*",
+        "*.devtunnels.ms",
+        "*.devtunnels.ms:*",
+        "*.lhr.life",
+        "*.lhr.life:*",
+        "*.pinggy.link",
+        "*.pinggy.link:*",
+        "*.pinggy.net",
+        "*.pinggy.net:*",
+        "*.ts.net",
+        "*.ts.net:*",
+>>>>>>> origin/main
     ])
     rate_limit_max_requests: int = 120
     rate_limit_window_seconds: float = 60.0
     max_payload_bytes: int = 10 * 1024 * 1024  # 10 MB
+
 
 
 @dataclass
@@ -119,6 +135,14 @@ class Config:
                 self.security.legacy_header_name = str(sec["legacy_header_name"] or "")
             if "allowed_hosts" in sec and isinstance(sec["allowed_hosts"], list):
                 self.security.allowed_hosts = [str(h) for h in sec["allowed_hosts"]]
+
+            env_hosts = os.environ.get("ALLOWED_HOSTS", "")
+            if env_hosts:
+                for h in env_hosts.split(","):
+                    h_clean = h.strip()
+                    if h_clean and h_clean not in self.security.allowed_hosts:
+                        self.security.allowed_hosts.append(h_clean)
+
             if "rate_limit" in sec and isinstance(sec["rate_limit"], dict):
                 rl = sec["rate_limit"]
                 self.security.rate_limit_max_requests = int(
@@ -179,16 +203,53 @@ class Config:
                 data = yaml.safe_load(f) or {}
             self.workspaces = data.get("workspaces", {})
 
+    def add_workspace(self, ws_id: str, path: str, writable: bool = True, description: str = "") -> None:
+        """Register and persist a workspace to workspaces.yaml."""
+        real_path = os.path.realpath(os.path.expanduser(path))
+        self.workspaces[ws_id] = {
+            "path": real_path,
+            "writable": writable,
+            "description": description,
+        }
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        ws_file = self.config_dir / "workspaces.yaml"
+        with open(ws_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump({"workspaces": self.workspaces}, f, sort_keys=False)
+
+    def remove_workspace(self, ws_id: str) -> bool:
+        """Remove a workspace from workspaces.yaml. Returns True if removed."""
+        if ws_id in self.workspaces:
+            del self.workspaces[ws_id]
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            ws_file = self.config_dir / "workspaces.yaml"
+            with open(ws_file, "w", encoding="utf-8") as f:
+                yaml.safe_dump({"workspaces": self.workspaces}, f, sort_keys=False)
+            return True
+        return False
+
+
     def _load_or_generate_api_key(self) -> None:
+<<<<<<< HEAD
         """Retrieve AgentPorter API key from env or secrets.env, generating one if absent."""
         env_key = os.environ.get("AGENTPORTER_API_KEY")
         if env_key:
             self.api_key = env_key.strip()
             return
+=======
+        """Retrieve API key from env or secrets.env, generating one if absent."""
+        self.api_keys = []
+        env_key = os.environ.get("AGENTPORTER_API_KEY")
+        if env_key and env_key.strip():
+            self.api_keys.append(env_key.strip())
+        env_m3 = os.environ.get("M3_MCP_KEY")
+        if env_m3 and env_m3.strip() and env_m3.strip() not in self.api_keys:
+            self.api_keys.append(env_m3.strip())
+>>>>>>> origin/main
 
         secrets_file = self.config_dir / "secrets.env"
         if secrets_file.is_file():
             try:
+<<<<<<< HEAD
                 os.chmod(secrets_file, 0o600)
             except OSError:
                 logger.warning("Could not enforce 0600 on %s", secrets_file)
@@ -208,3 +269,37 @@ class Config:
             f.write(f"AGENTPORTER_API_KEY={new_key}\n")
         self.api_key = new_key
         logger.info("Generated new API key at %s (mode 0600)", secrets_file)
+=======
+                with open(secrets_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("AGENTPORTER_API_KEY="):
+                            k = line.split("=", 1)[1].strip()
+                            if k and k not in self.api_keys:
+                                self.api_keys.append(k)
+                        elif line.startswith("M3_MCP_KEY="):
+                            k = line.split("=", 1)[1].strip()
+                            if k and k not in self.api_keys:
+                                self.api_keys.append(k)
+                        elif line and not line.startswith("#") and "=" not in line:
+                            if line not in self.api_keys:
+                                self.api_keys.append(line)
+            except Exception as e:
+                logger.warning("Could not read secrets file %s: %s", secrets_file, e)
+
+        if not self.api_keys:
+            # Generate a new random 32-byte key
+            new_key = secrets.token_urlsafe(32)
+            try:
+                with open(secrets_file, "w", encoding="utf-8") as f:
+                    f.write(f"# AgentPorter generated API key\n")
+                    f.write(f"AGENTPORTER_API_KEY={new_key}\n")
+                    f.write(f"M3_MCP_KEY={new_key}\n")
+                os.chmod(secrets_file, 0o600)
+                logger.info("Generated new API key at %s (mode 0600)", secrets_file)
+            except Exception as e:
+                logger.error("Failed to write secrets file %s: %s", secrets_file, e)
+            self.api_keys.append(new_key)
+
+        self.api_key = self.api_keys[0]
+>>>>>>> origin/main

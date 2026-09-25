@@ -14,7 +14,10 @@ async def homepage(request):
 
 
 def create_test_app(api_key="valid-key-123", max_payload=1024, rate_max=5):
-    inner_app = Starlette(routes=[Route("/", homepage, methods=["GET", "POST"])])
+    inner_app = Starlette(routes=[
+        Route("/", homepage, methods=["GET", "POST"]),
+        Route("/mcp", homepage, methods=["GET", "POST"]),
+    ])
     limiter = RateLimiter(max_requests=rate_max, window_seconds=10.0)
     return SecurityMiddleware(
         app=inner_app,
@@ -89,6 +92,7 @@ def test_middleware_rate_limiting():
     assert resp.status_code == 429
 
 
+<<<<<<< HEAD
 def test_middleware_streamed_payload_ceiling():
     app = create_test_app(max_payload=50)
     client = TestClient(app, base_url="http://testserver")
@@ -103,3 +107,38 @@ def test_middleware_streamed_payload_ceiling():
         headers={"X-AgentPorter-Key": "valid-key-123"},
     )
     assert resp.status_code == 413
+=======
+def test_middleware_health_endpoint():
+    app = create_test_app()
+    client = TestClient(app, base_url="http://testserver")
+    # Health endpoint succeeds without API key (for public uptime/tunnel probes)
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "healthy"
+    assert resp.json()["service"] == "agentporter"
+
+    # Health endpoint still enforces host header validation
+    client_bad_host = TestClient(app, base_url="http://attacker.com")
+    resp_bad = client_bad_host.get("/health")
+    assert resp_bad.status_code == 403
+
+
+def test_middleware_root_path_rewrite():
+    # Verify that requests to '/' are rewritten to '/mcp'
+    async def mcp_endpoint(request):
+        return JSONResponse({"path": request.scope["path"]})
+
+    inner_app = Starlette(routes=[Route("/mcp", mcp_endpoint, methods=["POST"])])
+    limiter = RateLimiter(max_requests=10, window_seconds=10.0)
+    app = SecurityMiddleware(
+        app=inner_app,
+        api_key="valid-key-123",
+        allowed_hosts=["testserver"],
+        rate_limiter=limiter,
+    )
+    client = TestClient(app, base_url="http://testserver")
+    resp = client.post("/", headers={"X-AgentPorter-Key": "valid-key-123"})
+    assert resp.status_code == 200
+    assert resp.json() == {"path": "/mcp"}
+
+>>>>>>> origin/main

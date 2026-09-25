@@ -15,7 +15,9 @@ def create_agent_tools(broker: AgentBroker):
         workspace_id: str,
         purpose: str = "",
         model: Optional[str] = None,
-        reasoning_effort: Optional[str] = None
+        reasoning_effort: Optional[str] = None,
+        allow_commit: bool = False,
+        allow_push: bool = False,
     ) -> dict:
         """Dispatch an authorized CLI agent worker asynchronously."""
         return broker.dispatch_agent(
@@ -24,7 +26,9 @@ def create_agent_tools(broker: AgentBroker):
             workspace_id=workspace_id,
             purpose=purpose,
             model=model,
-            reasoning_effort=reasoning_effort
+            reasoning_effort=reasoning_effort,
+            allow_commit=allow_commit,
+            allow_push=allow_push,
         )
 
     return list_agents, dispatch_agent

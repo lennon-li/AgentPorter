@@ -9,11 +9,19 @@ from collections import defaultdict
 logger = logging.getLogger("agentporter.auth")
 
 
-def verify_api_key(provided_key: str, expected_key: str) -> bool:
+def verify_api_key(provided_key: str, expected_key: str | list[str]) -> bool:
     """Perform constant-time comparison of the API key to prevent timing side-channels."""
     if not provided_key or not expected_key:
         return False
-    return hmac.compare_digest(provided_key.encode("utf-8"), expected_key.encode("utf-8"))
+    keys = [expected_key] if isinstance(expected_key, str) else expected_key
+    clean_prov = provided_key.strip()
+    while clean_prov.lower().startswith("bearer "):
+        clean_prov = clean_prov[7:].strip()
+    clean_bytes = clean_prov.encode("utf-8")
+    for k in keys:
+        if k and hmac.compare_digest(clean_bytes, k.strip().encode("utf-8")):
+            return True
+    return False
 
 
 def is_host_allowed(host_header: str, allowed_hosts: list[str]) -> bool:

@@ -12,6 +12,11 @@ SENSITIVE_NAMES_LOWER = {
     "id_rsa",
     "id_ed25519",
     "secrets.env",
+    ".bashrc",
+    ".bash_profile",
+    ".profile",
+    ".zshrc",
+    ".gnupg",
 }
 
 

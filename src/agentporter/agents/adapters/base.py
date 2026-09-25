@@ -5,6 +5,8 @@ import shutil
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from agentporter.agents.policy import ExecutionPolicy
+
 
 class AgentAdapter(ABC):
     """Abstract contract for an AI coding-agent CLI worker."""
@@ -54,9 +56,18 @@ class AgentAdapter(ABC):
         self,
         workspace_path: str,
         packet: str,
+<<<<<<< HEAD
         model: str = "",
         reasoning_effort: str = "",
         writable: bool = True,
     ) -> list[str]:
         """Construct argv using only controls this adapter can actually enforce."""
         raise NotImplementedError
+=======
+        model: str,
+        reasoning_effort: str,
+        policy: Optional[ExecutionPolicy] = None,
+    ) -> list[str]:
+        """Construct process command arguments enforcing the execution policy."""
+        pass
+>>>>>>> origin/main

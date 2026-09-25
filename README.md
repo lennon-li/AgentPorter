@@ -24,10 +24,20 @@ without giving the client unrestricted host access.
 
 Direct code execution is kernel-isolated with Bubblewrap.
 
+<<<<<<< HEAD
 Worker-agent delegation is different: installed CLIs normally run as the host
 user so they can access their own provider credentials and network. AgentPorter
 therefore does not claim that delegated workers are sandboxed. A read-only
 workspace can only dispatch an adapter that can enforce read-only behavior.
+=======
+- **Dual-Protocol Gateway (MCP & REST)**: Serves standard Model Context Protocol over Streamable HTTP at `/mcp` AND standard REST API with OpenAPI 3.1 schema at `/api/v1` for clients without native MCP support (such as ChatGPT Plus Web Custom Actions).
+- **Local-First & Client-Agnostic**: Compatible with ChatGPT Web, Microsoft 365 Copilot Studio, Claude Desktop, Cursor, and custom orchestrators.
+- **Controlled Workspace Access**: Replaces raw filesystem access with registered workspace identifiers. Operations enforce project-relative paths, block traversal sequences (`..`), prevent symlink escapes, and prohibit access to sensitive credentials (`.ssh`, `.env`, `.git`).
+- **Sandboxed Direct Execution**: Executes code (Bash, Python, R) within unprivileged Linux `bubblewrap` (bwrap) sandboxes with memory-backed private `/tmp`, unshared network namespaces (zero outbound network), and scrubbed environments.
+- **Asynchronous Jobs & Output Tailing**: Manages long-running commands and test suites asynchronously with SQLite tracking, incremental output cursors, and clean process-group cancellation.
+- **Read-Only Git Operations**: Exposes safe, non-destructive inspection tools (`git_status`, `git_diff`, `git_log`, `git_show`). State-changing Git operations (commit, push, force-reset) are explicitly forbidden.
+- **Worker-Agent Delegation**: Dispatches specialist tasks or independent code reviews to installed AI coding agent CLIs (such as Codex, Claude Code, OpenCode, and Antigravity) with structured control packets and telemetry tracking.
+>>>>>>> origin/main
 
 See [SECURITY.md](SECURITY.md).
 
@@ -52,6 +62,7 @@ pip install -e ".[dev]"
 
 AgentPorter is not published to PyPI yet.
 
+<<<<<<< HEAD
 ## Configure
 
 Create `~/.config/agentporter/workspaces.yaml`:
@@ -73,12 +84,42 @@ The default server configuration binds only to localhost and uses the
 key in `~/.config/agentporter/secrets.env` with restrictive permissions.
 
 ## Run
+=======
+## Quick Start
+
+### 1. Initialize Configuration
+
+```bash
+agentporter init
+```
+
+This creates standard directories, sets up an initial API key, and prepares workspace configurations.
+
+### 2. Register Workspaces
+
+Register a project workspace via the CLI or edit `~/.config/agentporter/workspaces.yaml`:
+
+```bash
+agentporter workspaces add my-project /path/to/project
+```
+
+### 3. Check System Health
+
+```bash
+agentporter doctor
+```
+
+`doctor` verifies Python version, Bubblewrap availability, configuration directories, registered workspaces, and detected CLI agent workers.
+
+### 4. Run the Server
+>>>>>>> origin/main
 
 ```bash
 agentporter doctor
 agentporter serve --host 127.0.0.1 --port 8765
 ```
 
+<<<<<<< HEAD
 ## Documentation
 
 - [Architecture](docs/architecture.md)
@@ -88,6 +129,32 @@ agentporter serve --host 127.0.0.1 --port 8765
 - [MCP clients](docs/mcp-clients.md)
 - [Microsoft Copilot Studio](docs/copilot-studio.md)
 - [Roadmap / TODO](TODO.md)
+=======
+On initial startup, an API key is generated and stored securely in `~/.config/agentporter/secrets.env` (file mode `0600`).
+
+### 5. Manage API Keys
+
+```bash
+# View active API key and accepted header names
+agentporter key show
+
+# Rotate API key
+agentporter key rotate
+```
+
+---
+
+## Documentation
+
+- [Architecture Overview](docs/architecture.md)
+- [Security Model & Threat Matrix](docs/security-model.md)
+- [Package vs. Local Separation](docs/package-vs-local.md)
+- [Local Installation & Setup Guide](docs/local-setup.md)
+- [Connecting MCP Clients](docs/mcp-clients.md)
+- [ChatGPT Web Custom Actions Setup](docs/chatgpt-web-integration-plan.md)
+- [Microsoft Copilot Studio Setup](docs/copilot-studio.md)
+- [Dogfooding Lessons Learned](docs/lessons-learned.md)
+>>>>>>> origin/main
 
 ## Development
 
