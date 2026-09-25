@@ -25,10 +25,10 @@ def test_local_http_unknown_workspace():
 
 
 def test_local_http_connection_refused():
-    reg = WorkspaceRegistry({"test": {"path": "/tmp", "writable": True}})
+    reg = WorkspaceRegistry({"test": {"path": "/tmp", "writable": True, "local_http_ports": [59999]}})
     local_http = create_local_http_tool(reg)
 
     # Port 59999 should not have a service listening
     res = local_http("test", port=59999)
     assert "error" in res
-    assert "Failed to connect to local service on 127.0.0.1:59999" in res["error"]
+    assert "Failed to connect to allowed loopback port 59999" in res["error"]

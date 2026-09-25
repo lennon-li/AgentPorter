@@ -47,6 +47,11 @@ class SecurityMiddleware:
             await self.app(scope, receive, send)
             return
 
+        path = scope.get("path", "")
+        if path in {"/health", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}:
+            await self.app(scope, receive, send)
+            return
+
         headers = dict(scope.get("headers", []))
 
         host = headers.get(b"host", b"").decode("utf-8", errors="replace")
@@ -78,6 +83,8 @@ class SecurityMiddleware:
         raw_header = headers.get(self.header_bytes)
         if raw_header is None and self.legacy_header_bytes:
             raw_header = headers.get(self.legacy_header_bytes)
+        if raw_header is None:
+            raw_header = headers.get(b"authorization")
         provided_key = (
             raw_header.decode("utf-8", errors="replace") if raw_header is not None else ""
         )
