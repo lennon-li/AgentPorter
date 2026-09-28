@@ -8,6 +8,7 @@ import subprocess
 import logging
 from pathlib import Path
 from agentporter.sandbox.base import SandboxBackend
+from agentporter.tooling import add_tooling_mounts
 
 logger = logging.getLogger("agentporter.sandbox.bwrap")
 
@@ -95,6 +96,10 @@ class BubblewrapSandbox(SandboxBackend):
             if os.path.exists(opt_dir):
                 args.extend(["--ro-bind", opt_dir, opt_dir])
 
+        # Expose the explicitly supported development tools through read-only
+        # mounts while keeping the host PATH and home directory isolated.
+        add_tooling_mounts(args)
+
         args.extend([
             "--bind" if writable else "--ro-bind",
             real_workspace,
@@ -102,7 +107,7 @@ class BubblewrapSandbox(SandboxBackend):
             "--unshare-all",
             "--unshare-net",
             "--clearenv",
-            "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin",
+            "--setenv", "PATH", "/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin",
             "--setenv", "HOME", "/tmp",
             "--setenv", "USER", "sandbox",
             "--setenv", "LOGNAME", "sandbox",

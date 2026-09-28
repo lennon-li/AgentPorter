@@ -16,6 +16,7 @@ from agentporter.sandbox.bubblewrap import BubblewrapSandbox
 from agentporter.workspaces.registry import WorkspaceRegistry
 from agentporter.tools.jobs import JobManager
 from agentporter.agents.broker import AgentBroker
+from agentporter.tooling import tool_inventory, tool_version
 
 
 @click.group()
@@ -55,6 +56,14 @@ def doctor(config_dir):
 
     # 1. Python Environment
     click.echo(f"Python Version:       {sys.version.split()[0]} ({sys.executable})")
+
+    click.echo("\nTooling Surface:")
+    for tool in tool_inventory():
+        if tool["path"]:
+            version = tool_version(str(tool["path"]))
+            click.echo(f"  • {tool['name']:<12} {tool['path']} [{tool['status']}] {version}")
+        else:
+            click.echo(f"  • {tool['name']:<12} NOT FOUND [MISSING]")
 
     # 2. Bubblewrap Sandbox Backend
     bwrap_path = shutil.which("bwrap")
@@ -107,6 +116,8 @@ def doctor(config_dir):
         avail_flag = f"Available (v{ag['cli_version']})" if ag["available"] else "Not installed"
         click.echo(f"  • {ag['agent']:<10} [{ag['provider']}]: {avail_flag}")
         click.echo(f"    Configured Model: {ag['configured_model']} (reasoning: {ag['reasoning_level']})")
+        click.echo(f"    Effective Model:  {ag['effective_model']}")
+        click.echo(f"    Default Routing:  {ag['default_routing']}")
 
     # 6. Security Warnings
     click.echo("\nSecurity Invariants:")
@@ -219,6 +230,8 @@ def agents(config_dir):
         click.echo(f"Agent: {ag['agent']} ({ag['alias']})")
         click.echo(f"  Provider:         {ag['provider']}")
         click.echo(f"  Configured Model: {ag['configured_model']}")
+        click.echo(f"  Effective Model:  {ag['effective_model']}")
+        click.echo(f"  Default Routing:  {ag['default_routing']}")
         click.echo(f"  Actual Model:     {ag['actual_model_used']}")
         click.echo(f"  CLI Version:      {ag['cli_version']}")
         click.echo(f"  Available:        {ag['available']}")
@@ -263,4 +276,3 @@ def key_rotate(config_dir, yes):
 
 if __name__ == "__main__":
     main()
-

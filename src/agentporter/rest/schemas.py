@@ -54,7 +54,7 @@ class JobStartResponse(BaseModel):
 
 class JobStatusResponse(BaseModel):
     job_id: str = Field(description="Job ID.")
-    status: str = Field(description="Current status (running, completed, failed, cancelled).")
+    status: str = Field(description="Current status (running, completed, failed, timed_out, cancelled).")
     exit_code: Optional[int] = Field(None, description="Exit code if finished.")
     duration_seconds: Optional[float] = Field(None)
 
@@ -73,11 +73,20 @@ class JobOutputResponse(BaseModel):
 
 
 class JobResultResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     job_id: str = Field(description="Job ID.")
     status: str = Field(description="Final status.")
     exit_code: Optional[int] = Field(None)
     stdout: str = Field(description="Full stdout.")
     stderr: str = Field(description="Full stderr.")
+    requested_model: Optional[str] = Field(None, description="Model requested/effectively routed for the job.")
+    actual_model: Optional[str] = Field(None, description="Runtime model resolved from worker provenance when available.")
+    provider: Optional[str] = Field(None, description="Provider recorded for the job.")
+    worker_cli: Optional[str] = Field(None, description="Worker CLI used for the job.")
+    reasoning_level: Optional[str] = Field(None, description="Requested reasoning effort.")
+    cursor: Optional[int] = Field(default=0, description="Start stdout byte offset for this result chunk.")
+    next_cursor: Optional[int] = Field(default=0, description="Cursor for the next stdout chunk.")
 
 class ArtifactInfo(BaseModel):
     name: str = Field(description="Filename.")

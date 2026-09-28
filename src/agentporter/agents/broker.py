@@ -14,6 +14,9 @@ from agentporter.tools.jobs import JobManager
 
 logger = logging.getLogger("agentporter.agents.broker")
 
+PROHIBITED_MODEL_PREFIXES = ("gpt-5.6",)
+OPENAI_FALLBACK_MODEL = "gpt-6-luna"
+
 
 class AgentBroker:
     """Manages agent discovery, capability enforcement, and asynchronous delegation."""
@@ -31,6 +34,22 @@ class AgentBroker:
     def register_adapter(self, adapter: AgentAdapter) -> None:
         self.adapters[adapter.name.lower()] = adapter
 
+    @staticmethod
+    def _model_is_prohibited(model: str) -> bool:
+        normalized = (model or "").strip().lower()
+        return any(normalized.startswith(prefix) for prefix in PROHIBITED_MODEL_PREFIXES)
+
+    @classmethod
+    def _resolve_default_model(cls, provider: str, configured_model: str) -> str:
+        if not cls._model_is_prohibited(configured_model):
+            return configured_model
+        if (provider or "").strip().lower() == "openai":
+            return OPENAI_FALLBACK_MODEL
+        raise ValueError(
+            f"Configured model '{configured_model}' is prohibited by AgentPorter delegation policy "
+            f"and cannot be remapped safely for provider '{provider}'."
+        )
+
     def list_agents(self) -> list[dict]:
         """List installed/known CLI workers without claiming unverified runtime models."""
         results = []
@@ -39,23 +58,37 @@ class AgentBroker:
             configured_model = detection.get("configured_model") or "unknown"
             reasoning = detection.get("reasoning_effort") or "unknown"
             provider = detection.get("provider") or adapter.provider or "unknown"
+            routing_blocked = False
+            try:
+                effective_model = self._resolve_default_model(provider, configured_model)
+            except ValueError as exc:
+                routing_blocked = True
+                effective_model = None
+                routing_note = f" (blocked: {exc})"
+            else:
+                routing_note = ""
+                if effective_model != configured_model:
+                    routing_note = f" (policy override from {configured_model})"
+            route_target = effective_model or "BLOCKED"
             results.append({
                 "agent": key,
                 "worker_cli": key,
                 "alias": adapter.alias or key,
                 "provider": provider,
                 "configured_model": configured_model,
-                "default_routing": f"{provider} -> {configured_model}",
+                "default_routing": f"{provider} -> {route_target}{routing_note}",
                 "actual_model_used": "unknown (resolved only from trusted runtime metadata)",
                 "reasoning_level": reasoning,
                 "cli_version": detection.get("cli_version", "unknown"),
-                "available": bool(detection.get("is_installed")),
+                "available": bool(detection.get("is_installed") and not routing_blocked),
                 "capabilities": adapter.capabilities(),
                 "description": adapter.description,
                 "isolation_note": "Runs with host user credentials; not kernel-isolated by AgentPorter.",
                 "supports_read_only": adapter.supports_read_only,
                 "supports_model_override": adapter.supports_model_override,
                 "supports_reasoning_override": adapter.supports_reasoning_override,
+                "effective_model": effective_model,
+                "default_model": effective_model,
             })
         return results
 
@@ -98,6 +131,19 @@ class AgentBroker:
         provider = detection.get("provider") or adapter.provider or "unknown"
         cli_ver = detection.get("cli_version", "unknown")
 
+        explicit_model = (model or "").strip()
+        if explicit_model and self._model_is_prohibited(explicit_model):
+            raise ValueError(
+                f"Model '{explicit_model}' is prohibited by AgentPorter delegation policy. "
+                f"Use '{OPENAI_FALLBACK_MODEL}' or another allowed worker model."
+            )
+        effective_model = explicit_model or self._resolve_default_model(provider, configured_model)
+        requested_model = (
+            effective_model
+            if explicit_model or effective_model != configured_model
+            else ""
+        )
+
         git_clean = True
         git_dir = os.path.join(ws.path, ".git")
         if os.path.exists(git_dir):
@@ -134,7 +180,6 @@ class AgentBroker:
 
         # Only explicit caller overrides are passed as overrides. Local CLI defaults/config
         # remain "configured", not misreported as a request made by AgentPorter.
-        requested_model = (model or "").strip()
         requested_reasoning = (reasoning_effort or "").strip()
 
         cmd = adapter.build_argv(

@@ -115,11 +115,22 @@ def test_exec_run_rest(client, test_config):
 def test_dispatch_agent_rest(client, test_config):
     headers = {"Authorization": f"Bearer {test_config.api_key}"}
 
+    prohibited_req = {
+        "agent": "codex",
+        "task": "echo blocked dispatch test",
+        "purpose": "unit test",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "high"
+    }
+    response = client.post("/api/v1/workspaces/test-workspace/agents/dispatch", json=prohibited_req, headers=headers)
+    assert response.status_code == 400
+    assert "prohibited" in response.json()["detail"].lower()
+
     dispatch_req = {
         "agent": "codex",
         "task": "echo rest dispatch test",
         "purpose": "unit test",
-        "model": "gpt-5.6-luna",
+        "model": "gpt-6-luna",
         "reasoning_effort": "high"
     }
     response = client.post("/api/v1/workspaces/test-workspace/agents/dispatch", json=dispatch_req, headers=headers)
@@ -130,4 +141,5 @@ def test_dispatch_agent_rest(client, test_config):
     assert data["dispatch_id"] == data["job_id"]
     assert data["status"] == "running"
     assert data["worker_cli"] == "codex"
+    assert data["requested_model"] == "gpt-6-luna"
 
