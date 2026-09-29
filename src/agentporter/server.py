@@ -14,6 +14,7 @@ import uvicorn
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from agentporter import __version__
 from agentporter.config import Config
@@ -146,7 +147,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool()
     @monitored_tool("list_files")
-    def list_files(workspace_id: str, path: str = "", depth: Optional[int] = None) -> list[str]:
+    def list_files(workspace_id: str, path: str = "", depth: Optional[int] = 1) -> list[str]:
         """List files in the workspace, skipping internal cache and git directories."""
         return _list_files(workspace_id, path=path, depth=depth)
 
@@ -350,20 +351,20 @@ def create_asgi_app(config: Config) -> ASGIApp:
         async with streamable_app.router.lifespan_context(streamable_app):
             yield
     
-    server_list = [
-        {"url": "https://5mvx3k0t-8765.use.devtunnels.ms", "description": "Asgard Dev Tunnel Gateway"}
-    ]
-
     app = FastAPI(
         title="AgentPorter API",
         version="0.1.0",
         description="AgentPorter Local Tools and Subagent Gateway for ChatGPT and MCP clients",
-        servers=server_list,
+        servers=([{"url": config.server.public_url}] if config.server.public_url else None),
         generate_unique_id_function=custom_generate_unique_id,
         lifespan=lifespan,
     )
     
     app.state.tools = context["tools"]
+
+    @app.get("/health")
+    async def health():
+        return JSONResponse({"status": "healthy"})
     
     app.include_router(api_router, prefix="/api/v1")
     # streamable_http_app already serves its endpoint at /mcp. Mounting it at
@@ -408,7 +409,7 @@ def create_asgi_app(config: Config) -> ASGIApp:
     )
     return SecurityMiddleware(
         app=app,
-        api_key=config.api_keys,
+        api_key=config.api_key,
         allowed_hosts=config.security.allowed_hosts,
         header_name=config.security.header_name,
         legacy_header_name=config.security.legacy_header_name,

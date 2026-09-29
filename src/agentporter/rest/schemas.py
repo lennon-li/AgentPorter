@@ -17,11 +17,12 @@ class WorkspaceDetailsResponse(BaseModel):
     exists: bool = Field(description="Whether the workspace exists")
     writable: bool = Field(description="Whether the workspace is writable")
     description: str = Field(default="")
-    git_status: Optional[str] = Field(None, description="Git status output if applicable")
-    language: Optional[str] = Field(None, description="Primary detected language")
-    runtimes: Optional[List[str]] = Field(None, description="Available runtime environments")
-    capabilities: Optional[List[str]] = Field(None)
-    sandbox_status: Optional[str] = Field(None)
+    permissions: Dict[str, Any] = Field(default_factory=dict)
+    git: Dict[str, Any] = Field(default_factory=dict)
+    languages: List[str] = Field(default_factory=list)
+    marker_files: List[str] = Field(default_factory=list)
+    r_version: Optional[str] = None
+    python_version: Optional[str] = None
 
 class FileResponse(BaseModel):
     path: str = Field(description="Path of the file.")
@@ -145,7 +146,7 @@ class DispatchResponse(BaseModel):
 
 class ListFilesRequest(BaseModel):
     path: str = Field(default="", description="Relative path within the workspace to list files from.")
-    depth: Optional[int] = Field(None, description="Maximum directory depth to traverse.")
+    depth: Optional[int] = Field(1, description="Maximum directory depth to traverse (default: one level).")
 
 class SearchTextRequest(BaseModel):
     query: str = Field(description="The regex or exact string to search for.")
@@ -209,4 +210,3 @@ class DispatchAgentRequest(BaseModel):
     reasoning_effort: Optional[str] = Field(None, description="Reasoning effort level (e.g., 'high', 'low').")
     allow_commit: bool = Field(False, description="Human confirmation that the agent may run git commit.")
     allow_push: bool = Field(False, description="Human confirmation that the agent may git push to existing remotes.")
-

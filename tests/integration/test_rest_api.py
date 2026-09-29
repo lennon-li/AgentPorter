@@ -19,7 +19,7 @@ def test_config():
         # Write workspaces.yaml
         ws_file = cfg_dir / "workspaces.yaml"
         with open(ws_file, "w") as f:
-            yaml.dump({"workspaces": {"test-workspace": {"path": "/tmp", "enabled": True}}}, f)
+            yaml.dump({"workspaces": {"test-workspace": {"path": "/tmp", "enabled": True, "allow_agent_dispatch": True}}}, f)
             
         # Write secrets.env
         secrets_file = cfg_dir / "secrets.env"
@@ -28,6 +28,7 @@ def test_config():
 
         config = Config(config_dir=cfg_dir, state_dir=st_dir)
         config.security.allowed_hosts.append("testserver")
+        config.server.public_url = "https://example.test"
         yield config
 
 @pytest.fixture
@@ -49,6 +50,7 @@ def test_unauthenticated_access(client):
     openapi = response.json()
     assert openapi["info"]["title"] == "AgentPorter API"
     assert openapi["info"]["version"] == "0.1.0"
+    assert openapi["servers"] == [{"url": "https://example.test"}]
     
     # Check operationId format
     paths = openapi.get("paths", {})
@@ -76,6 +78,10 @@ def test_authenticated_access_bearer_token(client, test_config):
     data = response.json()
     assert isinstance(data, list)
     assert any(ws.get("workspace_id") == "test-workspace" for ws in data)
+
+    response = client.get("/api/v1/workspaces/test-workspace", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["workspace_id"] == "test-workspace"
 
 def test_file_operations_rest(client, test_config):
     headers = {"Authorization": f"Bearer {test_config.api_key}"}
@@ -142,4 +148,3 @@ def test_dispatch_agent_rest(client, test_config):
     assert data["status"] == "running"
     assert data["worker_cli"] == "codex"
     assert data["requested_model"] == "gpt-6-luna"
-

@@ -47,6 +47,20 @@ class SecurityMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Health and the generated schema are intentionally public. Clients
+        # must be able to probe/import the gateway before sending the API key;
+        # the OpenAPI document declares BearerAuth for every protected route.
+        if scope.get("path") in {
+            "/health",
+            "/openapi.json",
+            "/docs",
+            "/docs/",
+            "/docs/oauth2-redirect",
+            "/redoc",
+        }:
+            await self.app(scope, receive, send)
+            return
+
         headers = dict(scope.get("headers", []))
 
         host = headers.get(b"host", b"").decode("utf-8", errors="replace")
@@ -78,6 +92,8 @@ class SecurityMiddleware:
         raw_header = headers.get(self.header_bytes)
         if raw_header is None and self.legacy_header_bytes:
             raw_header = headers.get(self.legacy_header_bytes)
+        if raw_header is None:
+            raw_header = headers.get(b"authorization")
         provided_key = (
             raw_header.decode("utf-8", errors="replace") if raw_header is not None else ""
         )
@@ -89,10 +105,16 @@ class SecurityMiddleware:
             )(scope, receive, send)
             return
 
-        # Buffer request bodies only for methods that can carry MCP payloads. This
-        # enforces the ceiling even when Content-Length is absent/chunked and
-        # ensures rejection happens before the downstream app starts a response.
         if scope.get("method", "GET").upper() in {"POST", "PUT", "PATCH"}:
+            # MCP Streamable HTTP may keep a POST request body open while the
+            # server handles the session. Do not wait for end-of-body on MCP;
+            # that would deadlock the transport and block the event loop.
+            if scope.get("path") in {"/mcp", "/mcp/"}:
+                await self.app(scope, receive, send)
+                return
+
+            # Keep buffering for REST requests so the size ceiling is enforced
+            # before a downstream handler starts its response.
             buffered: list[Message] = []
             total = 0
             while True:

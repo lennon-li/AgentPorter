@@ -23,3 +23,5 @@ def dispatch_agent(workspace_id: str, req: DispatchAgentRequest, request: Reques
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=400, detail=f"Dispatch prohibited: {exc}") from exc

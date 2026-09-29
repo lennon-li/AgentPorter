@@ -1,5 +1,7 @@
 """Unit tests for ASGI SecurityMiddleware."""
 
+import asyncio
+
 import pytest
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
@@ -103,3 +105,55 @@ def test_middleware_streamed_payload_ceiling():
         headers={"X-AgentPorter-Key": "valid-key-123"},
     )
     assert resp.status_code == 413
+
+
+def test_streaming_request_body_is_not_buffered():
+    """An open MCP POST must reach the downstream app before EOF."""
+    async def scenario():
+        received = asyncio.Event()
+
+        async def downstream(scope, receive, send):
+            message = await receive()
+            assert message["body"] == b"initialize"
+            received.set()
+
+        app = SecurityMiddleware(
+            app=downstream,
+            api_key="valid-key-123",
+            allowed_hosts=["testserver"],
+            rate_limiter=RateLimiter(max_requests=5, window_seconds=10.0),
+            max_payload_bytes=1024,
+        )
+
+        messages = iter(
+            [
+                {"type": "http.request", "body": b"initialize", "more_body": True},
+            ]
+        )
+
+        async def receive():
+            try:
+                return next(messages)
+            except StopIteration:
+                await asyncio.sleep(60)
+
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/mcp",
+            "headers": [
+                (b"host", b"testserver"),
+                (b"x-agentporter-key", b"valid-key-123"),
+            ],
+            "client": ("127.0.0.1", 12345),
+        }
+
+        await asyncio.wait_for(app(scope, receive, send), timeout=1)
+        assert received.is_set()
+
+    asyncio.run(scenario())

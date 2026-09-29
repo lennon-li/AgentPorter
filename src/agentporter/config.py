@@ -21,6 +21,9 @@ class ServerSettings:
     host: str = "127.0.0.1"
     port: int = 8765
     name: str = "AgentPorter"
+    # Optional deployment URL used for generated OpenAPI `servers` metadata.
+    # The reusable package stays tunnel-agnostic when this is unset.
+    public_url: str = field(default_factory=lambda: os.environ.get("AGENTPORTER_PUBLIC_URL", "").strip())
 
 
 @dataclass
@@ -108,6 +111,8 @@ class Config:
                 self.server.port = int(srv["port"])
             if "name" in srv:
                 self.server.name = str(srv["name"])
+            if "public_url" in srv:
+                self.server.public_url = str(srv["public_url"] or "").strip()
 
             sec = data.get("security", {})
             auth_mode = sec.get("auth", "api_key")
@@ -199,7 +204,11 @@ class Config:
                         self.api_key = line.split("=", 1)[1].strip()
                         if self.api_key:
                             return
-            raise ValueError(f"{secrets_file} exists but contains no AGENTPORTER_API_KEY")
+                    if line.startswith("API_KEY="):
+                        self.api_key = line.split("=", 1)[1].strip()
+                        if self.api_key:
+                            return
+            raise ValueError(f"{secrets_file} exists but contains no API key")
 
         new_key = secrets.token_urlsafe(32)
         fd = os.open(secrets_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -208,3 +217,39 @@ class Config:
             f.write(f"AGENTPORTER_API_KEY={new_key}\n")
         self.api_key = new_key
         logger.info("Generated new API key at %s (mode 0600)", secrets_file)
+
+    def _write_workspaces_file(self) -> None:
+        ws_file = self.config_dir / "workspaces.yaml"
+        with open(ws_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump({"workspaces": self.workspaces}, f, sort_keys=True)
+
+    def add_workspace(
+        self,
+        ws_id: str,
+        path: str,
+        writable: bool = True,
+        description: str = "",
+        allow_execute: bool = True,
+        allow_git: bool = True,
+        allow_artifacts: bool = True,
+        allow_agent_dispatch: bool = False,
+        local_http_ports: Optional[list[int]] = None,
+    ) -> None:
+        self.workspaces[ws_id] = {
+            "path": str(Path(path).expanduser().resolve()),
+            "writable": bool(writable),
+            "description": description,
+            "allow_execute": bool(allow_execute),
+            "allow_git": bool(allow_git),
+            "allow_artifacts": bool(allow_artifacts),
+            "allow_agent_dispatch": bool(allow_agent_dispatch),
+            "local_http_ports": sorted({int(p) for p in (local_http_ports or []) if 1 <= int(p) <= 65535}),
+        }
+        self._write_workspaces_file()
+
+    def remove_workspace(self, ws_id: str) -> bool:
+        if ws_id not in self.workspaces:
+            return False
+        del self.workspaces[ws_id]
+        self._write_workspaces_file()
+        return True

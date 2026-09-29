@@ -12,4 +12,5 @@ def list_workspaces(request: Request):
 @router.get("/{workspace_id}", response_model=WorkspaceDetailsResponse)
 def workspace_info(workspace_id: str, request: Request):
     """Return comprehensive development context for a workspace."""
-    return request.app.state.tools["workspace_info"](workspace_id)
+    # The monitored tool wrapper accepts keyword arguments.
+    return request.app.state.tools["workspace_info"](workspace_id=workspace_id)

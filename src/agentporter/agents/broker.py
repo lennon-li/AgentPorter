@@ -1,16 +1,21 @@
 """Agent broker orchestrating CLI agent discovery and delegation."""
 
+from __future__ import annotations
+
 import os
 import subprocess
 import logging
-from typing import Optional, Dict
+from typing import TYPE_CHECKING, Optional, Dict
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
 from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
+from agentporter.agents.policy import ExecutionPolicy
 from agentporter.workspaces.registry import WorkspaceRegistry
-from agentporter.tools.jobs import JobManager
+
+if TYPE_CHECKING:
+    from agentporter.tools.jobs import JobManager
 
 logger = logging.getLogger("agentporter.agents.broker")
 
@@ -100,6 +105,8 @@ class AgentBroker:
         purpose: str = "",
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
+        allow_commit: bool = False,
+        allow_push: bool = False,
     ) -> dict:
         """Dispatch an authorized worker agent asynchronously with enforceable controls."""
         agent_key = agent.lower().strip()
@@ -130,6 +137,12 @@ class AgentBroker:
         configured_reasoning = detection.get("reasoning_effort") or "unknown"
         provider = detection.get("provider") or adapter.provider or "unknown"
         cli_ver = detection.get("cli_version", "unknown")
+
+        policy = ExecutionPolicy.for_workspace(
+            writable=ws.writable,
+            allow_commit=allow_commit,
+            allow_push=allow_push,
+        )
 
         explicit_model = (model or "").strip()
         if explicit_model and self._model_is_prohibited(explicit_model):
@@ -174,6 +187,7 @@ class AgentBroker:
             f"Authorization: {'MAY MODIFY FILES WITHIN SCOPE' if ws.writable else 'READ-ONLY'}\n"
             "Step budget: 30\n"
             f"Project Root: {ws.path}\n"
+            f"{policy.packet_text()}"
             f"Purpose: {purpose or 'Worker delegation via AgentPorter'}\n"
             f"Task:\n{task}\n"
         )
@@ -212,6 +226,7 @@ class AgentBroker:
             "reasoning_level": requested_reasoning or configured_reasoning,
             "cli_version": cli_ver,
             "job_id": job_id,
+            "dispatch_id": job_id,
             "exit_status": None,
             "duration": 0.0,
             "status": "running",
