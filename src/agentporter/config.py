@@ -199,7 +199,13 @@ class Config:
                         self.api_key = line.split("=", 1)[1].strip()
                         if self.api_key:
                             return
-            raise ValueError(f"{secrets_file} exists but contains no AGENTPORTER_API_KEY")
+                    if line.startswith("API_KEY="):
+                        self.api_key = line.split("=", 1)[1].strip()
+                        if self.api_key:
+                            return
+            raise ValueError(
+                f"{secrets_file} exists but contains neither AGENTPORTER_API_KEY nor API_KEY"
+            )
 
         new_key = secrets.token_urlsafe(32)
         fd = os.open(secrets_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -208,3 +214,48 @@ class Config:
             f.write(f"AGENTPORTER_API_KEY={new_key}\n")
         self.api_key = new_key
         logger.info("Generated new API key at %s (mode 0600)", secrets_file)
+
+    def _write_workspaces_file(self) -> None:
+        ws_file = self.config_dir / "workspaces.yaml"
+        with open(ws_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump({"workspaces": self.workspaces}, f, sort_keys=True)
+
+    def add_workspace(
+        self,
+        ws_id: str,
+        path: str,
+        writable: bool = True,
+        description: str = "",
+        allow_execute: bool = True,
+        allow_git: bool = True,
+        allow_artifacts: bool = True,
+        allow_agent_dispatch: bool = False,
+        local_http_ports: Optional[list[int]] = None,
+    ) -> None:
+        self.workspaces[ws_id] = {
+            "path": str(Path(path).expanduser().resolve()),
+            "writable": bool(writable),
+            "description": description,
+            "allow_execute": bool(allow_execute),
+            "allow_git": bool(allow_git),
+            "allow_artifacts": bool(allow_artifacts),
+            "allow_agent_dispatch": bool(allow_agent_dispatch),
+            "local_http_ports": self._normalize_ports(local_http_ports),
+        }
+        self._write_workspaces_file()
+
+    def remove_workspace(self, ws_id: str) -> bool:
+        if ws_id not in self.workspaces:
+            return False
+        del self.workspaces[ws_id]
+        self._write_workspaces_file()
+        return True
+
+    @staticmethod
+    def _normalize_ports(local_http_ports: Optional[list[int]]) -> list[int]:
+        ports: set[int] = set()
+        for port in local_http_ports or []:
+            port_int = int(port)
+            if 1 <= port_int <= 65535:
+                ports.add(port_int)
+        return sorted(ports)

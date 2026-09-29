@@ -14,6 +14,7 @@ import uvicorn
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from agentporter import __version__
 from agentporter.config import Config
@@ -364,6 +365,10 @@ def create_asgi_app(config: Config) -> ASGIApp:
     )
     
     app.state.tools = context["tools"]
+
+    @app.get("/health")
+    async def health():
+        return JSONResponse({"status": "healthy"})
     
     app.include_router(api_router, prefix="/api/v1")
     # streamable_http_app already serves its endpoint at /mcp. Mounting it at
@@ -408,7 +413,7 @@ def create_asgi_app(config: Config) -> ASGIApp:
     )
     return SecurityMiddleware(
         app=app,
-        api_key=config.api_keys,
+        api_key=config.api_key,
         allowed_hosts=config.security.allowed_hosts,
         header_name=config.security.header_name,
         legacy_header_name=config.security.legacy_header_name,
