@@ -10,6 +10,7 @@ class WorkspaceInfoResponse(BaseModel):
     exists: bool = Field(description="Whether the workspace directory exists")
     writable: bool = Field(description="Whether the workspace is writable")
     description: str = Field(default="", description="Workspace description")
+    permissions: Dict[str, Any] = Field(default_factory=dict)
 
 class WorkspaceDetailsResponse(BaseModel):
     workspace_id: str = Field(description="Workspace ID")

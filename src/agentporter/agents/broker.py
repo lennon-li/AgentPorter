@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Optional, Dict
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
+from agentporter.agents.adapters.codex_identity import JaxAdapter, LizAdapter
 from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
@@ -31,6 +32,8 @@ class AgentBroker:
         self.job_manager = job_manager
         self.adapters: Dict[str, AgentAdapter] = {
             "codex": CodexAdapter(),
+            "jax": JaxAdapter(),
+            "liz": LizAdapter(),
             "claude": ClaudeAdapter(),
             "opencode": OpenCodeAdapter(),
             "agy": AgyAdapter(),
@@ -196,12 +199,13 @@ class AgentBroker:
         # remain "configured", not misreported as a request made by AgentPorter.
         requested_reasoning = (reasoning_effort or "").strip()
 
+        controls = {"policy": policy} if isinstance(adapter, CodexAdapter) else {"writable": ws.writable}
         cmd = adapter.build_argv(
             workspace_path=ws.path,
             packet=packet,
             model=requested_model,
             reasoning_effort=requested_reasoning,
-            writable=ws.writable,
+            **controls,
         )
 
         job_id = self.job_manager.start_raw_job(

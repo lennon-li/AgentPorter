@@ -146,6 +146,7 @@ class WorkspaceRegistry:
             "workspace_id": ws.id,
             "path": ws.path,
             "exists": os.path.isdir(ws_path),
+            "description": ws.description,
             "writable": ws.writable,
             "permissions": {
                 "execute": ws.allow_execute,

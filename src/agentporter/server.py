@@ -352,7 +352,7 @@ def create_asgi_app(config: Config) -> ASGIApp:
             yield
     
     app = FastAPI(
-        title="AgentPorter API",
+        title=f"{config.server.action_prefix.upper()} AgentPorter API" if config.server.action_prefix else "AgentPorter API",
         version="0.1.0",
         description="AgentPorter Local Tools and Subagent Gateway for ChatGPT and MCP clients",
         servers=([{"url": config.server.public_url}] if config.server.public_url else None),
@@ -399,6 +399,11 @@ def create_asgi_app(config: Config) -> ASGIApp:
             }
         }
         schema["security"] = [{"BearerAuth": []}]
+        if config.server.action_prefix:
+            for path in schema.get("paths", {}).values():
+                for operation in path.values():
+                    if isinstance(operation, dict) and "operationId" in operation:
+                        operation["operationId"] = f"{config.server.action_prefix}_{operation['operationId']}"
         app.openapi_schema = schema
         return app.openapi_schema
     app.openapi = custom_openapi

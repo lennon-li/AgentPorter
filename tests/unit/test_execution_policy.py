@@ -36,30 +36,20 @@ def test_default_policy_constrains_sensitive_actions():
     assert not READ_ONLY.workspace_write
 
 
-def test_claude_argv_is_scoped_and_non_interactive(fake_exe):
-    argv = ClaudeAdapter(executable_override=fake_exe).build_argv(WS, "PACKET", "sonnet", "high")
-    assert argv[argv.index("--permission-mode") + 1] == "acceptEdits"
-    assert argv[argv.index("--permission-prompts") + 1] == "none"
-    assert argv[argv.index("--allowedTools") + 1] == "Bash"
-    assert "Bash(git push *)" in argv
-    assert "Bash(git commit *)" in argv
-    assert "bypassPermissions" not in argv
-    assert "--dangerously-skip-permissions" not in argv
-    assert argv[argv.index("--model") + 1] == "sonnet"
-    assert argv[argv.index("--effort") + 1] == "high"
-    assert argv[-2:] == ["-p", "PACKET"]
-
-    # A pre-allowed Bash outranks deny rules in Claude Code, so a hook enforces them.
-    settings = json.loads(argv[argv.index("--settings") + 1])
-    hook = settings["hooks"]["PreToolUse"][0]
-    assert hook["matcher"] == "Bash"
-    assert "command_guard.py" in hook["hooks"][0]["command"]
-
-
-def test_claude_read_only_workspace_uses_plan_mode(fake_exe):
-    argv = ClaudeAdapter(executable_override=fake_exe).build_argv(WS, "P", "sonnet", "bogus", READ_ONLY)
-    assert argv[argv.index("--permission-mode") + 1] == "plan"
-    assert "--effort" not in argv
+def test_claude_model_override_and_non_interactive(fake_exe):
+    adapter = ClaudeAdapter(executable_override=fake_exe)
+    assert adapter.build_argv(WS, "PACKET") == [fake_exe, "-p", "PACKET"]
+    if adapter.supports_model_override:
+        assert adapter.build_argv(WS, "PACKET", "sonnet") == [fake_exe, "--model", "sonnet", "-p", "PACKET"]
+    else:
+        with pytest.raises(RuntimeError, match="model"):
+            adapter.build_argv(WS, "PACKET", "sonnet")
+    assert not adapter.supports_read_only
+    assert not adapter.supports_reasoning_override
+    with pytest.raises(RuntimeError, match="read-only"):
+        adapter.build_argv(WS, "P", writable=False)
+    with pytest.raises(RuntimeError, match="reasoning"):
+        adapter.build_argv(WS, "P", reasoning_effort="high")
 
 
 @pytest.mark.parametrize("adapter_cls", [CodexAdapter, JaxAdapter, LizAdapter])
@@ -100,24 +90,16 @@ def test_copilot_auto_model_omits_reasoning_effort(fake_exe):
     assert "--reasoning-effort" not in argv
 
 
-def test_opencode_argv_injects_scoped_permissions(fake_exe):
-    argv = OpenCodeAdapter(executable_override=fake_exe).build_argv(WS, "PACKET", "vertex/x", "medium")
-    assert argv[0] == "env"
-    assert argv[1].startswith("OPENCODE_CONFIG_CONTENT=")
-    config = json.loads(argv[1].split("=", 1)[1])
-    assert config["permission"]["edit"] == "allow"
-    assert config["permission"]["bash"]["*"] == "allow"
-    assert config["permission"]["bash"]["git push"] == "deny"
-    assert config["permission"]["bash"]["git push *"] == "deny"
-    assert config["permission"]["bash"]["rm -rf *"] == "deny"
-    assert "su*" not in config["permission"]["bash"]
-    assert "--auto" not in argv
-    assert argv[argv.index("--dir") + 1] == WS
-    assert argv[argv.index("-m") + 1] == "vertex/x"
-    assert argv[-1] == "PACKET"
-
-    read_only = OpenCodeAdapter(executable_override=fake_exe).build_argv(WS, "P", "vertex/x", "medium", READ_ONLY)
-    assert json.loads(read_only[1].split("=", 1)[1])["permission"]["edit"] == "deny"
+def test_opencode_supported_controls_fail_closed(fake_exe):
+    adapter = OpenCodeAdapter(executable_override=fake_exe)
+    argv = adapter.build_argv(WS, "PACKET", "vertex/x")
+    assert argv == [fake_exe, "run", "-m", "vertex/x", "PACKET"]
+    assert not adapter.supports_read_only
+    assert not adapter.supports_reasoning_override
+    with pytest.raises(RuntimeError, match="read-only"):
+        adapter.build_argv(WS, "P", writable=False)
+    with pytest.raises(RuntimeError, match="reasoning"):
+        adapter.build_argv(WS, "P", reasoning_effort="medium")
 
 
 @pytest.mark.parametrize("command", [

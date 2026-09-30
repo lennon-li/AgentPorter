@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
+from agentporter.agents.policy import ExecutionPolicy
 
 
 class CodexAdapter(AgentAdapter):
@@ -68,20 +69,26 @@ class CodexAdapter(AgentAdapter):
         packet: str,
         model: str = "",
         reasoning_effort: str = "",
+        policy: ExecutionPolicy | None = None,
+        *,
         writable: bool = True,
     ) -> list[str]:
         exe = self.find_executable(["codex", "~/.npm-global/bin/codex", "~/.local/bin/codex"])
         if not exe:
             raise RuntimeError("Codex CLI executable not found on host")
 
+        policy = policy or ExecutionPolicy.for_workspace(writable=writable)
         cmd = [
             exe,
             "exec",
             "--sandbox",
-            "workspace-write" if writable else "read-only",
+            "workspace-write" if policy.workspace_write else "read-only",
+            "--skip-git-repo-check",
             "-c",
             "approval_policy=never",
         ]
+        if policy.workspace_write and policy.git_push:
+            cmd.extend(["-c", "sandbox_workspace_write.network_access=true"])
         if model:
             cmd.extend(["-m", model])
         if reasoning_effort:

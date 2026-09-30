@@ -24,6 +24,7 @@ class ServerSettings:
     # Optional deployment URL used for generated OpenAPI `servers` metadata.
     # The reusable package stays tunnel-agnostic when this is unset.
     public_url: str = field(default_factory=lambda: os.environ.get("AGENTPORTER_PUBLIC_URL", "").strip())
+    action_prefix: str = field(default_factory=lambda: os.environ.get("AGENTPORTER_ACTION_PREFIX", "").strip())
 
 
 @dataclass
@@ -113,6 +114,8 @@ class Config:
                 self.server.name = str(srv["name"])
             if "public_url" in srv:
                 self.server.public_url = str(srv["public_url"] or "").strip()
+            if "action_prefix" in srv:
+                self.server.action_prefix = str(srv["action_prefix"] or "").strip()
 
             sec = data.get("security", {})
             auth_mode = sec.get("auth", "api_key")
