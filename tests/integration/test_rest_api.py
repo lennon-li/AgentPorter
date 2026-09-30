@@ -7,6 +7,7 @@ import pathlib
 import os
 import yaml
 import sys
+import time
 from agentporter.agents.adapters.codex import CodexAdapter
 from tests._support import BWRAP_USABLE
 
@@ -162,3 +163,13 @@ def test_dispatch_agent_rest(client, test_config):
     assert data["status"] == "running"
     assert data["worker_cli"] == "codex"
     assert data["requested_model"] == "gpt-6-luna"
+    # Let the monitor finish its SQLite write before the temp state is removed.
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        status = client.get(f"/api/v1/jobs/{data['job_id']}/status", headers=headers)
+        assert status.status_code == 200
+        if status.json()["status"] == "completed":
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail("fixture worker did not complete before teardown")
