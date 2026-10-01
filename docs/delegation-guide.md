@@ -13,7 +13,16 @@ Check:
 - the worker provider/capabilities match the work;
 - `reasoning_level` is appropriate.
 
-AgentPorter delegation policy currently prohibits GPT-5.6 variants. Inherited OpenAI configurations that still name GPT-5.6 are routed to `gpt-6-luna`. Explicit requests for a prohibited model are rejected.
+AgentPorter delegation policy currently prohibits GPT-5.6 variants. The
+supported OpenAI delegate targets documented here are:
+
+- `gpt-6.1-sol` for an explicit Sol delegation;
+- `gpt-6-luna` for the normal OpenAI route and safe fallback.
+
+These names are allowed delegate targets, subject to the live worker being
+available and supporting model overrides. Inherited OpenAI configurations that
+still name GPT-5.6 are routed to `gpt-6-luna`; explicit requests for a
+prohibited model are rejected.
 
 Treat the live `list_agents` response as authoritative for preflight. If a worker's `effective_model` is itself prohibited (for example, it still reports a GPT-5.6 variant), **do not dispatch that worker**, even if the checked-out source or documentation says the model should have been remapped. That is runtime/policy drift: repair or restart the serving AgentPorter instance, or choose another worker whose live `effective_model` is allowed.
 
@@ -32,6 +41,12 @@ For read-only reviews, say explicitly:
 This avoids workers attempting interactive write permissions when the desired deliverable is only a review.
 
 For implementation tasks, name the allowed files/directories and state whether commit/push is forbidden.
+
+GitHub pushes are denied by default. A push delegation must target a writable
+workspace and explicitly set `allow_push: true`; committing requires the
+separate `allow_commit: true` confirmation. This only permits pushes to an
+existing remote. Force-push, remote reconfiguration, branch deletion, and
+other destructive remote operations remain blocked.
 
 
 ## 2A. Host orchestration contract

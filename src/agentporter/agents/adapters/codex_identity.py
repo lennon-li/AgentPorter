@@ -43,8 +43,8 @@ class NamedCodexAdapter(CodexAdapter):
             except Exception:
                 cli_version = "unknown"
 
-        configured_model = self.default_model
-        reasoning_effort = self.reasoning_effort
+        configured_model = "unknown"
+        reasoning_effort = "unknown"
         if os.path.isfile(cfg_path):
             try:
                 with open(cfg_path, "r", encoding="utf-8") as handle:

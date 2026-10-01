@@ -3,7 +3,9 @@
 import pytest
 
 from agentporter.agents.adapters.base import AgentAdapter
+from agentporter.agents.adapters.codex import CodexAdapter
 from agentporter.agents.broker import AgentBroker, OPENAI_FALLBACK_MODEL
+from agentporter.agents.policy import ExecutionPolicy
 from agentporter.tools.jobs import JobManager
 
 
@@ -55,6 +57,40 @@ def test_non_prohibited_models_are_preserved():
     assert AgentBroker._resolve_default_model("Google AI", "vertex/gemini-3.8-flash") == "vertex/gemini-3.8-flash"
 
 
+def test_sol_is_an_allowed_explicit_openai_delegate():
+    assert AgentBroker._resolve_default_model("OpenAI", "gpt-6.1-sol") == "gpt-6.1-sol"
+
+
+def test_codex_skips_repository_trust_preflight(tmp_path):
+    fake_exe = tmp_path / "codex"
+    fake_exe.write_text("#!/bin/sh\n")
+    fake_exe.chmod(0o755)
+
+    argv = CodexAdapter(executable_override=str(fake_exe)).build_argv(
+        str(tmp_path), "PACKET", model="gpt-6.1-sol", reasoning_effort="high"
+    )
+
+    assert "--skip-git-repo-check" in argv
+    assert argv[argv.index("-m") + 1] == "gpt-6.1-sol"
+
+
+def test_codex_enables_network_only_for_confirmed_push(tmp_path):
+    fake_exe = tmp_path / "codex"
+    fake_exe.write_text("#!/bin/sh\n")
+    fake_exe.chmod(0o755)
+
+    default_argv = CodexAdapter(executable_override=str(fake_exe)).build_argv(
+        str(tmp_path), "PACKET", model="gpt-6.1-sol", reasoning_effort="high"
+    )
+    push_policy = ExecutionPolicy.for_workspace(writable=True, allow_push=True)
+    push_argv = CodexAdapter(executable_override=str(fake_exe)).build_argv(
+        str(tmp_path), "PACKET", model="gpt-6.1-sol", reasoning_effort="high", policy=push_policy
+    )
+
+    assert "sandbox_workspace_write.network_access=true" not in default_argv
+    assert "sandbox_workspace_write.network_access=true" in push_argv
+
+
 @pytest.mark.parametrize("model", ["gpt-5.6", "gpt-5.6-luna", "GPT-5.6-Pro"])
 def test_gpt_56_family_is_prohibited(model):
     assert AgentBroker._model_is_prohibited(model)
@@ -98,5 +134,7 @@ def test_dispatch_explicit_allowed_model_is_preserved(workspace_registry, tmp_pa
     try:
         assert adapter.last_model == "gpt-6-luna"
         assert result["requested_model"] == "gpt-6-luna"
+        assert result["model"] == "gpt-6-luna"
+        assert result["effective_model"] == "gpt-6-luna"
     finally:
         broker.job_manager.cancel(result["job_id"])

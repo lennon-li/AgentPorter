@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Optional, Dict
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
+from agentporter.agents.adapters.codex_identity import JaxAdapter, LizAdapter
 from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
@@ -31,6 +32,8 @@ class AgentBroker:
         self.job_manager = job_manager
         self.adapters: Dict[str, AgentAdapter] = {
             "codex": CodexAdapter(),
+            "jax": JaxAdapter(),
+            "liz": LizAdapter(),
             "claude": ClaudeAdapter(),
             "opencode": OpenCodeAdapter(),
             "agy": AgyAdapter(),
@@ -196,13 +199,18 @@ class AgentBroker:
         # remain "configured", not misreported as a request made by AgentPorter.
         requested_reasoning = (reasoning_effort or "").strip()
 
-        cmd = adapter.build_argv(
-            workspace_path=ws.path,
-            packet=packet,
-            model=requested_model,
-            reasoning_effort=requested_reasoning,
-            writable=ws.writable,
-        )
+        adapter_args = {
+            "workspace_path": ws.path,
+            "packet": packet,
+            "model": requested_model,
+            "reasoning_effort": requested_reasoning,
+        }
+        if isinstance(adapter, CodexAdapter):
+            # Codex needs the complete policy so an explicitly confirmed push
+            # can enable network access while ordinary dispatches remain offline.
+            cmd = adapter.build_argv(**adapter_args, policy=policy)
+        else:
+            cmd = adapter.build_argv(**adapter_args, writable=ws.writable)
 
         job_id = self.job_manager.start_raw_job(
             workspace_id=workspace_id,
@@ -232,7 +240,10 @@ class AgentBroker:
             "status": "running",
             "selected_agent": agent_key,
             "alias": adapter.alias or agent_key,
-            "model": configured_model,
+            # Keep the compatibility field truthful: it is the route that
+            # will be passed to the worker, not the adapter's stale default.
+            "model": effective_model,
+            "effective_model": effective_model,
             "thinking_level": requested_reasoning or configured_reasoning,
             "workspace_id": workspace_id,
             "git_clean_at_dispatch": git_clean,

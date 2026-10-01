@@ -100,6 +100,8 @@ def test_cli_agents(tmp_path: Path):
     assert result.exit_code == 0
     assert "Agent:" in result.output
     assert "Provider:" in result.output
+    assert "Jax" in result.output
+    assert "Liz" in result.output
 
 
 def test_cli_serve_help():
@@ -140,4 +142,3 @@ def test_cli_key_rotate(tmp_path: Path):
     content = secrets_file.read_text()
     assert "old-key-123" not in content
     assert "AGENTPORTER_API_KEY=" in content
-
