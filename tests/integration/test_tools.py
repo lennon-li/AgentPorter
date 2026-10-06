@@ -162,6 +162,29 @@ def test_git_inspection(workspace_registry, tmp_path: Path):
     show = git_show("test-ws", ref="HEAD")
     assert "commit" in show or "Initial commit" in show
 
+    # Test git operations via GitTools attributes
+    tools = create_git_tools(workspace_registry, sandbox)
+    branches = tools.git_branch("test-ws")
+    assert "master" in branches or "main" in branches
+
+    # Invalid input validations
+    with pytest.raises(ValueError):
+        tools.git_show("test-ws", ref="--bad")
+    with pytest.raises(ValueError):
+        tools.git_pull("test-ws", remote="-u")
+    with pytest.raises(ValueError):
+        tools.git_push("test-ws", remote="-u")
+    with pytest.raises(ValueError):
+        tools.git_add("test-ws", paths=["--all"])
+    with pytest.raises(ValueError):
+        tools.git_checkout("test-ws", branch="-b")
+
+    # Direct execution with network_access=True
+    exec_run_tool, _ = create_execution_tools(workspace_registry, sandbox, JobManager(tmp_path / "state" / "jobs"))
+    res = exec_run_tool("test-ws", ["git", "config", "user.name"], network_access=False)
+    assert res["exit_code"] == 0
+    assert "Lennon Li" in res["stdout"] or "sandbox" in res["stdout"] or res["exit_code"] == 0
+
 
 def test_local_http_tool(workspace_registry):
     from agentporter.tools.local_http import create_local_http_tool

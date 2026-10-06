@@ -10,11 +10,15 @@ jobs_router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 @router.post("/run", response_model=ExecResponse)
 def exec_run(workspace_id: str, req: ExecRunRequest, request: Request):
-    return request.app.state.tools["exec_run"](workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds)
+    return request.app.state.tools["exec_run"](
+        workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds, network_access=req.network_access
+    )
 
 @router.post("/start", response_model=JobStartResponse)
 def exec_start(workspace_id: str, req: ExecStartRequest, request: Request):
-    return request.app.state.tools["exec_start"](workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds)
+    return request.app.state.tools["exec_start"](
+        workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds, network_access=req.network_access
+    )
 
 @jobs_router.get("/{job_id}/status", response_model=JobStatusResponse)
 def job_status(job_id: str, request: Request):

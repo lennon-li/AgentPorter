@@ -181,11 +181,13 @@ class ExecRunRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=30, description="Timeout in seconds for execution.")
+    network_access: bool = Field(default=False, description="Whether to grant network access inside sandbox.")
 
 class ExecStartRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=300, description="Timeout in seconds for the background job.")
+    network_access: bool = Field(default=False, description="Whether to grant network access inside sandbox.")
 
 class JobOutputRequest(BaseModel):
     cursor: int = Field(default=0, description="Byte offset to start reading from.")
@@ -199,6 +201,32 @@ class GitLogRequest(BaseModel):
 
 class GitShowRequest(BaseModel):
     ref: str = Field(default="HEAD", description="Git object or commit ref to show.")
+
+class GitFetchRequest(BaseModel):
+    remote: str = Field(default="origin", description="Remote repository name.")
+
+class GitPullRequest(BaseModel):
+    remote: str = Field(default="origin", description="Remote repository name.")
+    branch: str = Field(default="", description="Remote branch name to pull.")
+
+class GitPushRequest(BaseModel):
+    remote: str = Field(default="origin", description="Remote repository name.")
+    branch: str = Field(default="", description="Branch name to push.")
+    set_upstream: bool = Field(default=False, description="Whether to set upstream branch (-u).")
+
+class GitCommitRequest(BaseModel):
+    message: str = Field(description="Commit message.")
+    all_files: bool = Field(default=False, description="Automatically stage modified/deleted files (-a).")
+
+class GitAddRequest(BaseModel):
+    paths: List[str] = Field(description="File paths to stage for commit.")
+
+class GitBranchRequest(BaseModel):
+    pass
+
+class GitCheckoutRequest(BaseModel):
+    branch: str = Field(description="Branch name to switch to or create.")
+    create: bool = Field(default=False, description="Create new branch (-b).")
 
 class ListArtifactsRequest(BaseModel):
     path: str = Field(default="artifacts", description="Relative path within workspace to look for artifacts.")

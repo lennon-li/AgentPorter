@@ -21,6 +21,7 @@ def create_execution_tools(
         argv: list[str],
         cwd: str = "",
         timeout_seconds: int = 30,
+        network_access: bool = False,
     ) -> dict:
         ws = _workspace(workspace_id)
         return sandbox.run(
@@ -29,6 +30,7 @@ def create_execution_tools(
             cwd=cwd,
             timeout_seconds=timeout_seconds,
             writable=ws.writable,
+            network_access=network_access,
         )
 
     def exec_start(
@@ -36,6 +38,7 @@ def create_execution_tools(
         argv: list[str],
         cwd: str = "",
         timeout_seconds: int = 300,
+        network_access: bool = False,
     ) -> dict:
         ws = _workspace(workspace_id)
         timeout = sandbox.clamp_timeout(timeout_seconds)
@@ -43,6 +46,7 @@ def create_execution_tools(
             workspace_path=ws.path,
             writable=ws.writable,
             sub_cwd=cwd,
+            network_access=network_access,
         ) + ["--"] + argv
 
         job_id = job_manager.start_raw_job(

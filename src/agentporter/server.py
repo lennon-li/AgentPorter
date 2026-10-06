@@ -121,7 +121,18 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         _apply_patch, _mkdir, _move_path, _trash_path
     ) = create_file_tools(registry)
     _exec_run, _exec_start = create_execution_tools(registry, sandbox, job_manager)
-    _git_status, _git_diff, _git_log, _git_show = create_git_tools(registry, sandbox)
+    git_tools = create_git_tools(registry, sandbox)
+    _git_status = git_tools.git_status
+    _git_diff = git_tools.git_diff
+    _git_log = git_tools.git_log
+    _git_show = git_tools.git_show
+    _git_fetch = git_tools.git_fetch
+    _git_pull = git_tools.git_pull
+    _git_push = git_tools.git_push
+    _git_commit = git_tools.git_commit
+    _git_add = git_tools.git_add
+    _git_branch = git_tools.git_branch
+    _git_checkout = git_tools.git_checkout
     _list_artifacts, _read_artifact = create_artifact_tools(registry)
     _local_http_request = create_local_http_tool(registry)
     _list_agents, _dispatch_agent = create_agent_tools(agent_broker)
@@ -195,15 +206,15 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool()
     @monitored_tool("exec_run")
-    def exec_run(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 30) -> dict:
-        """Execute command synchronously inside the bubblewrap sandbox with network disabled."""
-        return _exec_run(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds)
+    def exec_run(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 30, network_access: bool = False) -> dict:
+        """Execute command synchronously inside bubblewrap; opt in to host network when needed."""
+        return _exec_run(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access)
 
     @mcp.tool()
     @monitored_tool("exec_start")
-    def exec_start(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 300) -> dict:
-        """Start command asynchronously inside the sandbox, returning a job ID."""
-        return _exec_start(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds)
+    def exec_start(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 300, network_access: bool = False) -> dict:
+        """Start command asynchronously inside bubblewrap; opt in to host network when needed."""
+        return _exec_start(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access)
 
     @mcp.tool()
     @monitored_tool("job_status")
@@ -258,6 +269,48 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def git_show(workspace_id: str, ref: str = "HEAD") -> str:
         """Show git object or commit in the workspace (read-only)."""
         return _git_show(workspace_id, ref=ref)
+
+    @mcp.tool()
+    @monitored_tool("git_fetch")
+    def git_fetch(workspace_id: str, remote: str = "origin") -> str:
+        """Fetch branches and tags from remote repository."""
+        return _git_fetch(workspace_id, remote=remote)
+
+    @mcp.tool()
+    @monitored_tool("git_pull")
+    def git_pull(workspace_id: str, remote: str = "origin", branch: str = "") -> str:
+        """Pull changes from remote repository into current branch."""
+        return _git_pull(workspace_id, remote=remote, branch=branch)
+
+    @mcp.tool()
+    @monitored_tool("git_push")
+    def git_push(workspace_id: str, remote: str = "origin", branch: str = "", set_upstream: bool = False) -> str:
+        """Push local commits to remote repository."""
+        return _git_push(workspace_id, remote=remote, branch=branch, set_upstream=set_upstream)
+
+    @mcp.tool()
+    @monitored_tool("git_commit")
+    def git_commit(workspace_id: str, message: str, all_files: bool = False) -> str:
+        """Commit changes with the specified commit message."""
+        return _git_commit(workspace_id, message=message, all_files=all_files)
+
+    @mcp.tool()
+    @monitored_tool("git_add")
+    def git_add(workspace_id: str, paths: list[str]) -> str:
+        """Stage file paths for git commit."""
+        return _git_add(workspace_id, paths=paths)
+
+    @mcp.tool()
+    @monitored_tool("git_branch")
+    def git_branch(workspace_id: str) -> str:
+        """List local and remote branches in workspace."""
+        return _git_branch(workspace_id)
+
+    @mcp.tool()
+    @monitored_tool("git_checkout")
+    def git_checkout(workspace_id: str, branch: str, create: bool = False) -> str:
+        """Switch branches or create a new branch in workspace."""
+        return _git_checkout(workspace_id, branch=branch, create=create)
 
     @mcp.tool()
     @monitored_tool("list_artifacts")
@@ -327,6 +380,13 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             "git_diff": git_diff,
             "git_log": git_log,
             "git_show": git_show,
+            "git_fetch": git_fetch,
+            "git_pull": git_pull,
+            "git_push": git_push,
+            "git_commit": git_commit,
+            "git_add": git_add,
+            "git_branch": git_branch,
+            "git_checkout": git_checkout,
             "list_artifacts": list_artifacts,
             "read_artifact": read_artifact,
             "list_agents": list_agents,

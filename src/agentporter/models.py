@@ -13,6 +13,7 @@ class WorkspaceDefinition(BaseModel):
     allow_git: bool = True
     allow_artifacts: bool = True
     allow_agent_dispatch: bool = False
+    auto_discover: bool = False
     local_http_ports: list[int] = Field(default_factory=list)
 
 

@@ -26,7 +26,28 @@ class WorkspaceRegistry:
                     allow_artifacts=data.get("allow_artifacts", True),
                     allow_agent_dispatch=data.get("allow_agent_dispatch", False),
                     local_http_ports=data.get("local_http_ports", []),
+                    auto_discover=data.get("auto_discover", False),
                 )
+            for ws_id, ws in list(self._workspaces.items()):
+                if ws.auto_discover and os.path.isdir(ws.path):
+                    try:
+                        for entry in os.scandir(ws.path):
+                            if entry.name.startswith(".") or entry.name in self._workspaces:
+                                continue
+                            if entry.is_dir(follow_symlinks=False):
+                                self.register(
+                                    ws_id=entry.name,
+                                    path=entry.path,
+                                    writable=ws.writable,
+                                    description=f"Auto-discovered project in {ws.id}",
+                                    allow_execute=ws.allow_execute,
+                                    allow_git=ws.allow_git,
+                                    allow_artifacts=ws.allow_artifacts,
+                                    allow_agent_dispatch=ws.allow_agent_dispatch,
+                                    auto_discover=False,
+                                )
+                    except OSError as exc:
+                        logger.warning("Could not scan auto-discovery root %s: %s", ws.path, exc)
 
     def register(
         self,
@@ -39,6 +60,7 @@ class WorkspaceRegistry:
         allow_artifacts: bool = True,
         allow_agent_dispatch: bool = False,
         local_http_ports: Optional[list[int]] = None,
+        auto_discover: bool = False,
     ) -> None:
         real_path = os.path.realpath(os.path.expanduser(path))
         ports = sorted({int(p) for p in (local_http_ports or []) if 1 <= int(p) <= 65535})
@@ -51,6 +73,7 @@ class WorkspaceRegistry:
             allow_git=allow_git,
             allow_artifacts=allow_artifacts,
             allow_agent_dispatch=allow_agent_dispatch,
+            auto_discover=auto_discover,
             local_http_ports=ports,
         )
 

@@ -16,8 +16,8 @@ boundaries are part of the product contract.
 - private `/tmp`;
 - host home, SSH credentials, Windows mounts, and Docker sockets omitted;
 - read-only system runtimes;
-- cleared environment and synthetic `HOME=/tmp`;
-- unshared network namespace with outbound networking disabled;
+- cleared environment, synthetic `HOME=/tmp`, and host `.gitconfig` for commit metadata;
+- unshared network namespace with outbound networking disabled by default; opt-in `network_access=true` shares host network and mounts host SSH and GitHub credentials read-only;
 - bounded synchronous output;
 - bounded async job logs and execution timeout.
 
@@ -83,7 +83,7 @@ bounded.
 A local workspace may independently allow or deny:
 
 - direct execution;
-- Git inspection;
+- Git operations and inspection;
 - artifact access;
 - worker-agent dispatch;
 - exact loopback HTTP ports.
