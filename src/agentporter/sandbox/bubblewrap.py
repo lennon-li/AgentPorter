@@ -122,9 +122,9 @@ class BubblewrapSandbox(SandboxBackend):
             ssh_dir = os.path.join(host_home, ".ssh")
             if os.path.isdir(ssh_dir):
                 args.extend(["--dir", "/tmp/.ssh"])
-                for fname in ["known_hosts", "known_hosts2", "config", "id_ed25519", "id_rsa", "id_ecdsa", "id_ed25519_github", "id_ed25519_personal"]:
+                for fname in sorted(os.listdir(ssh_dir)):
                     fpath = os.path.join(ssh_dir, fname)
-                    if os.path.isfile(fpath):
+                    if os.path.isfile(fpath) and not fname.endswith("~") and not fname.endswith(".bak"):
                         args.extend(["--ro-bind", fpath, f"/tmp/.ssh/{fname}"])
 
             gh_config_dir = os.path.join(host_home, ".config", "gh")
