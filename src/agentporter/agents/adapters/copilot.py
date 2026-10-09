@@ -16,6 +16,9 @@ class CopilotAdapter(AgentAdapter):
     reasoning_effort = "medium"
     description = "GitHub Copilot CLI agent for non-interactive coding, review, and repository tasks"
 
+    supports_model_override = True
+    supports_reasoning_override = True
+
     def capabilities(self) -> list[str]:
         return ["implementation", "code_review", "code_search", "testing"]
 
@@ -70,6 +73,10 @@ class CopilotAdapter(AgentAdapter):
             args.extend(["--model", model])
             if reasoning_effort:
                 args.extend(["--reasoning-effort", reasoning_effort])
+        elif reasoning_effort and model != "auto":
+            # Copilot's "auto" router rejects a reasoning effort, so an effort
+            # is only enforceable together with an explicit model.
+            raise RuntimeError("Copilot reasoning override requires an explicit non-auto model")
         # Deny rules take precedence over --allow-all-tools. File tools stay
         # confined to -C because --allow-all-paths is never passed.
         policy = policy or ExecutionPolicy.for_workspace(writable=writable)

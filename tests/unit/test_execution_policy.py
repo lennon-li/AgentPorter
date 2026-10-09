@@ -90,6 +90,20 @@ def test_copilot_auto_model_omits_reasoning_effort(fake_exe):
     assert "--reasoning-effort" not in argv
 
 
+def test_copilot_reasoning_without_model_fails_closed(fake_exe):
+    with pytest.raises(RuntimeError, match="reasoning"):
+        CopilotAdapter(executable_override=fake_exe).build_argv(WS, "P", "", "high")
+
+
+def test_phil_accepts_explicit_model_and_reasoning(fake_exe, tmp_path):
+    adapter = PhilAdapter(executable_override=fake_exe, copilot_home=str(tmp_path))
+    assert adapter.supports_model_override and adapter.supports_reasoning_override
+    for model in ("claude-opus-5.5", "gpt-6.1-sol"):
+        argv = adapter.build_argv(WS, "P", model, "high")
+        assert argv[argv.index("--model") + 1] == model
+        assert argv[argv.index("--reasoning-effort") + 1] == "high"
+
+
 def test_phil_binds_own_copilot_profile_and_keeps_deny_rules(fake_exe, tmp_path):
     adapter = PhilAdapter(executable_override=fake_exe, copilot_home=str(tmp_path))
     argv = adapter.build_argv(WS, "P", policy=ExecutionPolicy.for_workspace(writable=True))
