@@ -127,3 +127,17 @@ def test_sandbox_environment_clean(tmp_path: Path):
     assert "SECRET_HOST_TOKEN_TEST" not in res["stdout"]
     assert "PATH=/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin" in res["stdout"]
     assert "USER=sandbox" in res["stdout"]
+
+
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap not available")
+def test_sandbox_background_process_does_not_block_exit(tmp_path: Path):
+    # gh/git can fork daemons (dbus, credential cache); they must not hold the run open.
+    sandbox = BubblewrapSandbox(tmp_path / "state")
+    res = sandbox.run(
+        str(tmp_path),
+        ["bash", "-c", "setsid sleep 60 >/dev/null 2>&1 & echo started; exit 3"],
+        timeout_seconds=10,
+    )
+    assert res["exit_code"] == 3
+    assert "started" in res["stdout"]
+    assert res["duration"] < 5

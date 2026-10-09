@@ -17,7 +17,8 @@ boundaries are part of the product contract.
 - host home, SSH credentials, Windows mounts, and Docker sockets omitted;
 - read-only system runtimes;
 - cleared environment, synthetic `HOME=/tmp`, and host `.gitconfig` for commit metadata;
-- unshared network namespace with outbound networking disabled by default; opt-in `network_access=true` shares host network and mounts host SSH and GitHub credentials read-only;
+- unshared network namespace with outbound networking disabled by default for MCP calls; REST/GPT Action `exec_run` and `exec_start` default to `network_access=true` (an explicit `false` runs offline). Network-enabled runs share the host network and mount host SSH and GitHub credentials read-only;
+- `--die-with-parent`, so background helpers (dbus, git credential caches) are killed with the command instead of holding the run open;
 - bounded synchronous output;
 - bounded async job logs and execution timeout.
 

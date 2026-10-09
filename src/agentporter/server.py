@@ -67,6 +67,7 @@ def log_tool_event(tool_name: str, kwargs: dict, result: Any, duration: float, e
         "path": kwargs.get("path"),
         "job_id": kwargs.get("job_id"),
         "agent": kwargs.get("agent"),
+        "network_access": kwargs.get("network_access"),
         "duration_sec": round(duration, 4),
         "status": "error" if error else "ok",
         "error": str(error) if error else None,
@@ -449,6 +450,17 @@ def create_asgi_app(config: Config) -> ASGIApp:
                 for item in obj:
                     fix_objects(item)
         fix_objects(schema)
+        # ChatGPT Actions rejects schemas with more than 30 operations; stay
+        # below the limit with margin. Retain HTTP handlers and MCP tools; omit
+        # only lower-priority operations from the imported REST schema, on
+        # Asgard and BCC alike (read_file/exec_run cover artifacts).
+        action_schema_exclusions = {"health", "git_branch", "list_artifacts", "read_artifact"}
+        for path, path_item in list(schema.get("paths", {}).items()):
+            for method, operation in list(path_item.items()):
+                if isinstance(operation, dict) and operation.get("operationId") in action_schema_exclusions:
+                    del path_item[method]
+            if not path_item:
+                del schema["paths"][path]
         if "components" not in schema:
             schema["components"] = {}
         schema["components"]["securitySchemes"] = {
@@ -459,6 +471,13 @@ def create_asgi_app(config: Config) -> ASGIApp:
             }
         }
         schema["security"] = [{"BearerAuth": []}]
+        # Every GPT Action offers persistent "Always allow" approval (Lennon's
+        # choice, 2026-10-09). Server-side workspace permissions, the offline
+        # sandbox default, and commit/push confirmation flags still apply.
+        for path_item in schema.get("paths", {}).values():
+            for operation in path_item.values():
+                if isinstance(operation, dict) and "operationId" in operation:
+                    operation["x-openai-isConsequential"] = False
         if config.server.action_prefix:
             for path in schema.get("paths", {}).values():
                 for operation in path.values():

@@ -181,13 +181,15 @@ class ExecRunRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=30, description="Timeout in seconds for execution.")
-    network_access: bool = Field(default=False, description="Whether to grant network access inside sandbox.")
+    # REST Actions (Agent7) are online by default (Lennon, 2026-10-09); MCP stays offline by default.
+    network_access: bool = Field(default=True, description="Internet access inside the sandbox (GitHub, package installs). Defaults to true; send false to run offline.")
 
 class ExecStartRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=300, description="Timeout in seconds for the background job.")
-    network_access: bool = Field(default=False, description="Whether to grant network access inside sandbox.")
+    # REST Actions (Agent7) are online by default (Lennon, 2026-10-09); MCP stays offline by default.
+    network_access: bool = Field(default=True, description="Internet access inside the sandbox (GitHub, package installs). Defaults to true; send false to run offline.")
 
 class JobOutputRequest(BaseModel):
     cursor: int = Field(default=0, description="Byte offset to start reading from.")

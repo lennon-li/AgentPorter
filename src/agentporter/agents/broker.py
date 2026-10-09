@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional, Dict
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
 from agentporter.agents.adapters.codex_identity import JaxAdapter, LizAdapter
+from agentporter.agents.adapters.copilot import CopilotAdapter, PhilAdapter
 from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
@@ -34,6 +35,7 @@ class AgentBroker:
             "codex": CodexAdapter(),
             "jax": JaxAdapter(),
             "liz": LizAdapter(),
+            "phil": PhilAdapter(),
             "claude": ClaudeAdapter(),
             "opencode": OpenCodeAdapter(),
             "agy": AgyAdapter(),
@@ -199,7 +201,11 @@ class AgentBroker:
         # remain "configured", not misreported as a request made by AgentPorter.
         requested_reasoning = (reasoning_effort or "").strip()
 
-        controls = {"policy": policy} if isinstance(adapter, CodexAdapter) else {"writable": ws.writable}
+        controls = (
+            {"policy": policy}
+            if isinstance(adapter, (CodexAdapter, CopilotAdapter))
+            else {"writable": ws.writable}
+        )
         cmd = adapter.build_argv(
             workspace_path=ws.path,
             packet=packet,

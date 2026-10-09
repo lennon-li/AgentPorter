@@ -87,3 +87,21 @@ Cloudflare Tunnels only route public web traffic to a custom domain when:
 1. The domain (e.g. `example.com`) is added to Cloudflare as an active site with nameservers delegated to Cloudflare.
 2. In Cloudflare DNS, the CNAME record for the tunnel subdomain (e.g. `agent`) has **Proxy status set to Proxied (Orange Cloud ☁️)**.
 3. Once proxied, Cloudflare Edge intercepts public requests on Anycast IPs, terminates TLS with an automated universal SSL certificate, and routes the traffic down the tunnel.
+
+---
+
+## 6. Agent7 GitHub Outage Postmortem (2026-10-08/09)
+
+Agent7 (ChatGPT GPT Actions) reported "no route, no DNS, gh not logged in" on Asgard and BCC. The servers were healthy the whole time; five independent faults stacked up.
+
+### Lessons
+1. **"Network unreachable" in the sandbox is the offline default, not an outage.** Without `network_access=true`, bwrap unshares the network namespace and gh's config is not mounted, so route, DNS, git and `gh auth` all fail together. Diagnose from the gateway log first: every tool event now records `"network_access"`, which shows what the client actually sent.
+2. **ChatGPT silently drops request fields its imported Action schema does not know.** Adding a field server-side does nothing until the schema is re-imported. Because the GPT kept sending the old default, REST `exec_run`/`exec_start` now default to `network_access=true`; MCP stays offline by default.
+3. **A sandboxed command that forks a daemon hangs until timeout.** `gh` auto-launches `dbus-daemon` for keyring lookup; bwrap's PID-1 then outlives the command and keeps the output pipe open, so every gh call returned exit 124 after 30 s. `--die-with-parent` fixes this for every helper (dbus, git credential cache).
+4. **Dev Tunnel hosts can stay "active" while not hosting.** At 21:44:58 both tunnels lost the relay and token refresh failed with `Unauthorized`; systemd still showed the services running. Check `journalctl -u <tunnel>` for `Ready to accept connections`, and restart the host process (the login was still valid).
+5. **GPT Actions accept at most 30 operations per schema.** Keep a margin: `health`, `git_branch`, `list_artifacts` and `read_artifact` are excluded from the Action schema (they remain HTTP routes and MCP tools).
+6. **Re-importing an Action can break its authentication.** After re-import the Asgard Action's calls never reached the server — not even a 401. If a machine's log shows no request at all, check the Action's Authentication (API Key → Bearer) before debugging the server.
+7. **`x-openai-isConsequential: true` forces a prompt on every call.** All operations are now non-consequential so "Always allow" is offered; server-side workspace permissions and commit/push confirmation still apply.
+8. **Keep copies on each machine in sync.** BCC was several commits behind Asgard and lacked `network_access` entirely. Compare `git log` on both hosts before assuming a fix is deployed.
+9. **Don't rely on hardcoded CLI paths or flags.** m3 pointed Phil at `~/.npm-global/bin/copilot` (absent on BCC) and sent `--reasoning-effort` with model `auto`, which Copilot rejects. Resolve executables at runtime and add argv tests.
+10. **Verify end to end through the public tunnel.** Unit tests passed throughout; only live calls (health → list_workspaces → exec_run with and without network → git fetch → agent dispatch) proved the path Agent7 uses.

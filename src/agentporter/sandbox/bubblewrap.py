@@ -86,6 +86,9 @@ class BubblewrapSandbox(SandboxBackend):
 
         args = [
             "bwrap",
+            # Kill the sandbox namespace with its launcher so background helpers
+            # (dbus, git credential caches) cannot hold output pipes open.
+            "--die-with-parent",
             "--ro-bind", "/usr", "/usr",
             "--ro-bind", "/lib", "/lib",
             "--ro-bind", "/lib64", "/lib64",

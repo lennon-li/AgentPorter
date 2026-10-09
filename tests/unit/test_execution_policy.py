@@ -8,7 +8,7 @@ import pytest
 from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
 from agentporter.agents.adapters.codex_identity import JaxAdapter, LizAdapter
-from agentporter.agents.adapters.copilot import CopilotAdapter
+from agentporter.agents.adapters.copilot import CopilotAdapter, PhilAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter
 from agentporter.agents.command_guard import find_denied
 from agentporter.agents.policy import ExecutionPolicy
@@ -88,6 +88,23 @@ def test_copilot_argv_scoped_with_deny_rules(fake_exe):
 def test_copilot_auto_model_omits_reasoning_effort(fake_exe):
     argv = CopilotAdapter(executable_override=fake_exe).build_argv(WS, "P", "auto", "high")
     assert "--reasoning-effort" not in argv
+
+
+def test_phil_binds_own_copilot_profile_and_keeps_deny_rules(fake_exe, tmp_path):
+    adapter = PhilAdapter(executable_override=fake_exe, copilot_home=str(tmp_path))
+    argv = adapter.build_argv(WS, "P", policy=ExecutionPolicy.for_workspace(writable=True))
+    assert argv[:3] == ["env", f"COPILOT_HOME={tmp_path}", f"PHIL_COPILOT_HOME={tmp_path}"]
+    assert argv[3] == fake_exe
+    assert "--model" not in argv
+    assert "--deny-tool=shell(git push)" in argv
+    assert adapter.detect()["is_installed"]
+    assert not PhilAdapter(executable_override=fake_exe, copilot_home=str(tmp_path / "missing")).detect()["is_installed"]
+
+
+def test_phil_is_registered_with_broker():
+    from agentporter.agents.broker import AgentBroker
+
+    assert isinstance(AgentBroker(None, None).adapters["phil"], PhilAdapter)
 
 
 def test_opencode_supported_controls_fail_closed(fake_exe):

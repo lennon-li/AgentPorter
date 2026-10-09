@@ -34,6 +34,16 @@ def test_action_metadata_config_override_and_workspace_permissions(tmp_path, mon
                      for op in path.values() if isinstance(op, dict) and "operationId" in op]
     assert operation_ids and all(op.startswith("bcc_") for op in operation_ids)
     assert len(operation_ids) == len(set(operation_ids))
+    # GPT Actions accepts at most 30 operations; hidden endpoints still exist.
+    assert len(operation_ids) <= 30
+    assert "bcc_health" not in operation_ids
+    assert "bcc_git_branch" not in operation_ids
+    for operation_id, request_schema in (
+        ("bcc_exec_run", "ExecRunRequest"),
+        ("bcc_exec_start", "ExecStartRequest"),
+    ):
+        assert operation_id in operation_ids
+        assert "network_access" in schema["components"]["schemas"][request_schema]["properties"]
     assert app.openapi() == schema
     from agentporter.rest.schemas import WorkspaceInfoResponse
     parsed = WorkspaceInfoResponse.model_validate(app.state.tools["list_workspaces"]()[0])
@@ -72,3 +82,12 @@ def test_named_codex_without_config_reports_unknown(tmp_path, adapter_cls):
     assert detection["configured_model"] == "unknown"
     assert detection["reasoning_effort"] == "unknown"
     assert not detection["is_installed"]
+
+
+def test_rest_exec_requests_default_to_network_access():
+    # Agent7 REST Actions are online unless the call explicitly opts out.
+    from agentporter.rest.schemas import ExecRunRequest, ExecStartRequest
+
+    assert ExecRunRequest(argv=["true"]).network_access is True
+    assert ExecStartRequest(argv=["true"]).network_access is True
+    assert ExecRunRequest(argv=["true"], network_access=False).network_access is False
