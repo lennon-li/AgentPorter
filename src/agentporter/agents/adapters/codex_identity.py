@@ -83,7 +83,7 @@ class NamedCodexAdapter(CodexAdapter):
         # The workspace-write sandbox has no network, so a confirmed push needs it enabled.
         network = ["-c", "sandbox_workspace_write.network_access=true"] if policy.git_push else []
 
-        return [
+        cmd = [
             "env",
             f"CODEX_HOME={self.codex_home}",
             exe,
@@ -95,12 +95,13 @@ class NamedCodexAdapter(CodexAdapter):
             "-c",
             "approval_policy=never",
             *network,
-            "-m",
-            model,
-            "-c",
-            f"model_reasoning_effort={reasoning_effort}",
-            packet,
         ]
+        if model:
+            cmd.extend(["-m", model])
+        if reasoning_effort:
+            cmd.extend(["-c", f"model_reasoning_effort={reasoning_effort}"])
+        cmd.append(packet)
+        return cmd
 
 
 class JaxAdapter(NamedCodexAdapter):
