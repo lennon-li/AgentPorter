@@ -234,6 +234,59 @@ def test_submit_rejects_unknown_placeholder_and_duplicate_partition(tmp_path):
         run_submit_existing(root, tmp_path)
 
 
+REAL_STYLE_TEMPLATE = (
+    b"#!/bin/bash\n"
+    b"# Rendered by AgentPorter: replaces @SLURM_ACCOUNT@-style tokens. Contact: ops@example.org\n"
+    b"#SBATCH --job-name=cranary-laya-smoke\n"
+    b"#SBATCH --account=@SLURM_ACCOUNT@\n"
+    b"#SBATCH --time=00:15:00\n"
+    b"#SBATCH --nodes=1\n#SBATCH --ntasks=1\n#SBATCH --gpus-per-node=1\n"
+    b"#SBATCH --cpus-per-task=@CPUS_PER_TASK@\n"
+    b"#SBATCH --output=@SCRATCH_LOG_DIR@/%x-%j.out\n"
+    b"#SBATCH --error=@SCRATCH_LOG_DIR@/%x-%j.err\n"
+    b"set -euo pipefail\n"
+    b"args=(a b); echo \"${args[@]}\" \"$@\"  # user@host, $CRANARY_SCRATCH\n"
+)
+
+
+def _rewrite_template(root, data):
+    (root / "laya_smoke.sbatch.template").write_bytes(data)
+    (root / "SHA256SUMS").write_text(
+        "".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n"
+                for p in root.iterdir() if p.name != "SHA256SUMS"), encoding="utf-8")
+
+
+def test_submit_allows_bare_at_signs_but_fills_all_tokens(tmp_path):
+    root = handoff(tmp_path)
+    _rewrite_template(root, REAL_STYLE_TEMPLATE)
+    wsreg = registry(root)
+    tool = create_scinet_training_tool(wsreg, settings(), tmp_path / "state")
+    with patch.object(training, "_identity", return_value=identity(wsreg.get("cranary"))), \
+         patch.object(training, "_call") as call:
+        call.side_effect = stage_receipt
+        staged = tool["scinet_stage"]("cranary")
+        call.reset_mock()
+        call.side_effect = [
+            {"exit_code": 0, "stdout": b"", "stderr": b"", "timed_out": False, "truncated": False},
+            {"exit_code": 0, "stdout": b"ok", "stderr": b"", "timed_out": False, "truncated": False},
+            {"exit_code": 0, "stdout": b"12345", "stderr": b"", "timed_out": False, "truncated": False},
+        ]
+        result = tool["scinet_submit"]("cranary", staged["stage_id"])
+    assert result["success"] is True
+    rendered = call.call_args_list[1].kwargs["input_bytes"]
+    assert b"ops@example.org" in rendered and b'"$@"' in rendered
+    assert b"--account=def-cranary" in rendered
+    assert b"#SBATCH --partition=gpu" in rendered
+    assert not training.PLACEHOLDER_RE.search(rendered.decode())
+
+
+def test_submit_rejects_unknown_strict_token(tmp_path):
+    root = handoff(tmp_path)
+    _rewrite_template(root, REAL_STYLE_TEMPLATE + b"echo @MYSTERY_TOKEN@\n")
+    with pytest.raises(ValueError, match="unfilled placeholder: @MYSTERY_TOKEN@"):
+        run_submit_existing(root, tmp_path)
+
+
 def run_submit_existing(root, tmp_path):
     wsreg = registry(root)
     tool = create_scinet_training_tool(wsreg, settings(), tmp_path / "state")

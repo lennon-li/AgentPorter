@@ -29,6 +29,8 @@ MAX_REMOTE_OUTPUT = 256 * 1024
 MAX_LOG_OUTPUT = 4 * 1024 * 1024
 JOB_ID_RE = re.compile(r"^[0-9]+$")
 ID_RE = re.compile(r"^[a-f0-9]{32}$")
+# Only strict @UPPER_SNAKE@ tokens count as placeholders; bare '@' (emails, "$@", comments) is allowed.
+PLACEHOLDER_RE = re.compile(r"@[A-Z][A-Z0-9_]*@")
 SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 HANDOFF_FILES = frozenset({
     "cranary-laya-bundle.tar.gz", "requirements-laya.in", "requirements-laya.lock",
@@ -440,8 +442,9 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
         if partition_in_template > 1:
             raise ValueError("Smoke template has duplicate partition placeholders")
         script = script.replace("@SLURM_PARTITION@", partition)
-        if "@" in script:
-            raise ValueError("Smoke template contains an unfilled placeholder")
+        unfilled = sorted(set(PLACEHOLDER_RE.findall(script)))
+        if unfilled:
+            raise ValueError("Smoke template contains an unfilled placeholder: " + ", ".join(unfilled))
         lines = script.splitlines()
         insert = next((i + 1 for i, line in enumerate(lines) if line.startswith("#SBATCH --account=")), None)
         if insert is None:
