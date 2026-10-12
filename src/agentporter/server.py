@@ -31,6 +31,7 @@ from agentporter.tools.git import create_git_tools
 from agentporter.tools.artifacts import create_artifact_tools
 from agentporter.tools.local_http import create_local_http_tool
 from agentporter.tools.agents import create_agent_tools
+from agentporter.tools.venkata import create_venkata_tool, Diagnostic
 
 logger = logging.getLogger("agentporter.server")
 
@@ -137,6 +138,13 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _list_artifacts, _read_artifact = create_artifact_tools(registry)
     _local_http_request = create_local_http_tool(registry)
     _list_agents, _dispatch_agent = create_agent_tools(agent_broker)
+    _venkata_diagnostic = create_venkata_tool(registry)
+
+    @mcp.tool()
+    @monitored_tool("venkata_diagnostic")
+    def venkata_diagnostic(workspace_id: str, command: Diagnostic, args: list[str] | None = None) -> dict:
+        """Run allowlisted read-only Venkata diagnostics using BCC's host SSH identity."""
+        return _venkata_diagnostic(workspace_id=workspace_id, command=command, args=args)
 
     # Tool definitions registered on MCPServer
     @mcp.tool()
@@ -392,6 +400,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             "read_artifact": read_artifact,
             "list_agents": list_agents,
             "dispatch_agent": dispatch_agent,
+            "venkata_diagnostic": venkata_diagnostic,
         }
     }
     return mcp, context

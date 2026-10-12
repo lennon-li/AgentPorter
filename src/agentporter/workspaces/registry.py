@@ -27,6 +27,7 @@ class WorkspaceRegistry:
                     allow_agent_dispatch=data.get("allow_agent_dispatch", False),
                     local_http_ports=data.get("local_http_ports", []),
                     auto_discover=data.get("auto_discover", False),
+                    allow_venkata_ssh=data.get("allow_venkata_ssh", False),
                 )
             for ws_id, ws in list(self._workspaces.items()):
                 if ws.auto_discover and os.path.isdir(ws.path):
@@ -61,6 +62,7 @@ class WorkspaceRegistry:
         allow_agent_dispatch: bool = False,
         local_http_ports: Optional[list[int]] = None,
         auto_discover: bool = False,
+        allow_venkata_ssh: bool = False,
     ) -> None:
         real_path = os.path.realpath(os.path.expanduser(path))
         ports = sorted({int(p) for p in (local_http_ports or []) if 1 <= int(p) <= 65535})
@@ -75,6 +77,7 @@ class WorkspaceRegistry:
             allow_agent_dispatch=allow_agent_dispatch,
             auto_discover=auto_discover,
             local_http_ports=ports,
+            allow_venkata_ssh=allow_venkata_ssh,
         )
 
     def get(self, ws_id: str) -> WorkspaceDefinition:
@@ -98,6 +101,7 @@ class WorkspaceRegistry:
                     "artifacts": ws.allow_artifacts,
                     "agent_dispatch": ws.allow_agent_dispatch,
                     "local_http_ports": ws.local_http_ports,
+                    "venkata_ssh": ws.allow_venkata_ssh,
                 },
             })
         return results

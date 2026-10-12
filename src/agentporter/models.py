@@ -15,6 +15,7 @@ class WorkspaceDefinition(BaseModel):
     allow_agent_dispatch: bool = False
     auto_discover: bool = False
     local_http_ports: list[int] = Field(default_factory=list)
+    allow_venkata_ssh: bool = False
 
 
 class GitContext(BaseModel):
