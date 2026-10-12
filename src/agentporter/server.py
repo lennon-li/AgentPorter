@@ -33,6 +33,7 @@ from agentporter.tools.local_http import create_local_http_tool
 from agentporter.tools.agents import create_agent_tools
 from agentporter.tools.venkata import create_venkata_tool, Diagnostic
 from agentporter.tools.venkata_transfer import create_venkata_transfer_tool, TransferSource, TransferDestination
+from agentporter.tools.scinet import create_scinet_tool, ScinetDiagnostic
 
 logger = logging.getLogger("agentporter.server")
 
@@ -141,6 +142,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _list_agents, _dispatch_agent = create_agent_tools(agent_broker)
     _venkata_diagnostic = create_venkata_tool(registry)
     _venkata_transfer = create_venkata_transfer_tool(registry)
+    _scinet_diagnostic = create_scinet_tool(registry, getattr(config, "scinet", None))
 
     @mcp.tool()
     @monitored_tool("venkata_transfer")
@@ -154,6 +156,12 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def venkata_diagnostic(workspace_id: str, command: Diagnostic, args: list[str] | None = None) -> dict:
         """Run allowlisted read-only Venkata diagnostics using BCC's host SSH identity."""
         return _venkata_diagnostic(workspace_id=workspace_id, command=command, args=args)
+
+    @mcp.tool()
+    @monitored_tool("scinet_diagnostic")
+    def scinet_diagnostic(workspace_id: str, command: ScinetDiagnostic) -> dict:
+        """Run one fixed, read-only SciNet diagnostic through Asgard's SSH master."""
+        return _scinet_diagnostic(workspace_id=workspace_id, command=command)
 
     # Tool definitions registered on MCPServer
     @mcp.tool()
@@ -411,6 +419,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             "dispatch_agent": dispatch_agent,
             "venkata_diagnostic": venkata_diagnostic,
             "venkata_transfer": venkata_transfer,
+        "scinet_diagnostic": scinet_diagnostic,
         }
     }
     return mcp, context
@@ -473,7 +482,13 @@ def create_asgi_app(config: Config) -> ASGIApp:
         # below the limit with margin. Retain HTTP handlers and MCP tools; omit
         # only lower-priority operations from the imported REST schema, on
         # Asgard and BCC alike (read_file/exec_run cover artifacts).
-        action_schema_exclusions = {"health", "git_branch", "list_artifacts", "read_artifact"}
+        action_schema_exclusions = {
+            "health",
+            "git_branch",
+            "git_show",
+            "list_artifacts",
+            "read_artifact",
+        }
         for path, path_item in list(schema.get("paths", {}).items()):
             for method, operation in list(path_item.items()):
                 if isinstance(operation, dict) and operation.get("operationId") in action_schema_exclusions:

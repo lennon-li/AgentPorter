@@ -54,6 +54,16 @@ class SandboxSettings:
     max_job_log_bytes: int = 10 * 1024 * 1024  # per stream, async jobs
 
 
+@dataclass
+class ScinetSettings:
+    """Private deployment-supplied endpoint for the optional SciNet action."""
+
+    host: str = ""
+    user: str = ""
+    control_socket: str = ""
+    machine: str = ""
+
+
 class Config:
     """Central configuration manager for AgentPorter."""
 
@@ -70,13 +80,26 @@ class Config:
         self.server = ServerSettings()
         self.security = SecuritySettings()
         self.sandbox = SandboxSettings()
+        self.scinet = ScinetSettings()
         self.workspaces: dict[str, dict[str, Any]] = {}
         self.api_key: str = ""
 
         self._ensure_dirs()
         self._load_config_file()
         self._load_workspaces_file()
+        self._load_scinet_environment()
         self._load_or_generate_api_key()
+
+    def _load_scinet_environment(self) -> None:
+        for field in ("host", "user", "control_socket", "machine"):
+            value = os.environ.get("AGENTPORTER_SCINET_" + field.upper())
+            if value is not None:
+                setattr(self.scinet, field, value.strip())
+        workspace = os.environ.get("AGENTPORTER_SCINET_WORKSPACE", "").strip()
+        if workspace:
+            if workspace not in self.workspaces:
+                raise ValueError("SciNet workspace override must name a registered workspace")
+            self.workspaces[workspace]["allow_scinet_diagnostic"] = True
 
     @staticmethod
     def _ensure_private_dir(path: Path) -> None:
@@ -155,6 +178,14 @@ class Config:
                 self.sandbox.max_output_bytes = int(sbx["max_output_bytes"])
             if "max_job_log_bytes" in sbx:
                 self.sandbox.max_job_log_bytes = int(sbx["max_job_log_bytes"])
+
+            sci = data.get("scinet", {})
+            self.scinet.host = str(sci.get("host", self.scinet.host) or "").strip()
+            self.scinet.user = str(sci.get("user", self.scinet.user) or "").strip()
+            self.scinet.control_socket = str(
+                sci.get("control_socket", self.scinet.control_socket) or ""
+            ).strip()
+            self.scinet.machine = str(sci.get("machine", self.scinet.machine) or "").strip()
 
             if self.sandbox.default_timeout_seconds <= 0:
                 raise ValueError("sandbox.default_timeout_seconds must be > 0")
