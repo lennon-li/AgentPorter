@@ -127,6 +127,13 @@ class VenkataTests(unittest.TestCase):
                 url = "/api/v1/workspaces/test/venkata/diagnostic"
                 operation = schema["paths"]["/api/v1/workspaces/{workspace_id}/venkata/diagnostic"]["post"]
                 self.assertEqual(operation["operationId"], "bcc_venkata_diagnostic")
+                transfer = "/api/v1/workspaces/test/venkata/transfer"
+                self.assertEqual(schema["paths"]["/api/v1/workspaces/{workspace_id}/venkata/transfer"]["post"]["operationId"],
+                                 "bcc_venkata_transfer")
+                body = {"source": "asgard_laya", "files": ["dataset.jsonl"]}
+                self.assertEqual(client.post(transfer, json=body).status_code, 401)
+                self.assertEqual(client.post(transfer, json=body,
+                                 headers={"Authorization": "Bearer synthetic-test-key"}).status_code, 403)
                 self.assertLessEqual(sum(len(v) for v in schema["paths"].values()), 30)
                 self.assertEqual(client.post(url, json={"command": "hostname"}).status_code, 401)
                 self.assertEqual(client.post(url, json={"command": "hostname"},

@@ -32,6 +32,7 @@ from agentporter.tools.artifacts import create_artifact_tools
 from agentporter.tools.local_http import create_local_http_tool
 from agentporter.tools.agents import create_agent_tools
 from agentporter.tools.venkata import create_venkata_tool, Diagnostic
+from agentporter.tools.venkata_transfer import create_venkata_transfer_tool, TransferSource, TransferDestination
 
 logger = logging.getLogger("agentporter.server")
 
@@ -139,6 +140,14 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _local_http_request = create_local_http_tool(registry)
     _list_agents, _dispatch_agent = create_agent_tools(agent_broker)
     _venkata_diagnostic = create_venkata_tool(registry)
+    _venkata_transfer = create_venkata_transfer_tool(registry)
+
+    @mcp.tool()
+    @monitored_tool("venkata_transfer")
+    def venkata_transfer(workspace_id: str, source: TransferSource, files: list[str],
+                         destination: TransferDestination = "laya-training") -> dict:
+        """Transfer allowlisted training files from Asgard or workspace staging to Venkata."""
+        return _venkata_transfer(workspace_id=workspace_id, source=source, files=files, destination=destination)
 
     @mcp.tool()
     @monitored_tool("venkata_diagnostic")
@@ -401,6 +410,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             "list_agents": list_agents,
             "dispatch_agent": dispatch_agent,
             "venkata_diagnostic": venkata_diagnostic,
+            "venkata_transfer": venkata_transfer,
         }
     }
     return mcp, context

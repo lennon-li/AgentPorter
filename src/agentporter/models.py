@@ -16,6 +16,7 @@ class WorkspaceDefinition(BaseModel):
     auto_discover: bool = False
     local_http_ports: list[int] = Field(default_factory=list)
     allow_venkata_ssh: bool = False
+    allow_venkata_transfer: bool = False
 
 
 class GitContext(BaseModel):
