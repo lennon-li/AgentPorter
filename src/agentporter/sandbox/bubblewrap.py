@@ -6,6 +6,7 @@ import shutil
 import signal
 import subprocess
 import logging
+import tempfile
 from pathlib import Path
 from agentporter.sandbox.base import SandboxBackend
 from agentporter.tooling import add_tooling_mounts
@@ -40,23 +41,22 @@ class BubblewrapSandbox(SandboxBackend):
     def _ensure_synthetic_identity(self) -> None:
         uid = os.getuid()
         gid = os.getgid()
-        if not self.passwd_file.exists():
-            self.passwd_file.write_text(
+        records = {
+            self.passwd_file: (
                 f"root:x:0:0:root:/tmp:/bin/bash\n"
                 f"sandbox:x:{uid}:{gid}:Sandbox User:/tmp:/bin/bash\n"
-                "nobody:x:65534:65534:nobody:/tmp:/bin/false\n",
-                encoding="utf-8",
-            )
-        if not self.group_file.exists():
-            self.group_file.write_text(
-                f"root:x:0:\nsandbox:x:{gid}:\nnobody:x:65534:\n",
-                encoding="utf-8",
-            )
-        for p in (self.passwd_file, self.group_file):
+                "nobody:x:65534:65534:nobody:/tmp:/bin/false\n"
+            ),
+            self.group_file: f"root:x:0:\nsandbox:x:{gid}:\nnobody:x:65534:\n",
+        }
+        for path, content in records.items():
+            fd, name = tempfile.mkstemp(prefix=".identity-", dir=self.etc_dir)
             try:
-                os.chmod(p, 0o600)
-            except OSError:
-                pass
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    stream.write(content)
+                os.replace(name, path)
+            finally:
+                Path(name).unlink(missing_ok=True)
 
     def is_available(self) -> bool:
         return shutil.which("bwrap") is not None
@@ -71,6 +71,7 @@ class BubblewrapSandbox(SandboxBackend):
         real_workspace = os.path.realpath(workspace_path)
         if not os.path.isdir(real_workspace):
             raise ValueError(f"Workspace path does not exist: {real_workspace}")
+        self._ensure_synthetic_identity()
 
         target_cwd = "/workspace"
         if sub_cwd:
