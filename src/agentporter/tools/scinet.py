@@ -8,6 +8,7 @@ import stat
 from typing import Literal
 
 from agentporter.tools.venkata import run_host_bytes
+from agentporter.tools.scinet_broker import broker_request, broker_socket_available
 
 ScinetDiagnostic = Literal[
     "gpu_partitions",
@@ -113,6 +114,71 @@ def ssh_argv(settings, home: str, command: ScinetDiagnostic) -> list[str]:
     return argv
 
 
+def ssh_remote_argv(
+    settings,
+    home: str,
+    remote: list[str],
+    *,
+    timeout_text: str = REMOTE_TIMEOUT,
+    accepts_stdin: bool = False,
+) -> list[str]:
+    """Build the fixed SSH envelope for server-generated remote commands."""
+    socket_path = control_socket(settings, home)
+    argv = [
+        "/usr/bin/ssh", "-F", "/dev/null", "-T", "-S", socket_path,
+        "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+        "-o", "ProxyCommand=/bin/false", "-o", "ControlMaster=no",
+        "-o", "ControlPersist=no", "-o", "IdentityAgent=none",
+        "-o", "PubkeyAuthentication=no", "-o", "PasswordAuthentication=no",
+        "-o", "KbdInteractiveAuthentication=no", "-o", "HostbasedAuthentication=no",
+        "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes",
+    ]
+    if not accepts_stdin:
+        argv.append("-n")
+    argv.extend(["-l", settings.user, settings.host])
+    command = shlex.join(["exec", "/usr/bin/timeout", timeout_text, *remote])
+    argv.append(shlex.join(["/bin/bash", "-lc", command]))
+    return argv
+
+
+def run_scinet_bytes(
+    settings,
+    user,
+    remote: list[str],
+    *,
+    input_bytes: bytes | None = None,
+    timeout: float = 60,
+    max_output: int = 256 * 1024,
+    operation: str = "training",
+    command: str | None = None,
+) -> dict:
+    """Run through the broker when configured; retain legacy fallback only for deployment migration."""
+    broker_socket = str(getattr(settings, "broker_socket", "") or "").strip()
+    if broker_socket:
+        return broker_request(
+            settings,
+            remote,
+            input_bytes=input_bytes,
+            timeout=timeout,
+            max_output=max_output,
+            operation=operation,
+            command=command,
+        )
+    return run_host_bytes(
+        ssh_remote_argv(
+            settings,
+            user.pw_dir,
+            remote,
+            timeout_text=f"{max(1, int(timeout))}s",
+            accepts_stdin=input_bytes is not None,
+        ),
+        user.pw_dir,
+        input_bytes=input_bytes,
+        max_output=max_output,
+        timeout=timeout + 5,
+    )
+
+
 def _decode(value: bytes | str) -> str:
     return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value)
 
@@ -139,9 +205,11 @@ def _failure(command: ScinetDiagnostic, error: str) -> dict:
 def host_identity(registry, workspace_id: str, settings):
     if not settings or not all(
         getattr(settings, field, "")
-        for field in ("host", "user", "control_socket", "machine")
+        for field in ("host", "user", "machine")
     ):
         raise PermissionError("SciNet endpoint is not configured for this AgentPorter instance")
+    if not getattr(settings, "broker_socket", "") and not getattr(settings, "control_socket", ""):
+        raise PermissionError("SciNet endpoint transport is not configured")
     ws = registry.get(workspace_id)
     if not ws.allow_execute or not ws.allow_scinet_diagnostic:
         raise PermissionError(
@@ -163,16 +231,31 @@ def create_scinet_tool(registry, settings=None):
             "connection_status",
         }:
             raise ValueError("SciNet diagnostic command is not allowed")
-        socket_path = control_socket(settings, user.pw_dir)
-        if not _socket_available(socket_path):
-            return _failure(command, "ssh_control_socket_unavailable")
 
-        result = run_host_bytes(
-            ssh_argv(settings, user.pw_dir, command),
-            user.pw_dir,
-            max_output=MAX_OUTPUT,
-            timeout=TIMEOUT,
-        )
+        broker_socket = str(getattr(settings, "broker_socket", "") or "").strip()
+        if broker_socket:
+            if not broker_socket_available(broker_socket):
+                return _failure(command, "scinet_broker_unavailable")
+            result = run_scinet_bytes(
+                settings,
+                user,
+                remote_argv(command) or [],
+                max_output=MAX_OUTPUT,
+                timeout=TIMEOUT,
+                operation="diagnostic",
+                command=command,
+            )
+        else:
+            socket_path = control_socket(settings, user.pw_dir)
+            if not _socket_available(socket_path):
+                return _failure(command, "ssh_control_socket_unavailable")
+            result = run_host_bytes(
+                ssh_argv(settings, user.pw_dir, command),
+                user.pw_dir,
+                max_output=MAX_OUTPUT,
+                timeout=TIMEOUT,
+            )
+
         result["target"] = "scinet"
         result["command"] = command
         result["success"] = (

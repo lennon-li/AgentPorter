@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Run this from an interactive Asgard terminal when Duo re-authentication is
+# required.  The SSH master is private to the broker and is not an
+# AgentPorter/agent configuration dependency.
+runtime="${XDG_RUNTIME_DIR:?}/agentporter"
+socket="$runtime/scinet-control"
+mkdir -p "$runtime"
+chmod 700 "$runtime"
+
+if ssh -S "$socket" -O check \
+    -l yeli -o BatchMode=yes -o StrictHostKeyChecking=yes \
+    trillium-gpu.alliancecan.ca >/dev/null 2>&1; then
+  echo "SciNet broker session is already authenticated"
+  exit 0
+fi
+
+if [[ -e "$socket" ]]; then
+  rm -- "$socket"
+fi
+
+exec ssh -M -S "$socket" -N -T -f \
+  -o ControlPersist=12h \
+  -o BatchMode=no \
+  -o PreferredAuthentications=keyboard-interactive \
+  -o KbdInteractiveAuthentication=yes \
+  -o HostbasedAuthentication=no \
+  -o PubkeyAuthentication=no \
+  -o PasswordAuthentication=no \
+  -o StrictHostKeyChecking=yes \
+  -o ClearAllForwardings=yes \
+  -l yeli trillium-gpu.alliancecan.ca

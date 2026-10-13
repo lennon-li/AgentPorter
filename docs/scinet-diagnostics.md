@@ -1,5 +1,11 @@
 # SciNet diagnostics
 
+When `scinet.broker_socket` is configured, AgentPorter uses the host-side
+SciNet broker. The broker owns the Duo-authenticated SSH session and its
+private transport; agents do not receive `~/.ssh` access or a control-socket
+path. The legacy `control_socket` setting remains migration-only and should
+not be used for new deployments.
+
 `scinet_diagnostic` exposes four read-only operations to an explicitly opted-in
 workspace. It is a host-side capability: it does not mount SSH credentials or
 the control socket into the ordinary Bubblewrap sandbox.
@@ -31,7 +37,7 @@ REST Action (with the configured Action prefix):
 
 The commands are:
 
-- `connection_status`: checks the existing SSH master only.
+- `connection_status`: checks the broker-owned authenticated session.
 - `gpu_partitions`: reports Slurm partition capacity/state/GRES.
 - `gpu_nodes`: reports node/GRES/state rows.
 - `gpu_allocations`: reports Slurm jobs and requested/allocated resources.
@@ -56,7 +62,7 @@ The private `config.yaml` must also provide the fixed deployment endpoint:
 scinet:
   host: <approved-host>
   user: <approved-user>
-  control_socket: <approved-socket-under-user-ssh-directory>
+  broker_socket: /run/user/<uid>/agentporter/scinet.sock
   machine: <approved-local-machine>
 ```
 
@@ -70,5 +76,5 @@ receives only server-side allowlisted, shell-quoted arguments; this is not an
 arbitrary remote command interface.
 
 Then restart the service and re-import the Action schema only with explicit
-operator approval. A missing, expired, or inaccessible master returns a
-structured failure; it does not initiate authentication.
+operator approval. A missing broker or expired authentication returns a
+structured failure; it does not initiate Duo authentication.

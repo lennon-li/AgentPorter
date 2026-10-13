@@ -1,7 +1,8 @@
 """Fail-closed Laya staging and Slurm control through the existing SciNet master.
 
-Only the bounded Laya smoke workflow is exposed. Remote setup, model fetching,
-and human approvals remain interactive and are never automated here.
+Fixed actions cover stage, login-node setup, preflight, bounded submission,
+status and logs.  Human approvals are recorded by a person in pins.json and are
+never written, inferred or fabricated here; Duo/authentication is never automated.
 """
 
 from __future__ import annotations
@@ -22,9 +23,24 @@ import uuid
 from agentporter.tools.scinet import _socket_available, control_socket, run_scinet_bytes
 from agentporter.tools.scinet_broker import broker_socket_available
 
-ScinetExperiment = Literal["laya_smoke"]
+ScinetExperiment = Literal["laya_smoke", "laya_expA", "laya_expB"]
 ScinetLogKind = Literal["all", "stdout", "stderr", "metrics", "manifests", "checkpoints"]
 
+EXPERIMENTS = {
+    "laya_smoke": ("laya_smoke.sbatch.template", "laya-smoke"),
+    "laya_expA": ("laya_expA.sbatch.template", "laya-expA"),
+    "laya_expB": ("laya_expB.sbatch.template", "laya-expB"),
+}
+WALLTIME_RE = re.compile(r"^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$")
+APPROVAL_FIELDS = {
+    "laya_smoke": ["head_contract_reviewed_by", "compute_approved_by",
+                   "gpu_allocation_approved_by", "experiment_b_approved_by", "smoke_approved_by"],
+    "laya_expA": ["head_contract_reviewed_by", "compute_approved_by", "gpu_allocation_approved_by"],
+    "laya_expB": ["experiment_b_approved_by"],
+}
+AGENT_APPROVER_RE = re.compile(r"agent|copilot|phil|claude|gpt|bot|automat|agentporter", re.I)
+SETUP_MAX_ATTEMPTS = 5
+SETUP_TIMEOUT_SECONDS = 3600
 MAX_REMOTE_OUTPUT = 256 * 1024
 MAX_LOG_OUTPUT = 4 * 1024 * 1024
 JOB_ID_RE = re.compile(r"^[0-9]+$")
@@ -84,13 +100,138 @@ except Exception as exc:
     raise SystemExit(65)
 '''
 
+REMOTE_SETUP_RUNNER = r'''
+import fcntl, hashlib, json, os, re, subprocess, sys, time
+action, root, stage_id, py312, expected_json, timeout_s = sys.argv[1:7]
+if action not in {"start", "status"} or not re.fullmatch(r"[a-f0-9]{32}", stage_id):
+    raise SystemExit(64)
+handoff, runtime = os.path.join(root, "handoff", stage_id), os.path.join(root, "runs", stage_id)
+script = os.path.join(handoff, "scinet_login_setup.sh")
+env_python = os.path.join(runtime, "envs", "laya-expA", "bin", "python")
+pins = os.path.join(runtime, "pinned", "pins.json")
+sdir = os.path.join(runtime, "setup")
+state_path, exit_path, log_path = (os.path.join(sdir, n) for n in ("state.json", "exit_code", "setup.log"))
+def sha(path):
+    d = hashlib.sha256()
+    with open(path, "rb") as f:
+        for c in iter(lambda: f.read(1 << 20), b""):
+            d.update(c)
+    return d.hexdigest()
+def load():
+    try:
+        with open(state_path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+def alive(pid):
+    try:
+        with open("/proc/%d/cmdline" % int(pid), "rb") as f:
+            return script.encode() in f.read()
+    except (OSError, ValueError, TypeError):
+        return False
+def report(extra=None):
+    st = load()
+    out = {"stage_id": stage_id, "attempt": st.get("attempt", 0)}
+    if alive(st.get("pid")):
+        out["state"] = "running"
+    elif os.path.isfile(exit_path):
+        try:
+            code = int(open(exit_path).read().strip())
+        except ValueError:
+            code = -1
+        done = code == 0 and os.access(env_python, os.X_OK) and os.path.isfile(pins)
+        out["state"] = "complete" if done else "failed"
+        out["exit_code"] = code
+    elif st.get("pid"):
+        out["state"] = "interrupted"
+    else:
+        out["state"] = "not_started"
+    out["env_python_present"] = os.access(env_python, os.X_OK)
+    out["pins_present"] = os.path.isfile(pins)
+    if st.get("started"):
+        out["started_epoch"] = st["started"]
+    try:
+        with open(log_path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 8192))
+            out["log_tail"] = f.read().decode("utf-8", "replace")
+    except OSError:
+        out["log_tail"] = ""
+    out.update(extra or {})
+    print(json.dumps(out, sort_keys=True))
+if action == "status":
+    report()
+    raise SystemExit(0)
+expected = json.loads(expected_json)
+if not isinstance(expected, dict) or "scinet_login_setup.sh" not in expected:
+    raise SystemExit(64)
+for name, want in expected.items():
+    path = os.path.join(handoff, name)
+    if os.path.basename(name) != name or os.path.islink(path) or not os.path.isfile(path) or sha(path) != want:
+        print(json.dumps({"state": "refused", "error": "staged_file_hash_mismatch", "file": name}))
+        raise SystemExit(65)
+os.makedirs(sdir, mode=0o700, exist_ok=True)
+with open(os.path.join(sdir, "lock"), "a") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    st = load()
+    if alive(st.get("pid")):
+        report({"idempotent": True})
+        raise SystemExit(0)
+    if os.path.isfile(exit_path) and os.access(env_python, os.X_OK) and os.path.isfile(pins) \
+            and open(exit_path).read().strip() == "0":
+        report({"idempotent": True})
+        raise SystemExit(0)
+    attempt = int(st.get("attempt", 0)) + 1
+    if attempt > 5:
+        print(json.dumps({"state": "retry_limit", "attempt": attempt - 1}))
+        raise SystemExit(75)
+    try:
+        os.unlink(exit_path)
+    except FileNotFoundError:
+        pass
+    inner = ('timeout --kill-after=60 "$4" /bin/bash "$0" "$1" >>"$2" 2>&1 </dev/null; '
+             'echo $? >"$3.tmp"; mv "$3.tmp" "$3"')
+    env = {k: os.environ[k] for k in ("PATH", "HOME", "USER", "LANG") if k in os.environ}
+    env.update(PYTHON312=py312, CRANARY_SCRATCH=runtime)
+    with open(log_path, "ab") as log:
+        log.write(("\n== setup attempt %d at %s ==\n" % (attempt, time.strftime("%FT%TZ", time.gmtime()))).encode())
+    proc = subprocess.Popen(["/bin/bash", "-c", inner, script, handoff, log_path, exit_path, timeout_s],
+                            env=env, cwd=handoff, stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            start_new_session=True, close_fds=True)
+    tmp = state_path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"pid": proc.pid, "attempt": attempt, "started": int(time.time())}, f)
+    os.replace(tmp, state_path)
+time.sleep(1)
+report({"launched": True})
+'''
+
+PINS_READER = r'''
+import hashlib, json, sys
+path = sys.argv[1]
+raw = open(path, "rb").read(65536)
+p = json.loads(raw)
+keep = ("schema", "device", "torch_version", "transformers_version", "weights_sha256",
+        "weights_source_revision", "trust_remote_code")
+out = {k: p.get(k) for k in keep}
+out.update({k: v for k, v in p.items() if k.endswith("_by") and isinstance(v, (str, type(None)))})
+print(json.dumps({"pins_sha256": hashlib.sha256(raw).hexdigest(), "pins": out}, sort_keys=True))
+'''
+
 REMOTE_EXCLUSIVE_WRITER = r'''
 import hashlib, os, sys
 path, want = sys.argv[1:3]
 data = sys.stdin.buffer.read()
 if len(data) > 2 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != want:
     raise SystemExit(65)
-fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o700)
+try:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o700)
+except FileExistsError:
+    if os.path.islink(path) or hashlib.sha256(open(path, "rb").read()).hexdigest() != want:
+        raise SystemExit(73)
+    print("ok")
+    raise SystemExit(0)
 try:
     with os.fdopen(fd, "wb") as out:
         out.write(data)
@@ -104,7 +245,10 @@ print("ok")
 REMOTE_FILE_READER = r'''
 import base64, hashlib, json, os, sys
 root, job_id, kind = sys.argv[1:4]
-job_root, log_root = os.path.join(root, "laya-smoke", job_id), os.path.join(root, "logs")
+exp_dir = sys.argv[4] if len(sys.argv) > 4 else "laya-smoke"
+if exp_dir not in {"laya-smoke", "laya-expA", "laya-expB"}:
+    raise SystemExit(64)
+job_root, log_root = os.path.join(root, exp_dir, job_id), os.path.join(root, "logs")
 if kind not in {"all", "stdout", "stderr", "metrics", "manifests", "checkpoints"}:
     raise SystemExit(64)
 metrics = {"run.json", "metrics.json", "input-hashes.txt", "pip-freeze.txt"}
@@ -190,6 +334,26 @@ def _runtime_python(runtime_root: str) -> str:
     return _validate_python(
         runtime_root + "/envs/laya-expA/bin/python", "Python environment"
     )
+
+def _gate_script(py: str, repo: str, pins: str, experiment: str) -> list[list[str]]:
+    trainer, lora = repo + "/code/laya_expA_trainer.py", repo + "/code/laya_expB_lora.py"
+    split = repo + "/data"
+    verify = ("verify-bundle", [py, trainer, "verify-bundle", "--out", repo])
+    gate_a = ("gate-expA", [py, trainer, "gate", "--root", repo, "--pins", pins, "--split-dir", split])
+    gate_b = ["--root", repo, "--pins", pins, "--split-dir", split]
+    if experiment == "laya_smoke":
+        return [verify, gate_a, ("gate-expB-smoke", [py, lora, "gate", *gate_b, "--smoke"])]
+    if experiment == "laya_expA":
+        return [verify, gate_a]
+    return [verify, ("gate-expB", [py, lora, "gate", *gate_b])]
+
+
+def _full_walltime(settings) -> str:
+    walltime = str(getattr(settings, "training_full_walltime", "") or "")
+    if not WALLTIME_RE.fullmatch(walltime) or walltime == "00:00:00":
+        raise PermissionError("SciNet full-run walltime is not configured safely")
+    return walltime
+
 
 def _settings_ready(settings) -> None:
     if settings is None:
@@ -325,6 +489,17 @@ class _Ledger:
         value.setdefault("stages", {})[record["stage_id"]] = record
         self.write(value)
 
+    def update_stage(self, stage_id, **fields):
+        value = self.read()
+        record = value.get("stages", {}).get(stage_id)
+        if record is not None:
+            record.update(fields)
+            self.write(value)
+
+    def jobs_for(self, stage_id, experiment):
+        return [j for j in self.read().get("jobs", {}).values()
+                if j.get("stage_id") == stage_id and j.get("experiment") == experiment]
+
     def stage(self, stage_id):
         return self.read().get("stages", {}).get(stage_id)
 
@@ -383,6 +558,122 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
                 "files": [{"name": name, "size": path.stat().st_size, "sha256": hashes[name]}
                           for name, path in sorted(files.items())]}
 
+    def _staged(workspace_id: str, stage_id: str):
+        user, ws = _identity(registry, workspace_id, settings)
+        if not isinstance(stage_id, str) or not ID_RE.fullmatch(stage_id):
+            raise ValueError("Invalid SciNet stage_id")
+        record = ledger.stage(stage_id)
+        if not record or record.get("workspace_id") != workspace_id:
+            raise PermissionError("stage_id was not created by this workspace")
+        return user, ws, record
+
+    def _setup_call(action: str, workspace_id: str, stage_id: str) -> dict:
+        user, _, record = _staged(workspace_id, stage_id)
+        root = _validate_remote_root(settings.training_remote_root)
+        bootstrap = _validate_python(settings.training_bootstrap_python, "bootstrap Python")
+        result = _call(settings, user, _remote_python_command(
+            bootstrap, REMOTE_SETUP_RUNNER,
+            [action, root, stage_id, bootstrap,
+             json.dumps(record.get("files", {}), sort_keys=True, separators=(",", ":")),
+             str(SETUP_TIMEOUT_SECONDS)]), timeout=100)
+        response = _result(result)
+        command = "scinet_setup" if action == "start" else "scinet_setup_status"
+        response.update({"command": command, "stage_id": stage_id, "success": False})
+        if result.get("error") in {"scinet_auth_required", "scinet_broker_unavailable"}:
+            response.update({"error": result["error"], "human_action": (
+                "A human must complete the interactive SciNet Duo login on Asgard to "
+                "establish the authenticated control master; AgentPorter never automates it.")})
+            return response
+        try:
+            report = json.loads(response["stdout"].strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            response["error"] = "invalid_setup_receipt"
+            return response
+        response.pop("stdout", None)
+        response.pop("stderr", None)
+        state = report.get("state")
+        response.update(report)
+        response["success"] = state in {"running", "complete", "not_started"} and \
+            result.get("exit_code") == 0 and not result.get("timed_out")
+        if state == "failed":
+            response["error"] = "setup_failed_retry_with_scinet_setup"
+        elif result.get("exit_code") not in (0, None) and "error" not in response:
+            response["error"] = state or "setup_remote_failed"
+        response["runtime_python"] = record.get("runtime_python")
+        if state in {"running", "complete", "failed", "interrupted", "not_started"}:
+            ledger.update_stage(stage_id, setup_state=state)
+        if state == "complete":
+            response["next"] = "scinet_preflight, then a human records approvals in pins.json"
+        return response
+
+    def scinet_setup(workspace_id: str, stage_id: str) -> dict:
+        """Start (or resume/retry) the fixed, SHA-verified login-node setup for a stage."""
+        return _setup_call("start", workspace_id, stage_id)
+
+    def scinet_setup_status(workspace_id: str, stage_id: str) -> dict:
+        """Read the fixed setup status and bounded log tail for a stage."""
+        return _setup_call("status", workspace_id, stage_id)
+
+    def scinet_preflight(workspace_id: str, stage_id: str,
+                         experiment: ScinetExperiment = "laya_smoke") -> dict:
+        """Read-only gate and human-approval visibility; submits nothing and approves nothing."""
+        if experiment not in EXPERIMENTS:
+            raise ValueError("Unknown SciNet experiment")
+        user, _, record = _staged(workspace_id, stage_id)
+        runtime = record["remote_runtime"]
+        py = _runtime_python(runtime)
+        repo, pins = runtime + "/cranary-bundle", runtime + "/pinned/pins.json"
+        parts = ["set +e"]
+        for name, argv in _gate_script(py, repo, pins, experiment):
+            parts.append(f"printf '@@BEGIN {name}\\n'; " + shlex.join(argv) +
+                         f" 2>&1 | tail -c 4000; printf '@@END {name} %s\\n' \"${{PIPESTATUS[0]}}\"")
+        parts.append("printf '@@BEGIN pins\\n'; " + shlex.join([
+            _validate_python(settings.training_bootstrap_python, "bootstrap Python"),
+            "-c", PINS_READER, pins]) + " 2>&1 | tail -c 8000; printf '@@END pins %s\\n' \"${PIPESTATUS[0]}\"")
+        result = _call(settings, user, ["/bin/bash", "-lc", "; ".join(parts)], timeout=110)
+        response = _result(result)
+        response.update({"command": "scinet_preflight", "stage_id": stage_id,
+                         "experiment": experiment, "success": False, "ready": False})
+        if result.get("error") in {"scinet_auth_required", "scinet_broker_unavailable"} \
+                or result.get("exit_code") is None:
+            response["error"] = result.get("error", "scinet_unreachable")
+            return response
+        text = response.pop("stdout")
+        response.pop("stderr", None)
+        gates, pins_info = [], None
+        for name, body, code in re.findall(r"@@BEGIN (\S+)\n(.*?)@@END \1 (\d+)\n", text, re.S):
+            if name == "pins":
+                if code == "0":
+                    try:
+                        pins_info = json.loads(body.strip().splitlines()[-1])
+                    except (ValueError, IndexError):
+                        pass
+                continue
+            gates.append({"gate": name, "exit_code": int(code), "output": body[-2000:]})
+        expected = {name for name, _ in _gate_script(py, repo, pins, experiment)}
+        passed = {g["gate"] for g in gates if g["exit_code"] == 0}
+        approvals = {}
+        for field in APPROVAL_FIELDS[experiment]:
+            value = (pins_info or {}).get("pins", {}).get(field)
+            approvals[field] = {"recorded": bool(value), "approver": value if value else None,
+                                "suspect_agent_identity": bool(value and AGENT_APPROVER_RE.search(str(value)))}
+        response.update({
+            "gates": gates, "approvals": approvals,
+            "pins_sha256": (pins_info or {}).get("pins_sha256"),
+            "pins": (pins_info or {}).get("pins"),
+            "pins_missing": pins_info is None,
+            "ready": expected <= passed and pins_info is not None
+            and all(a["recorded"] and not a["suspect_agent_identity"] for a in approvals.values()),
+            "setup_state": ledger.stage(stage_id).get("setup_state"),
+            "human_approval_steps": [
+                "On a SciNet login node, as yourself, review " + pins + " and the gate output above.",
+                "Edit the null *_by fields listed in approvals with your own name; AgentPorter never writes them.",
+                "Re-run scinet_preflight and confirm pins_sha256 matches what you reviewed before scinet_submit.",
+            ],
+        })
+        response["success"] = True
+        return response
+
     def scinet_environment_check(workspace_id: str) -> dict:
         user, _ = _identity(registry, workspace_id, settings)
         root = _validate_remote_root(settings.training_remote_root)
@@ -420,16 +711,26 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
     def scinet_submit(workspace_id: str, stage_id: str,
                       experiment: ScinetExperiment = "laya_smoke") -> dict:
         user, ws = _identity(registry, workspace_id, settings)
-        if experiment != "laya_smoke":
-            raise ValueError("Only the bounded laya_smoke experiment is enabled")
+        if experiment not in EXPERIMENTS:
+            raise ValueError("Unknown SciNet experiment")
+        full = experiment != "laya_smoke"
+        if full:
+            if not getattr(settings, "training_allow_full_runs", False):
+                raise PermissionError("Full Laya training submission is not enabled by deployment policy")
+            walltime = _full_walltime(settings)
+        else:
+            walltime = "00:15:00"
         if not ID_RE.fullmatch(stage_id):
             raise ValueError("Invalid SciNet stage_id")
         record = ledger.stage(stage_id)
         if not record or record.get("workspace_id") != workspace_id:
             raise PermissionError("stage_id was not created by this workspace")
-        template = _handoff_dir(ws) / "laya_smoke.sbatch.template"
+        if full and ledger.jobs_for(stage_id, experiment):
+            return {"target": "scinet_training", "command": "scinet_submit", "success": False,
+                    "error": "already_submitted", "job_id": ledger.jobs_for(stage_id, experiment)[-1]["job_id"]}
+        template = _handoff_dir(ws) / EXPERIMENTS[experiment][0]
         if not template.is_file() or _sha256(template) != record.get("files", {}).get(template.name):
-            raise ValueError("Smoke template changed after staging")
+            raise ValueError("Sbatch template changed after staging")
         account = _validate_token(settings.training_account, "account")
         partition = _validate_token(settings.training_partition, "partition")
         runtime = record["remote_runtime"]
@@ -438,6 +739,10 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
         script = template.read_text(encoding="utf-8")
         script = script.replace("@SLURM_ACCOUNT@", account).replace("@CPUS_PER_TASK@", str(settings.training_cpus_per_task))
         script = script.replace("@SCRATCH_LOG_DIR@", logs)
+        if full:
+            if script.count("@WALLTIME_HH_MM_SS@") != 1:
+                raise ValueError("Full-run template must have exactly one walltime placeholder")
+            script = script.replace("@WALLTIME_HH_MM_SS@", walltime)
         partition_in_template = script.count("@SLURM_PARTITION@")
         if partition_in_template > 1:
             raise ValueError("Smoke template has duplicate partition placeholders")
@@ -464,23 +769,20 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
             "export CRANARY_PYTHON=" + shlex.quote(py),
         ]
         rendered = ("\n".join(lines) + "\n").encode()
-        required = [b"#SBATCH --gpus-per-node=1", b"#SBATCH --time=00:15:00"]
-        if rendered.count(required[0]) != 1 or any(item not in rendered for item in required):
-            raise ValueError("Smoke job resource bounds are invalid")
-        preflight = "set -e; " + " && ".join([
-            shlex.join([py, repo + "/code/laya_expA_trainer.py", "verify-bundle", "--out", repo]),
-            shlex.join([py, repo + "/code/laya_expA_trainer.py", "gate", "--root", repo,
-                        "--pins", pins, "--split-dir", repo + "/data"]),
-            shlex.join([py, repo + "/code/laya_expB_lora.py", "gate", "--root", repo,
-                        "--pins", pins, "--split-dir", repo + "/data", "--smoke"]),
-        ])
+        required = [b"#SBATCH --gpus-per-node=1", b"#SBATCH --nodes=1",
+                    f"#SBATCH --time={walltime}".encode()]
+        if any(rendered.count(item) != 1 for item in required) or \
+                rendered.count(b"#SBATCH --time=") != 1:
+            raise ValueError("Job resource bounds are invalid")
+        preflight = "set -e; " + " && ".join(
+            shlex.join(argv) for _, argv in _gate_script(py, repo, pins, experiment))
         preflight_result = _call(settings, user, ["/bin/bash", "-lc", preflight], timeout=120)
         if preflight_result.get("exit_code") != 0 or preflight_result.get("timed_out"):
             response = _result(preflight_result)
             response.update({"command": "scinet_submit", "success": False,
                              "error": "approval_or_checksum_gate_failed"})
             return response
-        script_path = runtime + "/laya_smoke.sbatch"
+        script_path = f"{runtime}/{experiment}-{_sha256_bytes(rendered)[:16]}.sbatch"
         write = _call(settings, user, _remote_python_command(
             settings.training_bootstrap_python, REMOTE_EXCLUSIVE_WRITER,
             [script_path, _sha256_bytes(rendered)]), input_bytes=rendered)
@@ -497,10 +799,11 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
             return output
         job_id = match.group(0)
         ledger.add_job({"job_id": job_id, "workspace_id": workspace_id,
-                        "stage_id": stage_id, "runtime_root": runtime, "experiment": experiment})
+                        "stage_id": stage_id, "runtime_root": runtime, "experiment": experiment,
+                        "run_dir": EXPERIMENTS[experiment][1]})
         return {"target": "scinet_training", "command": "scinet_submit", "success": True,
                 "job_id": job_id, "stage_id": stage_id, "experiment": experiment,
-                "resources": {"gpus": 1, "walltime": "00:15:00",
+                "resources": {"gpus": 1, "walltime": walltime,
                               "account": account, "partition": partition}}
 
     def _job(registry, workspace_id: str, job_id: str):
@@ -545,7 +848,7 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
             raise ValueError("Invalid SciNet log kind")
         result = _call(settings, user, _remote_python_command(
             settings.training_bootstrap_python, REMOTE_FILE_READER,
-            [record["runtime_root"], job_id, kind]), max_output=MAX_LOG_OUTPUT)
+            [record["runtime_root"], job_id, kind, record.get("run_dir", "laya-smoke")]), max_output=MAX_LOG_OUTPUT)
         response = _result(result)
         response.update({"command": "scinet_job_logs", "job_id": job_id, "kind": kind,
                          "success": result.get("exit_code") == 0 and not result.get("timed_out")})
@@ -562,5 +865,8 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
         "scinet_job_status": scinet_job_status,
         "scinet_job_logs": scinet_job_logs,
         "scinet_environment_check": scinet_environment_check,
+        "scinet_setup": scinet_setup,
+        "scinet_setup_status": scinet_setup_status,
+        "scinet_preflight": scinet_preflight,
     }
 

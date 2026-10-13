@@ -18,6 +18,8 @@ class WorkspaceDefinition(BaseModel):
     allow_venkata_ssh: bool = False
     allow_venkata_transfer: bool = False
     allow_scinet_diagnostic: bool = False
+    # Training actions are a separate, higher-risk opt-in from read-only diagnostics.
+    allow_scinet_training: bool = False
 
 
 class GitContext(BaseModel):

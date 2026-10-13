@@ -1,6 +1,7 @@
 """Configuration resolution and path management for AgentPorter."""
 
 import os
+import re
 import yaml
 import secrets
 import logging
@@ -56,12 +57,26 @@ class SandboxSettings:
 
 @dataclass
 class ScinetSettings:
-    """Private deployment-supplied endpoint for the optional SciNet action."""
+    """Private deployment-supplied endpoint and training policy settings."""
 
     host: str = ""
     user: str = ""
+    # AgentPorter talks to the broker, never to the user's SSH control socket.
+    # The broker owns the authenticated SSH session and its private transport.
+    broker_socket: str = ""
+    broker_control_socket: str = ""
     control_socket: str = ""
     machine: str = ""
+    training_remote_root: str = ""
+    training_account: str = ""
+    training_partition: str = ""
+    training_python: str = ""
+    training_bootstrap_python: str = "/usr/bin/python3"
+    training_cpus_per_task: int = 4
+    training_max_stage_bytes: int = 512 * 1024 * 1024
+    # Full Experiment A/B submission is off unless a human enables it privately.
+    training_allow_full_runs: bool = False
+    training_full_walltime: str = "02:00:00"
 
 
 class Config:
@@ -91,10 +106,30 @@ class Config:
         self._load_or_generate_api_key()
 
     def _load_scinet_environment(self) -> None:
-        for field in ("host", "user", "control_socket", "machine"):
+        for field in (
+            "host",
+            "user",
+            "broker_socket",
+            "broker_control_socket",
+            "control_socket",
+            "machine",
+        ):
             value = os.environ.get("AGENTPORTER_SCINET_" + field.upper())
             if value is not None:
                 setattr(self.scinet, field, value.strip())
+        for field in (
+            "training_remote_root",
+            "training_account",
+            "training_partition",
+            "training_python",
+            "training_bootstrap_python",
+        ):
+            value = os.environ.get("AGENTPORTER_SCINET_" + field.upper())
+            if value is not None:
+                setattr(self.scinet, field, value.strip())
+        value = os.environ.get("AGENTPORTER_SCINET_TRAINING_CPUS_PER_TASK")
+        if value is not None:
+            self.scinet.training_cpus_per_task = int(value)
         workspace = os.environ.get("AGENTPORTER_SCINET_WORKSPACE", "").strip()
         if workspace:
             if workspace not in self.workspaces:
@@ -182,10 +217,44 @@ class Config:
             sci = data.get("scinet", {})
             self.scinet.host = str(sci.get("host", self.scinet.host) or "").strip()
             self.scinet.user = str(sci.get("user", self.scinet.user) or "").strip()
+            self.scinet.broker_socket = str(
+                sci.get("broker_socket", self.scinet.broker_socket) or ""
+            ).strip()
+            self.scinet.broker_control_socket = str(
+                sci.get("broker_control_socket", self.scinet.broker_control_socket) or ""
+            ).strip()
             self.scinet.control_socket = str(
                 sci.get("control_socket", self.scinet.control_socket) or ""
             ).strip()
             self.scinet.machine = str(sci.get("machine", self.scinet.machine) or "").strip()
+            self.scinet.training_remote_root = str(
+                sci.get("training_remote_root", self.scinet.training_remote_root) or ""
+            ).strip()
+            self.scinet.training_account = str(
+                sci.get("training_account", self.scinet.training_account) or ""
+            ).strip()
+            self.scinet.training_partition = str(
+                sci.get("training_partition", self.scinet.training_partition) or ""
+            ).strip()
+            self.scinet.training_python = str(
+                sci.get("training_python", self.scinet.training_python) or ""
+            ).strip()
+            self.scinet.training_bootstrap_python = str(
+                sci.get("training_bootstrap_python", self.scinet.training_bootstrap_python) or ""
+            ).strip()
+            if "training_cpus_per_task" in sci:
+                self.scinet.training_cpus_per_task = int(sci["training_cpus_per_task"])
+            if "training_max_stage_bytes" in sci:
+                self.scinet.training_max_stage_bytes = int(sci["training_max_stage_bytes"])
+            if "training_allow_full_runs" in sci:
+                if not isinstance(sci["training_allow_full_runs"], bool):
+                    raise ValueError("scinet.training_allow_full_runs must be a boolean")
+                self.scinet.training_allow_full_runs = sci["training_allow_full_runs"]
+            if "training_full_walltime" in sci:
+                walltime = str(sci["training_full_walltime"])
+                if not re.fullmatch(r"(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]", walltime):
+                    raise ValueError("scinet.training_full_walltime must be HH:MM:SS below 24h")
+                self.scinet.training_full_walltime = walltime
 
             if self.sandbox.default_timeout_seconds <= 0:
                 raise ValueError("sandbox.default_timeout_seconds must be > 0")
@@ -195,6 +264,10 @@ class Config:
                 raise ValueError("sandbox output limits must be > 0")
             if self.security.max_payload_bytes <= 0:
                 raise ValueError("security.max_payload_bytes must be > 0")
+            if self.scinet.training_cpus_per_task <= 0:
+                raise ValueError("scinet.training_cpus_per_task must be > 0")
+            if self.scinet.training_max_stage_bytes <= 0:
+                raise ValueError("scinet.training_max_stage_bytes must be > 0")
 
         except Exception as e:
             # Invalid security configuration must fail closed rather than be silently ignored.

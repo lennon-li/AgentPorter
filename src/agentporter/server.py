@@ -34,6 +34,11 @@ from agentporter.tools.agents import create_agent_tools
 from agentporter.tools.venkata import create_venkata_tool, Diagnostic
 from agentporter.tools.venkata_transfer import create_venkata_transfer_tool, TransferSource, TransferDestination
 from agentporter.tools.scinet import create_scinet_tool, ScinetDiagnostic
+from agentporter.tools.scinet_training import (
+    create_scinet_training_tool,
+    ScinetExperiment,
+    ScinetLogKind,
+)
 
 logger = logging.getLogger("agentporter.server")
 
@@ -143,6 +148,9 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _venkata_diagnostic = create_venkata_tool(registry)
     _venkata_transfer = create_venkata_transfer_tool(registry)
     _scinet_diagnostic = create_scinet_tool(registry, getattr(config, "scinet", None))
+    _scinet_training = create_scinet_training_tool(
+        registry, getattr(config, "scinet", None), config.state_dir
+    )
 
     @mcp.tool()
     @monitored_tool("venkata_transfer")
@@ -160,8 +168,70 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     @mcp.tool()
     @monitored_tool("scinet_diagnostic")
     def scinet_diagnostic(workspace_id: str, command: ScinetDiagnostic) -> dict:
-        """Run one fixed, read-only SciNet diagnostic through Asgard's SSH master."""
+        """Run one fixed, read-only SciNet diagnostic through the host-side broker."""
         return _scinet_diagnostic(workspace_id=workspace_id, command=command)
+
+    @mcp.tool()
+    @monitored_tool("scinet_stage")
+    def scinet_stage(workspace_id: str) -> dict:
+        """Stage the approved Laya handoff into a dedicated SciNet directory."""
+        return _scinet_training["scinet_stage"](workspace_id=workspace_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_submit")
+    def scinet_submit(
+        workspace_id: str, stage_id: str, experiment: ScinetExperiment = "laya_smoke"
+    ) -> dict:
+        """Submit a bounded, approval-gated Laya job (smoke; full A/B only if privately enabled)."""
+        return _scinet_training["scinet_submit"](
+            workspace_id=workspace_id, stage_id=stage_id, experiment=experiment
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_job_status")
+    def scinet_job_status(workspace_id: str, job_id: str) -> dict:
+        """Read status only for a job submitted through this workspace."""
+        return _scinet_training["scinet_job_status"](
+            workspace_id=workspace_id, job_id=job_id
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_job_logs")
+    def scinet_job_logs(
+        workspace_id: str, job_id: str, kind: ScinetLogKind = "all"
+    ) -> dict:
+        """Read bounded logs and result metadata for an approved SciNet job."""
+        return _scinet_training["scinet_job_logs"](
+            workspace_id=workspace_id, job_id=job_id, kind=kind
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_setup")
+    def scinet_setup(workspace_id: str, stage_id: str) -> dict:
+        """Start/resume the fixed SHA-verified login-node setup for a staged run."""
+        return _scinet_training["scinet_setup"](workspace_id=workspace_id, stage_id=stage_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_setup_status")
+    def scinet_setup_status(workspace_id: str, stage_id: str) -> dict:
+        """Read fixed setup status and a bounded log tail for a staged run."""
+        return _scinet_training["scinet_setup_status"](workspace_id=workspace_id, stage_id=stage_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_preflight")
+    def scinet_preflight(
+        workspace_id: str, stage_id: str, experiment: ScinetExperiment = "laya_smoke"
+    ) -> dict:
+        """Read-only gate and human-approval visibility; never approves or submits."""
+        return _scinet_training["scinet_preflight"](
+            workspace_id=workspace_id, stage_id=stage_id, experiment=experiment
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_environment_check")
+    def scinet_environment_check(workspace_id: str) -> dict:
+        """Run the fixed, read-only SciNet training environment check."""
+        return _scinet_training["scinet_environment_check"](workspace_id=workspace_id)
 
     # Tool definitions registered on MCPServer
     @mcp.tool()
@@ -420,6 +490,14 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             "venkata_diagnostic": venkata_diagnostic,
             "venkata_transfer": venkata_transfer,
         "scinet_diagnostic": scinet_diagnostic,
+        "scinet_stage": scinet_stage,
+        "scinet_submit": scinet_submit,
+        "scinet_job_status": scinet_job_status,
+        "scinet_job_logs": scinet_job_logs,
+        "scinet_environment_check": scinet_environment_check,
+        "scinet_setup": scinet_setup,
+        "scinet_setup_status": scinet_setup_status,
+        "scinet_preflight": scinet_preflight,
         }
     }
     return mcp, context
@@ -486,6 +564,11 @@ def create_asgi_app(config: Config) -> ASGIApp:
             "health",
             "git_branch",
             "git_show",
+        "git_status",
+        "git_diff",
+        "git_log",
+        "git_fetch",
+        "git_pull",
             "list_artifacts",
             "read_artifact",
         }

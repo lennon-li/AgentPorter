@@ -13,6 +13,7 @@ from agentporter.tools.scinet import (
     create_scinet_tool,
     remote_argv,
     ssh_argv,
+    ssh_remote_argv,
 )
 from agentporter.workspaces.registry import WorkspaceRegistry
 from agentporter.config import ScinetSettings, SandboxSettings, SecuritySettings, ServerSettings
@@ -66,6 +67,15 @@ def test_ssh_arguments_pin_socket_identity_and_host():
         ["/bin/bash", "-lc", "exec /usr/bin/timeout 25s sinfo -N -h -o '%N|%G|%t'"]
     )
     assert argv[-2:] == ["trillium-gpu.alliancecan.ca", expected_remote]
+
+
+def test_server_generated_ssh_preserves_stdin_only_when_requested():
+    remote = ["/bin/bash", "-lc", "cat"]
+    without_stdin = ssh_remote_argv(settings(), "/home/yeli", remote)
+    with_stdin = ssh_remote_argv(settings(), "/home/yeli", remote, accepts_stdin=True)
+
+    assert "-n" in without_stdin
+    assert "-n" not in with_stdin
 
 
 def test_authorized_workspace_runs_only_the_allowlisted_operation(tmp_path: Path):
@@ -204,3 +214,26 @@ def test_rest_action_is_schema_visible_bounded_and_permission_gated():
                 json={"command": "uname -a"},
                 headers={"Authorization": "Bearer synthetic-test-key"},
             ).status_code == 422
+
+
+def test_training_actions_are_schema_visible_but_separate_from_diagnostics():
+    with TemporaryDirectory() as root:
+        config = SimpleNamespace(
+            state_dir=Path(root),
+            workspaces={"asgard": {"path": root}},
+            server=ServerSettings(action_prefix="asgard"),
+            sandbox=SandboxSettings(),
+            security=SecuritySettings(allowed_hosts=["testserver"]),
+            api_key="synthetic-test-key",
+        )
+        with TestClient(create_asgi_app(config)) as client:
+            paths = client.get("/openapi.json").json()["paths"]
+    expected = {
+        "/api/v1/workspaces/{workspace_id}/scinet/stage": "asgard_scinet_stage",
+        "/api/v1/workspaces/{workspace_id}/scinet/submit": "asgard_scinet_submit",
+        "/api/v1/workspaces/{workspace_id}/scinet/job-status": "asgard_scinet_job_status",
+        "/api/v1/workspaces/{workspace_id}/scinet/job-logs": "asgard_scinet_job_logs",
+        "/api/v1/workspaces/{workspace_id}/scinet/setup": "asgard_scinet_setup",
+    }
+    for path, operation_id in expected.items():
+        assert paths[path]["post"]["operationId"] == operation_id
