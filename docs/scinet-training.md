@@ -59,8 +59,29 @@ has the separate allow_scinet_training permission.
   the experiment's gates, reports each exit code/output, shows which *_by
   approval fields in pins.json are recorded (flagging agent-like names) and
   the pins.json SHA-256. ready is true only if all gates pass and every
-  required approval is recorded. Approvals are made only by a human editing
-  pins.json on SciNet; no Action writes them.
+  required approval is recorded.
+- scinet_record_approvals (REST: `/scinet/setup` with `action: record_approvals`,
+  which keeps the API at 30 operations) records the five laya_smoke approvals
+  (head_contract_reviewed_by, compute_approved_by, gpu_allocation_approved_by,
+  experiment_b_approved_by, smoke_approved_by) plus `device: cuda` in the
+  stage's pins.json. Fail-closed requirements: the exact text
+  `I approve all 5` as `confirmation`, `reviewer` equal to the authorized
+  reviewer (`AGENTPORTER_SCINET_APPROVAL_REVIEWER`, default = the broker's
+  SciNet `user`; agent-like names are rejected), `approved_fields` listing
+  exactly those five, and a stage created by the calling workspace. Only
+  laya_smoke is supported; no paths or commands are accepted. On SciNet a
+  fixed script takes an exclusive lock, refuses null-only exceptions (any
+  existing non-null value differing from the request, including device,
+  aborts with no change), updates atomically (temp file + fsync + rename),
+  is idempotent (re-run reports `unchanged`, no write), and appends
+  time/reviewer/stage/before+after SHA-256 to `pinned/approvals.audit.jsonl`
+  and the stage ledger. Gates and preflight are unchanged; run scinet_preflight
+  afterwards. **Limitation:** the confirmation is caller-supplied text, so
+  AgentPorter cannot cryptographically prove a human typed it; it relies on
+  the operator invoking it only after the user's explicit statement. A caller
+  with workspace training permission could spoof it. Stronger evidence (e.g. a
+  human-held signed grant) is not implemented. Manual pins.json editing
+  remains available.
 - Each staged run creates its environment at
   `<training_remote_root>/runs/<stage_id>/envs/laya-expA/bin/python`.
   Submission derives that path from the recorded stage; the setup command
@@ -90,8 +111,9 @@ socket must already be authenticated; missing or expired masters fail closed.
 2. Run scinet_stage.
 3. A human completes the Duo login (broker control master), then call
    scinet_setup and poll scinet_setup_status until complete.
-4. Run scinet_preflight; a human reviews pins.json and records the
-   model-design, compute, GPU-allocation (and B/smoke) approvals themselves.
+4. Run scinet_preflight; a human reviews pins.json and the gates, then either
+   edits the approvals themselves or explicitly states "I approve all 5" so
+   scinet_record_approvals can record them under their identity.
 5. Re-run scinet_preflight until ready, then scinet_submit laya_smoke; full
    A/B only after private opt-in.
 6. Monitor with scinet_job_status and retrieve bounded results with

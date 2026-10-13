@@ -1,8 +1,9 @@
 """Fail-closed Laya staging and Slurm control through the existing SciNet master.
 
 Fixed actions cover stage, login-node setup, preflight, bounded submission,
-status and logs.  Human approvals are recorded by a person in pins.json and are
-never written, inferred or fabricated here; Duo/authentication is never automated.
+status and logs.  Approvals are recorded only by the audited scinet_record_approvals action, which
+needs explicit human confirmation, a fixed authorized reviewer, the exact stage
+and the five smoke fields; they are never inferred.  Duo is never automated.
 """
 
 from __future__ import annotations
@@ -38,6 +39,8 @@ APPROVAL_FIELDS = {
     "laya_expA": ["head_contract_reviewed_by", "compute_approved_by", "gpu_allocation_approved_by"],
     "laya_expB": ["experiment_b_approved_by"],
 }
+APPROVAL_CONFIRMATION = "I approve all 5"
+APPROVAL_DEVICE = "cuda"
 AGENT_APPROVER_RE = re.compile(r"agent|copilot|phil|claude|gpt|bot|automat|agentporter", re.I)
 SETUP_MAX_ATTEMPTS = 5
 SETUP_TIMEOUT_SECONDS = 3600
@@ -217,6 +220,67 @@ keep = ("schema", "device", "torch_version", "transformers_version", "weights_sh
 out = {k: p.get(k) for k in keep}
 out.update({k: v for k, v in p.items() if k.endswith("_by") and isinstance(v, (str, type(None)))})
 print(json.dumps({"pins_sha256": hashlib.sha256(raw).hexdigest(), "pins": out}, sort_keys=True))
+'''
+
+REMOTE_APPROVAL_RECORDER = r'''
+import fcntl, hashlib, json, os, re, sys, tempfile, time
+pins, reviewer, device, fields_json, stage_id, workspace_id = sys.argv[1:7]
+fields = json.loads(fields_json)
+def out(state, code, **extra):
+    print(json.dumps(dict(extra, state=state), sort_keys=True))
+    raise SystemExit(code)
+if not re.fullmatch(r"[a-f0-9]{32}", stage_id) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", reviewer) \
+        or device != "cuda" or not isinstance(fields, list) or not fields:
+    out("refused", 64, error="invalid_arguments")
+if os.path.islink(pins) or not os.path.isfile(pins) or os.path.islink(os.path.dirname(pins)):
+    out("refused", 66, error="pins_missing_or_unsafe")
+pdir = os.path.dirname(pins)
+with open(os.path.join(pdir, ".approvals.lock"), "a") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    with open(pins, "rb") as f:
+        raw = f.read(1 << 20)
+    before = hashlib.sha256(raw).hexdigest()
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        out("refused", 65, error="pins_not_json")
+    if not isinstance(data, dict):
+        out("refused", 65, error="pins_not_object")
+    desired = dict.fromkeys(fields, reviewer)
+    desired["device"] = device
+    conflicts = [k for k, v in desired.items() if data.get(k) not in (None, v)]
+    if conflicts:
+        out("refused", 73, error="contradictory_existing_values", fields=sorted(conflicts))
+    changed = sorted(k for k, v in desired.items() if data.get(k) != v)
+    if not changed:
+        out("unchanged", 0, idempotent=True, pins_sha256=before, changed_fields=[])
+    data.update(desired)
+    body = json.dumps(data, indent=2, sort_keys=True).encode() + b"\n"
+    after = hashlib.sha256(body).hexdigest()
+    mode = os.stat(pins).st_mode & 0o777
+    fd, tmp = tempfile.mkstemp(prefix=".pins-", dir=pdir)
+    try:
+        with os.fdopen(fd, "wb") as t:
+            os.fchmod(t.fileno(), mode)
+            t.write(body)
+            t.flush()
+            os.fsync(t.fileno())
+        os.replace(tmp, pins)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+    entry = {"time": time.strftime("%FT%TZ", time.gmtime()), "stage_id": stage_id,
+             "workspace_id": workspace_id, "reviewer": reviewer, "changed_fields": changed,
+             "pins_sha256_before": before, "pins_sha256_after": after, "via": "agentporter"}
+    afd = os.open(os.path.join(pdir, "approvals.audit.jsonl"),
+                  os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(afd, "a") as a:
+        a.write(json.dumps(entry, sort_keys=True) + "\n")
+        a.flush()
+        os.fsync(a.fileno())
+    out("recorded", 0, changed_fields=changed, pins_sha256_before=before,
+        pins_sha256=after, audit_time=entry["time"])
 '''
 
 REMOTE_EXCLUSIVE_WRITER = r'''
@@ -667,11 +731,61 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
             "setup_state": ledger.stage(stage_id).get("setup_state"),
             "human_approval_steps": [
                 "On a SciNet login node, as yourself, review " + pins + " and the gate output above.",
-                "Edit the null *_by fields listed in approvals with your own name; AgentPorter never writes them.",
+                "Either edit the null *_by fields with your own name, AgentPorter never writes them without explicit human confirmation via scinet_record_approvals ('I approve all 5').",
                 "Re-run scinet_preflight and confirm pins_sha256 matches what you reviewed before scinet_submit.",
             ],
         })
         response["success"] = True
+        return response
+
+    def scinet_record_approvals(workspace_id: str, stage_id: str, reviewer: str,
+                                confirmation: str, approved_fields: list[str],
+                                device: str = APPROVAL_DEVICE,
+                                experiment: str = "laya_smoke") -> dict:
+        """Record the five explicit human smoke approvals for one staged run; fail closed."""
+        user, _, record = _staged(workspace_id, stage_id)
+        authorized = str(getattr(settings, "approval_reviewer", "") or settings.user)
+        if experiment != "laya_smoke":
+            raise ValueError("Approvals can only be recorded for laya_smoke")
+        if confirmation != APPROVAL_CONFIRMATION:
+            raise PermissionError("explicit human confirmation is required: " + APPROVAL_CONFIRMATION)
+        if reviewer != authorized or AGENT_APPROVER_RE.search(reviewer):
+            raise PermissionError("reviewer is not the authorized human reviewer")
+        if device != APPROVAL_DEVICE:
+            raise ValueError("device must be cuda")
+        fields = APPROVAL_FIELDS["laya_smoke"]
+        if not isinstance(approved_fields, list) or sorted(approved_fields) != sorted(fields):
+            raise ValueError("approved_fields must be exactly the five smoke approval fields")
+        pins = record["remote_runtime"] + "/pinned/pins.json"
+        result = _call(settings, user, _remote_python_command(
+            _validate_python(settings.training_bootstrap_python, "bootstrap Python"),
+            REMOTE_APPROVAL_RECORDER,
+            [pins, reviewer, device, json.dumps(fields), stage_id, workspace_id]), timeout=60)
+        response = _result(result)
+        response.update({"command": "scinet_record_approvals", "stage_id": stage_id,
+                         "experiment": experiment, "success": False, "reviewer": reviewer})
+        if result.get("error") in {"scinet_auth_required", "scinet_broker_unavailable"}:
+            response["error"] = result["error"]
+            return response
+        try:
+            report = json.loads(response["stdout"].strip().splitlines()[-1])
+        except (ValueError, IndexError, KeyError):
+            response["error"] = "invalid_approval_receipt"
+            return response
+        response.pop("stdout", None)
+        response.pop("stderr", None)
+        response.update(report)
+        if report.get("state") in {"recorded", "unchanged"} and result.get("exit_code") == 0:
+            response["success"] = True
+            if report["state"] == "recorded":
+                entry = {"time": report.get("audit_time"), "reviewer": reviewer,
+                         "workspace_id": workspace_id, "device": device,
+                         "changed_fields": report.get("changed_fields"),
+                         "pins_sha256": report.get("pins_sha256")}
+                ledger.update_stage(stage_id, approvals=(record.get("approvals") or []) + [entry])
+            response["next"] = "run scinet_preflight to verify gates against the updated pins"
+        else:
+            response["error"] = report.get("error", "approval_refused")
         return response
 
     def scinet_environment_check(workspace_id: str) -> dict:
@@ -868,5 +982,6 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
         "scinet_setup": scinet_setup,
         "scinet_setup_status": scinet_setup_status,
         "scinet_preflight": scinet_preflight,
+        "scinet_record_approvals": scinet_record_approvals,
     }
 

@@ -67,6 +67,8 @@ class ScinetSettings:
     broker_control_socket: str = ""
     control_socket: str = ""
     machine: str = ""
+    # Authorized human reviewer for scinet_record_approvals; defaults to `user`.
+    approval_reviewer: str = ""
     training_remote_root: str = ""
     training_account: str = ""
     training_partition: str = ""
@@ -113,6 +115,7 @@ class Config:
             "broker_control_socket",
             "control_socket",
             "machine",
+            "approval_reviewer",
         ):
             value = os.environ.get("AGENTPORTER_SCINET_" + field.upper())
             if value is not None:

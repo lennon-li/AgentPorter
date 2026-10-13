@@ -228,6 +228,19 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         )
 
     @mcp.tool()
+    @monitored_tool("scinet_record_approvals")
+    def scinet_record_approvals(
+        workspace_id: str, stage_id: str, reviewer: str, confirmation: str,
+        approved_fields: list[str], device: str = "cuda", experiment: str = "laya_smoke",
+    ) -> dict:
+        """Record the five explicit human smoke approvals for one staged SciNet run."""
+        return _scinet_training["scinet_record_approvals"](
+            workspace_id=workspace_id, stage_id=stage_id, reviewer=reviewer,
+            confirmation=confirmation, approved_fields=approved_fields,
+            device=device, experiment=experiment,
+        )
+
+    @mcp.tool()
     @monitored_tool("scinet_environment_check")
     def scinet_environment_check(workspace_id: str) -> dict:
         """Run the fixed, read-only SciNet training environment check."""
@@ -498,6 +511,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         "scinet_setup": scinet_setup,
         "scinet_setup_status": scinet_setup_status,
         "scinet_preflight": scinet_preflight,
+        "scinet_record_approvals": scinet_record_approvals,
         }
     }
     return mcp, context

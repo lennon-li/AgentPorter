@@ -3009,49 +3009,106 @@
         "title": "ScinetJobRequest"
       },
       "ScinetSetupRequest": {
+        "additionalProperties": false,
+        "description": "One consolidated Action so the API stays within the 30-operation Actions limit.",
         "properties": {
           "action": {
-            "type": "string",
             "enum": [
               "start",
               "status",
               "preflight",
-              "environment_check"
+              "environment_check",
+              "record_approvals"
             ],
-            "title": "Action"
+            "title": "Action",
+            "type": "string"
           },
           "stage_id": {
             "anyOf": [
               {
-                "type": "string",
                 "maxLength": 32,
                 "minLength": 32,
-                "pattern": "^[a-f0-9]{32}$"
+                "pattern": "^[a-f0-9]{32}$",
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Stage Id"
           },
           "experiment": {
-            "type": "string",
+            "default": "laya_smoke",
             "enum": [
               "laya_smoke",
               "laya_expA",
               "laya_expB"
             ],
             "title": "Experiment",
-            "default": "laya_smoke"
+            "type": "string"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reviewer"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Confirmation"
+          },
+          "approved_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Approved Fields"
+          },
+          "device": {
+            "anyOf": [
+              {
+                "const": "cuda",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Device"
           }
         },
-        "additionalProperties": false,
-        "type": "object",
         "required": [
           "action"
         ],
         "title": "ScinetSetupRequest",
-        "description": "One consolidated Action so the API stays within the 30-operation Actions limit."
+        "type": "object"
       },
       "ScinetSubmitRequest": {
         "properties": {

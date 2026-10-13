@@ -230,3 +230,170 @@ def test_config_rejects_bad_full_walltime(tmp_path):
     (tmp_path / "cfg" / "config.yaml").write_text("scinet:\n  training_full_walltime: '99:00:00'\n")
     with pytest.raises(ValueError, match="walltime"):
         Config(config_dir=tmp_path / "cfg", state_dir=tmp_path / "st")
+
+
+FIELDS = training.APPROVAL_FIELDS["laya_smoke"]
+GOOD = dict(reviewer="yeli", confirmation="I approve all 5", approved_fields=list(FIELDS))
+
+
+def run_recorder(pins, reviewer="yeli", device="cuda", stage="a" * 32):
+    proc = subprocess.run(
+        [sys.executable, "-c", training.REMOTE_APPROVAL_RECORDER, str(pins), reviewer, device,
+         json.dumps(FIELDS), stage, "cranary"], capture_output=True, text=True)
+    return proc.returncode, json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+def write_pins(tmp_path, **kw):
+    path = tmp_path / "pins.json"
+    path.write_text(json.dumps({"schema": 1, "device": None, **kw}))
+    return path
+
+
+def test_recorder_writes_only_approved_fields_with_audit_and_is_idempotent(tmp_path):
+    pins = write_pins(tmp_path, weights_sha256="ff")
+    code, out = run_recorder(pins)
+    data = json.loads(pins.read_text())
+    assert code == 0 and out["state"] == "recorded" and data["device"] == "cuda"
+    assert all(data[f] == "yeli" for f in FIELDS) and data["weights_sha256"] == "ff"
+    assert out["pins_sha256_before"] != out["pins_sha256"]
+    assert out["pins_sha256"] == hashlib.sha256(pins.read_bytes()).hexdigest()
+    audit = [json.loads(x) for x in (tmp_path / "approvals.audit.jsonl").read_text().splitlines()]
+    assert len(audit) == 1 and audit[0]["reviewer"] == "yeli" and audit[0]["time"]
+    code, again = run_recorder(pins)
+    assert code == 0 and again["state"] == "unchanged" and again["idempotent"] is True
+    assert len((tmp_path / "approvals.audit.jsonl").read_text().splitlines()) == 1
+
+
+@pytest.mark.parametrize("existing", [{"compute_approved_by": "someone"}, {"device": "cpu"}])
+def test_recorder_refuses_contradictory_existing_values(tmp_path, existing):
+    pins = write_pins(tmp_path, **existing)
+    before = pins.read_bytes()
+    code, out = run_recorder(pins)
+    assert code != 0 and out["error"] == "contradictory_existing_values"
+    assert pins.read_bytes() == before and not (tmp_path / "approvals.audit.jsonl").exists()
+
+
+def test_recorder_refuses_symlink_missing_and_bad_args(tmp_path):
+    real = write_pins(tmp_path)
+    link = tmp_path / "link.json"
+    link.symlink_to(real)
+    assert run_recorder(link)[0] != 0
+    assert run_recorder(tmp_path / "nope.json")[0] != 0
+    assert run_recorder(real, device="cpu")[0] != 0
+    assert run_recorder(real, reviewer="x;rm")[0] != 0
+    assert run_recorder(real, stage="../x")[0] != 0
+    assert json.loads(real.read_text())["device"] is None
+
+
+def approval_tool(tmp_path):
+    tool, call, stage, patches = staged_tool(tmp_path)
+    return tool, call, stage, patches
+
+
+def test_record_approvals_success_updates_ledger_and_uses_fixed_runner(tmp_path):
+    tool, call, stage, patches = approval_tool(tmp_path)
+    try:
+        report = {"state": "recorded", "changed_fields": sorted(FIELDS), "pins_sha256": "ab" * 32,
+                  "audit_time": "2026-10-12T00:00:00Z"}
+        call.return_value = ok(json.dumps(report).encode())
+        result = tool["scinet_record_approvals"]("cranary", stage["stage_id"], **GOOD)
+        assert result["success"] is True and result["state"] == "recorded"
+        argv = call.call_args.args[2][-1]
+        assert stage["stage_id"] in argv and "/pinned/pins.json" in argv and "yeli" in argv
+        assert call.call_args.args[2][:2] == ["/bin/bash", "-lc"]
+        approvals = training._Ledger(tmp_path / "state").stage(stage["stage_id"])["approvals"]
+        assert approvals[0]["reviewer"] == "yeli" and approvals[0]["pins_sha256"] == "ab" * 32
+    finally:
+        for p in reversed(patches):
+            p.__exit__(None, None, None)
+
+
+def test_record_approvals_idempotent_does_not_duplicate_ledger(tmp_path):
+    tool, call, stage, patches = approval_tool(tmp_path)
+    try:
+        call.return_value = ok(json.dumps({"state": "unchanged", "idempotent": True}).encode())
+        result = tool["scinet_record_approvals"]("cranary", stage["stage_id"], **GOOD)
+        assert result["success"] is True and result["idempotent"] is True
+        assert "approvals" not in training._Ledger(tmp_path / "state").stage(stage["stage_id"])
+    finally:
+        for p in reversed(patches):
+            p.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize("override,exc", [
+    ({"confirmation": ""}, PermissionError),
+    ({"confirmation": "i approve all 5"}, PermissionError),
+    ({"confirmation": "I approve all 5 please"}, PermissionError),
+    ({"reviewer": "Copilot-agent"}, PermissionError),
+    ({"reviewer": "someone-else"}, PermissionError),
+    ({"reviewer": "yeli-bot"}, PermissionError),
+    ({"approved_fields": ["smoke_approved_by"]}, ValueError),
+    ({"approved_fields": list(FIELDS) + ["extra"]}, ValueError),
+    ({"device": "cpu"}, ValueError),
+    ({"experiment": "laya_expB"}, ValueError),
+])
+def test_record_approvals_rejects_bad_requests_without_remote_call(tmp_path, override, exc):
+    tool, call, stage, patches = approval_tool(tmp_path)
+    try:
+        with pytest.raises(exc):
+            tool["scinet_record_approvals"]("cranary", stage["stage_id"], **{**GOOD, **override})
+        call.assert_not_called()
+    finally:
+        for p in reversed(patches):
+            p.__exit__(None, None, None)
+
+
+def test_record_approvals_rejects_unrelated_or_malformed_stage(tmp_path):
+    tool, call, stage, patches = approval_tool(tmp_path)
+    try:
+        with pytest.raises(PermissionError):
+            tool["scinet_record_approvals"]("cranary", "0" * 32, **GOOD)
+        with pytest.raises(ValueError):
+            tool["scinet_record_approvals"]("cranary", "../etc", **GOOD)
+        call.assert_not_called()
+    finally:
+        for p in reversed(patches):
+            p.__exit__(None, None, None)
+
+
+def test_record_approvals_surfaces_refusal_auth_and_garbage(tmp_path):
+    tool, call, stage, patches = approval_tool(tmp_path)
+    try:
+        call.return_value = ok(json.dumps({"state": "refused", "error": "contradictory_existing_values"}).encode(), code=73)
+        r = tool["scinet_record_approvals"]("cranary", stage["stage_id"], **GOOD)
+        assert r["success"] is False and r["error"] == "contradictory_existing_values"
+        call.return_value = ok(code=None, error="scinet_auth_required")
+        assert tool["scinet_record_approvals"]("cranary", stage["stage_id"], **GOOD)["error"] == "scinet_auth_required"
+        call.return_value = ok(b"garbage")
+        assert tool["scinet_record_approvals"]("cranary", stage["stage_id"], **GOOD)["error"] == "invalid_approval_receipt"
+        assert "approvals" not in training._Ledger(tmp_path / "state").stage(stage["stage_id"])
+    finally:
+        for p in reversed(patches):
+            p.__exit__(None, None, None)
+
+
+def test_configured_reviewer_overrides_default_user(tmp_path):
+    cfg = settings()
+    cfg.approval_reviewer = "drsmith"
+    tool, call, stage, patches = staged_tool(tmp_path, cfg=cfg)
+    try:
+        with pytest.raises(PermissionError):
+            tool["scinet_record_approvals"]("cranary", stage["stage_id"], **GOOD)
+        call.return_value = ok(json.dumps({"state": "unchanged"}).encode())
+        assert tool["scinet_record_approvals"]("cranary", stage["stage_id"], **{**GOOD, "reviewer": "drsmith"})["success"]
+    finally:
+        for p in reversed(patches):
+            p.__exit__(None, None, None)
+
+
+def test_rest_schema_scopes_approval_fields_to_record_action():
+    from pydantic import ValidationError
+    from agentporter.rest.routers.scinet import ScinetSetupRequest
+    sid = "a" * 32
+    ScinetSetupRequest(action="record_approvals", stage_id=sid, **GOOD)
+    for bad in ({"action": "record_approvals", "stage_id": sid},
+                {"action": "preflight", "stage_id": sid, "reviewer": "yeli"},
+                {"action": "record_approvals", "stage_id": sid, **GOOD, "device": "cpu"},
+                {"action": "record_approvals", "stage_id": sid, **GOOD, "path": "/x"}):
+        with pytest.raises(ValidationError):
+            ScinetSetupRequest(**bad)

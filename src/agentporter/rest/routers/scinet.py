@@ -3,7 +3,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agentporter.tools.scinet import ScinetDiagnostic
 from agentporter.tools.scinet_training import ScinetExperiment, ScinetLogKind
@@ -22,7 +22,7 @@ class ScinetSubmitRequest(BaseModel):
     experiment: ScinetExperiment = "laya_smoke"
 
 
-ScinetSetupAction = Literal["start", "status", "preflight", "environment_check"]
+ScinetSetupAction = Literal["start", "status", "preflight", "environment_check", "record_approvals"]
 
 
 class ScinetSetupRequest(BaseModel):
@@ -32,6 +32,21 @@ class ScinetSetupRequest(BaseModel):
     action: ScinetSetupAction
     stage_id: str | None = Field(default=None, min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
     experiment: ScinetExperiment = "laya_smoke"
+    # Only for record_approvals.
+    reviewer: str | None = Field(default=None, max_length=64)
+    confirmation: str | None = Field(default=None, max_length=64)
+    approved_fields: list[str] | None = Field(default=None, max_length=5)
+    device: Literal["cuda"] | None = None
+
+    @model_validator(mode="after")
+    def _approval_fields_only_for_record(self):
+        extras = (self.reviewer, self.confirmation, self.approved_fields, self.device)
+        if self.action == "record_approvals":
+            if None in extras[:3]:
+                raise ValueError("reviewer, confirmation and approved_fields are required")
+        elif any(v is not None for v in extras):
+            raise ValueError("approval fields are only valid for record_approvals")
+        return self
 
 
 class ScinetJobRequest(BaseModel):
@@ -124,7 +139,9 @@ def scinet_setup(workspace_id: str, req: ScinetSetupRequest, request: Request) -
     """Fixed stage setup, setup status, read-only preflight, or environment check.
 
     start runs only the SHA-verified staged login setup; it needs a pre-existing
-    authenticated session and never automates Duo or records approvals.
+    authenticated session and never automates Duo. record_approvals writes only the
+    five smoke approval fields plus device=cuda, and only with the exact human
+    confirmation text, the authorized reviewer and an explicit stage_id.
     """
     tools = request.app.state.tools
     try:
@@ -132,6 +149,12 @@ def scinet_setup(workspace_id: str, req: ScinetSetupRequest, request: Request) -
             return tools["scinet_environment_check"](workspace_id=workspace_id)
         if req.stage_id is None:
             raise ValueError("stage_id is required for this action")
+        if req.action == "record_approvals":
+            return tools["scinet_record_approvals"](
+                workspace_id=workspace_id, stage_id=req.stage_id, reviewer=req.reviewer,
+                confirmation=req.confirmation, approved_fields=req.approved_fields,
+                device=req.device or "cuda", experiment=req.experiment,
+            )
         if req.action == "preflight":
             return tools["scinet_preflight"](
                 workspace_id=workspace_id, stage_id=req.stage_id, experiment=req.experiment
