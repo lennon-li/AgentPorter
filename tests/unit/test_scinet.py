@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agentporter.tools.scinet import (
+    create_scinet_login_tool,
     create_scinet_tool,
     remote_argv,
     ssh_argv,
@@ -103,6 +104,24 @@ def test_authorized_workspace_runs_only_the_allowlisted_operation(tmp_path: Path
         ["/bin/bash", "-lc", "exec /usr/bin/timeout 25s sinfo -N -h -o '%N|%G|%t'"]
     )
     assert called_argv[-1] == expected_remote
+
+
+def test_scinet_login_uses_broker_and_returns_only_safe_state():
+    configured = SimpleNamespace(broker_socket="/run/user/1000/agentporter/scinet.sock")
+    with (
+        patch("agentporter.tools.scinet.host_identity", return_value=host()),
+        patch("agentporter.tools.scinet.broker_socket_available", return_value=True),
+        patch(
+            "agentporter.tools.scinet.run_scinet_bytes",
+            return_value={"state": "push_requested", "success": False},
+        ) as run,
+    ):
+        response = create_scinet_login_tool(registry(), configured)("asgard", "start")
+
+    assert response == {"target": "scinet", "success": False, "state": "push_requested"}
+    assert run.call_args.kwargs["operation"] == "login"
+    assert run.call_args.kwargs["command"] == "start"
+    assert run.call_args.args[2] == []
 
 
 def test_unauthorized_workspace_is_rejected_before_ssh():
@@ -204,6 +223,9 @@ def test_rest_action_is_schema_visible_bounded_and_permission_gated():
             ]["post"]
             assert operation["operationId"] == "asgard_scinet_diagnostic"
             assert len([method for path in schema["paths"].values() for method in path]) <= 30
+            login_actions = schema["components"]["schemas"]["ScinetSetupRequest"][
+                "properties"]["action"]["enum"]
+            assert {"login_start", "login_status"} <= set(login_actions)
             assert client.post(
                 "/api/v1/workspaces/asgard/scinet/diagnostic",
                 json={"command": "gpu_nodes"},
@@ -214,6 +236,15 @@ def test_rest_action_is_schema_visible_bounded_and_permission_gated():
                 json={"command": "uname -a"},
                 headers={"Authorization": "Bearer synthetic-test-key"},
             ).status_code == 422
+            setup = schema["paths"][
+                "/api/v1/workspaces/{workspace_id}/scinet/setup"
+            ]["post"]
+            assert len(setup["description"]) <= 300
+            assert client.post(
+                "/api/v1/workspaces/asgard/scinet/setup",
+                json={"action": "login_start"},
+                headers={"Authorization": "Bearer synthetic-test-key"},
+            ).status_code == 403
 
 
 def test_training_actions_are_schema_visible_but_separate_from_diagnostics():

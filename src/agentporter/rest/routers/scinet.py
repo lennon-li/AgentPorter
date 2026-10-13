@@ -22,7 +22,10 @@ class ScinetSubmitRequest(BaseModel):
     experiment: ScinetExperiment = "laya_smoke"
 
 
-ScinetSetupAction = Literal["start", "status", "preflight", "environment_check", "record_approvals"]
+ScinetSetupAction = Literal[
+    "start", "status", "preflight", "environment_check", "record_approvals",
+    "login_start", "login_status",
+]
 
 
 class ScinetSetupRequest(BaseModel):
@@ -136,15 +139,14 @@ def scinet_job_logs(workspace_id: str, req: ScinetJobLogsRequest, request: Reque
 
 @router.post("/setup")
 def scinet_setup(workspace_id: str, req: ScinetSetupRequest, request: Request) -> dict:
-    """Fixed stage setup, setup status, read-only preflight, or environment check.
-
-    start runs only the SHA-verified staged login setup; it needs a pre-existing
-    authenticated session and never automates Duo. record_approvals writes only the
-    five smoke approval fields plus device=cuda, and only with the exact human
-    confirmation text, the authorized reviewer and an explicit stage_id.
-    """
+    """Manage SciNet setup, preflight, approvals, or login. ``login_start`` requests one Duo push; ``login_status`` checks the master. Tap approve on your phone; AgentPorter never accepts passcodes or approves Duo."""
     tools = request.app.state.tools
     try:
+        if req.action in {"login_start", "login_status"}:
+            return tools["scinet_login"](
+                workspace_id=workspace_id,
+                action="start" if req.action == "login_start" else "status",
+            )
         if req.action == "environment_check":
             return tools["scinet_environment_check"](workspace_id=workspace_id)
         if req.stage_id is None:

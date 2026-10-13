@@ -4,8 +4,10 @@ set -euo pipefail
 # Run this from an interactive Asgard terminal when Duo re-authentication is
 # required.  The SSH master is private to the broker and is not an
 # AgentPorter/agent configuration dependency.
+# This is the broker-owned SSH control socket.  AgentPorter agents only use
+# the broker RPC socket; they never receive this path or ~/.ssh access.
+socket="${AGENTPORTER_SCINET_CONTROL_SOCKET:-$HOME/.ssh/cm-yeli@trillium-gpu.alliancecan.ca:22}"
 runtime="${XDG_RUNTIME_DIR:?}/agentporter"
-socket="$runtime/scinet-control"
 mkdir -p "$runtime"
 chmod 700 "$runtime"
 
@@ -23,11 +25,12 @@ fi
 exec ssh -M -S "$socket" -N -T -f \
   -o ControlPersist=12h \
   -o BatchMode=no \
-  -o PreferredAuthentications=keyboard-interactive \
+  -o PreferredAuthentications=publickey,keyboard-interactive \
   -o KbdInteractiveAuthentication=yes \
   -o HostbasedAuthentication=no \
-  -o PubkeyAuthentication=no \
+  -o PubkeyAuthentication=yes \
   -o PasswordAuthentication=no \
   -o StrictHostKeyChecking=yes \
+  -o ForwardAgent=no \
   -o ClearAllForwardings=yes \
   -l yeli trillium-gpu.alliancecan.ca

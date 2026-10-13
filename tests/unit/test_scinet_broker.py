@@ -8,9 +8,51 @@ import pytest
 
 from agentporter.tools.scinet_broker import (
     ScinetBroker,
+    DUO_PUSH_PROMPT,
+    _has_duo_push_prompt,
+    _login_failure_reason,
     broker_request,
     broker_socket_available,
 )
+
+
+def test_only_expected_duo_choice_prompt_triggers_push_selection():
+    assert DUO_PUSH_PROMPT.search(b"Passcode or option (1-1):")
+    assert _has_duo_push_prompt(b"Passcode or option (1-1):")
+    assert _has_duo_push_prompt(b"\x1b[1mPasscode or option (1-1):\x1b[0m\r")
+    assert _has_duo_push_prompt(b"\r\nPasscode  or option (1-1) :  ")
+    assert not DUO_PUSH_PROMPT.search(b"Password:")
+    assert not _has_duo_push_prompt(b"Password:")
+    assert not _has_duo_push_prompt(b"Duo Push? (y/n):")
+    assert not DUO_PUSH_PROMPT.search(b"Duo Push? (y/n):")
+
+
+@pytest.mark.parametrize(
+    ("output", "push_requested", "exit_status", "timed_out", "expected"),
+    [
+        (b"Permission denied (keyboard-interactive,hostbased).", False, 255, False, "authentication_rejected"),
+        (b"Host key verification failed.", False, 255, False, "host_key_failed"),
+        (b"ssh: Could not resolve hostname host: Name or service not known", False, 255, False, "dns_failed"),
+        (b"connect to host port 22: Connection refused", False, 255, False, "connection_refused"),
+        (b"", False, 127, False, "ssh_start_failed"),
+        (b"", False, 255, True, "no_ssh_prompt"),
+        (b"Duo two-factor login", False, 255, True, "duo_prompt_unrecognized"),
+        (b"Verification code:", False, 255, True, "authentication_prompt_unrecognized"),
+        (b"", True, 255, True, "duo_approval_timeout"),
+    ],
+)
+def test_login_failure_reporting_is_classified_and_redacted(
+    output, push_requested, exit_status, timed_out, expected
+):
+    reason = _login_failure_reason(
+        output,
+        push_requested=push_requested,
+        exit_status=exit_status,
+        timed_out=timed_out,
+    )
+    assert reason == expected
+    if output:
+        assert output.decode(errors="ignore") not in reason
 
 
 def _unix_sockets_available() -> bool:
@@ -88,6 +130,95 @@ def test_broker_rejects_ssh_like_remote_tokens(tmp_path):
                 {"version": 1, "operation": "training", "remote": ["ssh", "other"]},
                 b"",
             )
+
+
+def test_login_argv_allows_host_public_key_then_duo_with_fixed_target(tmp_path):
+    broker = ScinetBroker(
+        str(tmp_path / "broker.sock"),
+        str(tmp_path / "control.sock"),
+        "trillium-gpu.alliancecan.ca",
+        "yeli",
+    )
+    argv = broker._login_argv()
+    assert argv[0] == "/usr/bin/ssh"
+    assert argv[-2:] == ["yeli", "trillium-gpu.alliancecan.ca"]
+    assert "-M" in argv and "-f" in argv
+    assert "PreferredAuthentications=publickey,keyboard-interactive" in argv
+    assert "PubkeyAuthentication=yes" in argv
+    assert "PasswordAuthentication=no" in argv
+    assert "StrictHostKeyChecking=yes" in argv
+    assert "ClearAllForwardings=yes" in argv
+    assert "ForwardAgent=no" in argv
+    assert not any(arg in {"-L", "-R", "-D", "-W"} for arg in argv)
+    assert not any(arg.startswith("ProxyCommand=") for arg in argv)
+
+
+def test_login_status_only_reports_verified_master(tmp_path):
+    broker = ScinetBroker(
+        str(tmp_path / "broker.sock"),
+        str(tmp_path / "control.sock"),
+        "trillium-gpu.alliancecan.ca",
+        "yeli",
+    )
+    request = {
+        "version": 1,
+        "operation": "login",
+        "command": "status",
+        "remote": [],
+        "input_length": 0,
+    }
+    with patch.object(broker, "_master_is_running", return_value=False):
+        assert broker._request(request, b"") == {"state": "not_started", "success": False}
+    with patch.object(broker, "_master_is_running", return_value=True):
+        assert broker._request(request, b"") == {"state": "authenticated", "success": True}
+
+
+def test_login_rpc_rejects_caller_supplied_remote_command(tmp_path):
+    broker = ScinetBroker(
+        str(tmp_path / "broker.sock"),
+        str(tmp_path / "control.sock"),
+        "trillium-gpu.alliancecan.ca",
+        "yeli",
+    )
+    request = {
+        "version": 1,
+        "operation": "login",
+        "command": "start",
+        "remote": ["uname", "-a"],
+        "input_length": 0,
+    }
+    with pytest.raises(ValueError, match="invalid SciNet login request"):
+        broker._request(request, b"")
+
+
+def test_login_start_is_single_flight_and_rate_limited(tmp_path):
+    broker = ScinetBroker(
+        str(tmp_path / "broker.sock"),
+        str(tmp_path / "control.sock"),
+        "trillium-gpu.alliancecan.ca",
+        "yeli",
+    )
+    request = {
+        "version": 1,
+        "operation": "login",
+        "command": "start",
+        "remote": [],
+        "input_length": 0,
+    }
+    with (
+        patch.object(broker, "_master_is_running", return_value=False),
+        patch("agentporter.tools.scinet_broker.os.path.lexists", return_value=False),
+        patch("agentporter.tools.scinet_broker.pty.fork", return_value=(123, 456)) as fork,
+        patch("agentporter.tools.scinet_broker.threading.Thread.start"),
+    ):
+        assert broker._request(request, b"") == {"state": "starting", "success": False}
+        assert broker._request(request, b"") == {"state": "starting", "success": False}
+        fork.assert_called_once()
+        with broker._login_lock:
+            broker._login_state = "failed"
+        assert broker._request(request, b"") == {
+            "state": "cooldown", "success": False, "reason": "retry_cooldown"
+        }
 
 
 @pytest.mark.skipif(not UNIX_SOCKETS_AVAILABLE, reason="sandbox disallows Unix sockets")

@@ -1518,7 +1518,7 @@
           "SciNet"
         ],
         "summary": "Scinet Setup",
-        "description": "Fixed stage setup, setup status, read-only preflight, or environment check.\n\nstart runs only the SHA-verified staged login setup; it needs a pre-existing\nauthenticated session and never automates Duo or records approvals.",
+        "description": "Manage SciNet setup, preflight, approvals, or login. login_start requests one Duo push; tap approve on your phone. login_status checks connection. AgentPorter never approves Duo.",
         "operationId": "scinet_setup",
         "parameters": [
           {
@@ -3018,7 +3018,9 @@
               "status",
               "preflight",
               "environment_check",
-              "record_approvals"
+              "record_approvals",
+              "login_start",
+              "login_status"
             ],
             "title": "Action",
             "type": "string"

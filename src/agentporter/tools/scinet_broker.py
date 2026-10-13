@@ -15,7 +15,11 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
+import pty
+import re
+import select
 import selectors
 import shlex
 import signal
@@ -24,6 +28,7 @@ import stat
 import subprocess
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +37,25 @@ from agentporter.tools.venkata import run_host_bytes
 BROKER_PROTOCOL = 1
 MAX_REQUEST = 8 * 1024 * 1024
 MAX_RESPONSE = 4 * 1024 * 1024
+LOGIN_COOLDOWN_SECONDS = 300
+LOGIN_TIMEOUT_SECONDS = 90
+ANSI_TERMINAL_SEQUENCE = re.compile(
+    rb"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[@-_])"
+)
+DUO_PUSH_PROMPT = re.compile(
+    rb"Passcode\s+or\s+option(?:\s+\([^\r\n)]*\))?\s*:\s*$", re.I
+)
+OTHER_AUTH_PROMPT = re.compile(rb"(?:passcode|password|verification|challenge)[^\r\n:]*:\s*$", re.I)
+logger = logging.getLogger("agentporter.scinet_broker")
+LOGIN_FAILURE_PATTERNS = (
+    (re.compile(rb"permission denied", re.I), "authentication_rejected"),
+    (re.compile(rb"host key verification failed|remote host identification has changed", re.I), "host_key_failed"),
+    (re.compile(rb"could not resolve hostname|temporary failure in name resolution", re.I), "dns_failed"),
+    (re.compile(rb"connection refused", re.I), "connection_refused"),
+    (re.compile(rb"connection timed out|operation timed out", re.I), "connection_timeout"),
+    (re.compile(rb"no route to host|network is unreachable", re.I), "network_unreachable"),
+    (re.compile(rb"control socket|unix_listener|cannot bind to path|could not create directory", re.I), "control_socket_unavailable"),
+)
 DIAGNOSTIC_COMMANDS = {
     "gpu_partitions": ["sinfo", "-h", "-o", "%P|%D|%t|%G"],
     "gpu_nodes": ["sinfo", "-N", "-h", "-o", "%N|%G|%t"],
@@ -132,6 +156,32 @@ def _ssh_envelope(host: str, user: str, control_socket: str, remote: list[str]) 
     ]
 
 
+def _login_failure_reason(
+    output: bytes, *, push_requested: bool, exit_status: int, timed_out: bool
+) -> str:
+    """Map private SSH terminal output to a small, non-sensitive reason enum."""
+    for pattern, reason in LOGIN_FAILURE_PATTERNS:
+        if pattern.search(output):
+            return reason
+    if timed_out:
+        if push_requested:
+            return "duo_approval_timeout"
+        if re.search(rb"duo", output, re.I):
+            return "duo_prompt_unrecognized"
+        if OTHER_AUTH_PROMPT.search(output):
+            return "authentication_prompt_unrecognized"
+        return "ssh_output_without_known_prompt" if output else "no_ssh_prompt"
+    if not output and exit_status == 127:
+        return "ssh_start_failed"
+    return "login_process_exited"
+
+
+def _has_duo_push_prompt(output: bytes) -> bool:
+    terminal_text = ANSI_TERMINAL_SEQUENCE.sub(b"", output)
+    terminal_text = terminal_text.replace(b"\r", b"\n").replace(b"\x08", b"")
+    return DUO_PUSH_PROMPT.search(terminal_text) is not None
+
+
 def broker_request(
     settings,
     remote: list[str],
@@ -184,6 +234,9 @@ def broker_request(
     try:
         record = json.loads(bytes(response).split(b"\n", 1)[0])
         return {
+            **({"state": record["state"]} if record.get("state") else {}),
+            **({"success": bool(record["success"])} if "success" in record else {}),
+            **({"reason": record["reason"]} if record.get("reason") else {}),
             "exit_code": record.get("exit_code"),
             "stdout": _unb64(record.get("stdout", "")),
             "stderr": _unb64(record.get("stderr", "")),
@@ -208,8 +261,127 @@ class ScinetBroker:
     def __init__(self, socket_path: str, control_socket: str, host: str, user: str):
         self.socket_path = _socket_path(socket_path, "broker socket")
         self.control_socket = _socket_path(control_socket, "broker control socket")
+        self.login_control_socket = _socket_path(
+            str(Path(self.socket_path).parent / "scinet-control"),
+            "login control socket",
+        )
         self.host = host
         self.user = user
+        self._login_lock = threading.Lock()
+        self._login_state = "not_started"
+        self._login_reason: str | None = None
+        self._login_started = 0.0
+
+    def _master_is_running(self, path: str | None = None) -> bool:
+        path = path or self.control_socket
+        if not _control_socket_available(path):
+            return False
+        try:
+            result = subprocess.run(
+                [
+                    "/usr/bin/ssh", "-F", "/dev/null", "-S", path,
+                    "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+                    "-o", "ProxyCommand=/bin/false", "-l", self.user,
+                    "-O", "check", self.host,
+                ],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, timeout=5, check=False,
+            )
+            return result.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+    def _login_status(self) -> dict[str, Any]:
+        if self._master_is_running(self.login_control_socket) or self._master_is_running():
+            with self._login_lock:
+                self._login_state = "authenticated"
+                self._login_reason = None
+            return {"state": "authenticated", "success": True}
+        with self._login_lock:
+            state = self._login_state
+            reason = self._login_reason
+        return {"state": state, "success": False, **({"reason": reason} if reason else {})}
+
+    def _login_argv(self, control_socket: str | None = None) -> list[str]:
+        return [
+            "/usr/bin/ssh", "-F", "/dev/null", "-M", "-S",
+            control_socket or self.login_control_socket,
+            "-N", "-T", "-f", "-o", "ControlPersist=12h", "-o", "BatchMode=no",
+            # Some SciNet accounts require an existing host public key before Duo.
+            "-o", "PreferredAuthentications=publickey,keyboard-interactive",
+            "-o", "KbdInteractiveAuthentication=yes", "-o", "HostbasedAuthentication=no",
+            "-o", "PubkeyAuthentication=yes", "-o", "PasswordAuthentication=no",
+            "-o", "StrictHostKeyChecking=yes", "-o", "ClearAllForwardings=yes",
+            "-o", "ForwardAgent=no",
+            "-l", self.user, self.host,
+        ]
+
+    def _login_worker(self, pid: int, master_fd: int, control_socket: str) -> None:
+        deadline = time.monotonic() + LOGIN_TIMEOUT_SECONDS
+        output = bytearray()
+        push_requested = False
+        exit_status: int | None = None
+        timed_out = False
+        try:
+            os.set_blocking(master_fd, False)
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master_fd], [], [], 0.2)
+                if ready:
+                    try:
+                        chunk = os.read(master_fd, 4096)
+                    except OSError:
+                        chunk = b""
+                    if chunk:
+                        output.extend(chunk)
+                        if len(output) > 32768:
+                            del output[:-4096]
+                        if not push_requested and _has_duo_push_prompt(bytes(output)):
+                            # This selects the push factor only; it is not a Duo approval/code.
+                            try:
+                                os.write(master_fd, b"1\n")
+                            except OSError:
+                                break
+                            push_requested = True
+                            with self._login_lock:
+                                self._login_state = "push_requested"
+                    else:
+                        break
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    exit_status = os.waitstatus_to_exitcode(status)
+                    break
+            if exit_status is None:
+                timed_out = True
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                _, status = os.waitpid(pid, 0)
+                exit_status = os.waitstatus_to_exitcode(status)
+            if self._master_is_running(control_socket):
+                state = "authenticated"
+                reason = None
+            elif push_requested:
+                state = "failed" if timed_out or exit_status else "pending_approval"
+                reason = _login_failure_reason(
+                    bytes(output), push_requested=True,
+                    exit_status=exit_status or 0, timed_out=timed_out,
+                ) if state == "failed" else None
+            else:
+                state = "failed"
+                reason = _login_failure_reason(
+                    bytes(output), push_requested=False,
+                    exit_status=exit_status or 0, timed_out=timed_out,
+                )
+            with self._login_lock:
+                self._login_state = state
+                self._login_reason = reason
+            if reason:
+                logger.warning("SciNet login finished: state=%s reason=%s", state, reason)
+            else:
+                logger.info("SciNet login finished: state=%s", state)
+        finally:
+            os.close(master_fd)
 
     def _authorized_peer(self, channel: socket.socket) -> bool:
         try:
@@ -224,6 +396,47 @@ class ScinetBroker:
             raise ValueError("unsupported SciNet broker protocol")
         operation = record.get("operation")
         remote = record.get("remote")
+        if operation == "login":
+            if remote != [] or body or record.get("input_length", 0) != 0:
+                raise ValueError("invalid SciNet login request")
+            command = record.get("command")
+            if command == "status":
+                return self._login_status()
+            if command != "start":
+                raise ValueError("unsupported SciNet login action")
+            if self._master_is_running(self.login_control_socket) or self._master_is_running():
+                with self._login_lock:
+                    self._login_state = "authenticated"
+                    self._login_reason = None
+                return {"state": "authenticated", "success": True}
+            if os.path.lexists(self.login_control_socket):
+                logger.warning("SciNet login not started: reason=stale_control_socket")
+                return {"state": "failed", "success": False, "reason": "stale_control_socket"}
+            with self._login_lock:
+                now = time.monotonic()
+                if self._login_state in {"starting", "push_requested", "pending_approval"}:
+                    return {
+                        "state": self._login_state,
+                        "success": False,
+                        **({"reason": self._login_reason} if self._login_reason else {}),
+                    }
+                if now - self._login_started < LOGIN_COOLDOWN_SECONDS:
+                    return {"state": "cooldown", "success": False, "reason": "retry_cooldown"}
+                self._login_started = now
+                self._login_state = "starting"
+                self._login_reason = None
+            pid, master_fd = pty.fork()
+            if pid == 0:
+                try:
+                    os.execv("/usr/bin/ssh", self._login_argv(self.login_control_socket))
+                except BaseException:
+                    os._exit(127)
+            threading.Thread(
+                target=self._login_worker,
+                args=(pid, master_fd, self.login_control_socket),
+                daemon=True,
+            ).start()
+            return {"state": "starting", "success": False}
         if operation not in {"diagnostic", "training"} or not isinstance(remote, list):
             raise ValueError("unsupported SciNet broker operation")
         length = record.get("input_length", 0)
@@ -237,7 +450,10 @@ class ScinetBroker:
                 remote = DIAGNOSTIC_COMMANDS[command]
             else:
                 raise ValueError("unsupported SciNet diagnostic")
-        if not _control_socket_available(self.control_socket):
+        if not (
+            _control_socket_available(self.login_control_socket)
+            or _control_socket_available(self.control_socket)
+        ):
             return {
                 "exit_code": None,
                 "stdout": "",
@@ -246,7 +462,12 @@ class ScinetBroker:
                 "truncated": False,
                 "error": "scinet_auth_required",
             }
-        argv = _ssh_envelope(self.host, self.user, self.control_socket, remote)
+        control_socket = (
+            self.login_control_socket
+            if _control_socket_available(self.login_control_socket)
+            else self.control_socket
+        )
+        argv = _ssh_envelope(self.host, self.user, control_socket, remote)
         result = run_host_bytes(
             argv,
             os.path.expanduser("~"),
@@ -320,6 +541,10 @@ class ScinetBroker:
 def main() -> None:
     import argparse
 
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
     parser = argparse.ArgumentParser(description="AgentPorter SciNet broker")
     parser.add_argument("--socket", required=True)
     parser.add_argument("--control-socket", required=True)

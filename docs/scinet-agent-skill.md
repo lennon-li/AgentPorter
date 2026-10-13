@@ -23,11 +23,19 @@ arbitrary remote commands or paths.
 
 ## Authentication
 
-Duo authentication is interactive and cannot be automated by an agent. When
-the broker reports `scinet_broker_unavailable` or `scinet_auth_required`, an
-operator runs `scripts/agentporter-scinet-login` in an Asgard terminal and
-approves Duo. The operator does not paste a password, private key, or Duo code
-into an agent conversation.
+Use the consolidated `scinet_setup` Action with `action: "login_start"` to
+request a fixed SciNet login using an existing host public key when required,
+followed by keyboard-interactive authentication. The broker does not provision
+keys or accept credentials from agents. Password authentication and agent
+forwarding remain disabled. The host broker sends only
+the literal push-selection response at SciNet's Duo-choice prompt; it cannot
+approve the push, enter a passcode, or accept caller-supplied SSH options. The
+operator must approve the notification on their phone. Poll with
+`action: "login_status"`; `authenticated` is returned only after the SSH master
+is verified. Requests are single-flight and rate-limited. If the broker reports
+a stale socket or failed login, stop and ask the operator to resolve it; do not
+retry-loop. Never paste passwords, private keys, or Duo codes into an agent
+conversation.
 
 ## Training workflow
 

@@ -16,6 +16,7 @@ ScinetDiagnostic = Literal[
     "gpu_allocations",
     "connection_status",
 ]
+ScinetLoginAction = Literal["start", "status"]
 
 MAX_OUTPUT = 65536
 TIMEOUT = 30
@@ -278,3 +279,30 @@ def create_scinet_tool(registry, settings=None):
         return result
 
     return scinet_diagnostic
+
+
+def create_scinet_login_tool(registry, settings=None):
+    """Expose only the fixed, rate-limited host-broker login initiation/status."""
+    def scinet_login(workspace_id: str, action: ScinetLoginAction = "start") -> dict:
+        if action not in {"start", "status"}:
+            raise ValueError("SciNet login action not allowed")
+        user = host_identity(registry, workspace_id, settings)
+        broker_socket = str(getattr(settings, "broker_socket", "") or "").strip()
+        if not broker_socket:
+            raise PermissionError("SciNet login requires the host-side broker")
+        if not broker_socket_available(broker_socket):
+            return {"target": "scinet", "success": False, "state": "broker_unavailable"}
+        result = run_scinet_bytes(
+            settings, user, [], max_output=1024, timeout=10,
+            operation="login", command=action,
+        )
+        state = result.get("state", "failed")
+        return {
+            "target": "scinet",
+            "success": bool(result.get("success", False)),
+            "state": state,
+            **({"reason": result["reason"]} if result.get("reason") else {}),
+            **({"error": result["error"]} if result.get("error") else {}),
+        }
+
+    return scinet_login

@@ -33,7 +33,12 @@ from agentporter.tools.local_http import create_local_http_tool
 from agentporter.tools.agents import create_agent_tools
 from agentporter.tools.venkata import create_venkata_tool, Diagnostic
 from agentporter.tools.venkata_transfer import create_venkata_transfer_tool, TransferSource, TransferDestination
-from agentporter.tools.scinet import create_scinet_tool, ScinetDiagnostic
+from agentporter.tools.scinet import (
+    create_scinet_login_tool,
+    create_scinet_tool,
+    ScinetDiagnostic,
+    ScinetLoginAction,
+)
 from agentporter.tools.scinet_training import (
     create_scinet_training_tool,
     ScinetExperiment,
@@ -148,6 +153,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _venkata_diagnostic = create_venkata_tool(registry)
     _venkata_transfer = create_venkata_transfer_tool(registry)
     _scinet_diagnostic = create_scinet_tool(registry, getattr(config, "scinet", None))
+    _scinet_login = create_scinet_login_tool(registry, getattr(config, "scinet", None))
     _scinet_training = create_scinet_training_tool(
         registry, getattr(config, "scinet", None), config.state_dir
     )
@@ -170,6 +176,12 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def scinet_diagnostic(workspace_id: str, command: ScinetDiagnostic) -> dict:
         """Run one fixed, read-only SciNet diagnostic through the host-side broker."""
         return _scinet_diagnostic(workspace_id=workspace_id, command=command)
+
+    @mcp.tool()
+    @monitored_tool("scinet_login")
+    def scinet_login(workspace_id: str, action: ScinetLoginAction = "start") -> dict:
+        """Request one fixed SciNet Duo push or check login status; approval stays human."""
+        return _scinet_login(workspace_id=workspace_id, action=action)
 
     @mcp.tool()
     @monitored_tool("scinet_stage")
@@ -503,6 +515,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             "venkata_diagnostic": venkata_diagnostic,
             "venkata_transfer": venkata_transfer,
         "scinet_diagnostic": scinet_diagnostic,
+        "scinet_login": scinet_login,
         "scinet_stage": scinet_stage,
         "scinet_submit": scinet_submit,
         "scinet_job_status": scinet_job_status,
