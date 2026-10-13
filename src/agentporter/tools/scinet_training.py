@@ -876,7 +876,12 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
             raise ValueError("Smoke template has an unexpected partition directive")
         else:
             lines.insert(insert, f"#SBATCH --partition={partition}")
-        lines[1:1] = [
+        first_exec = next((i for i, line in enumerate(lines)
+                           if i and line.strip() and not line.lstrip().startswith("#")), len(lines))
+        if not lines or not lines[0].startswith("#!") or \
+                any(line.lstrip().startswith("#SBATCH") for line in lines[first_exec:]):
+            raise ValueError("Sbatch directives must follow the shebang and precede executable statements")
+        lines[first_exec:first_exec] = [
             "export CRANARY_SCRATCH=" + shlex.quote(runtime),
             "export CRANARY_REPO=" + shlex.quote(repo),
             "export CRANARY_PINS=" + shlex.quote(pins),
@@ -884,11 +889,16 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
         ]
         rendered = ("\n".join(lines) + "\n").encode()
         required = [b"#SBATCH --gpus-per-node=1", b"#SBATCH --nodes=1",
-                    f"#SBATCH --time={walltime}".encode()]
+                    f"#SBATCH --time={walltime}".encode(),
+                    f"#SBATCH --account={account}".encode(),
+                    f"#SBATCH --partition={partition}".encode(),
+                    f"#SBATCH --output={logs}/%x-%j.out".encode()]
         if any(rendered.count(item) != 1 for item in required) or \
-                rendered.count(b"#SBATCH --time=") != 1:
+                rendered.count(b"#SBATCH --time=") != 1 or \
+                any(line.startswith("#SBATCH --error=") and not line.startswith(f"#SBATCH --error={logs}/")
+                    for line in lines):
             raise ValueError("Job resource bounds are invalid")
-        preflight = "set -e; " + " && ".join(
+        preflight = "set -e; " + shlex.join(["mkdir", "-p", "-m", "700", logs]) + " && " + " && ".join(
             shlex.join(argv) for _, argv in _gate_script(py, repo, pins, experiment))
         preflight_result = _call(settings, user, ["/bin/bash", "-lc", preflight], timeout=120)
         if preflight_result.get("exit_code") != 0 or preflight_result.get("timed_out"):

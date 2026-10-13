@@ -297,3 +297,80 @@ def run_submit_existing(root, tmp_path):
         call.side_effect = [
             {"exit_code": 0, "stdout": b"", "stderr": b"", "timed_out": False, "truncated": False}]
         return tool["scinet_submit"]("cranary", staged["stage_id"])
+
+
+def slurm_validate(script: bytes) -> list[str]:
+    """Mimic sbatch: shebang first, all #SBATCH before the first executable statement."""
+    lines = script.decode().splitlines()
+    assert lines[0].startswith("#!")
+    directives, seen_exec = [], False
+    for n, line in enumerate(lines[1:], 2):
+        if line.lstrip().startswith("#SBATCH"):
+            assert not seen_exec, f"#SBATCH on line {n} after first executable statement"
+            directives.append(line.strip())
+        elif line.strip() and not line.lstrip().startswith("#"):
+            seen_exec = True
+    return directives
+
+
+REAL_TEMPLATE = (
+    b"#!/bin/bash\n"
+    b"#SBATCH --job-name=cranary-laya-smoke\n"
+    b"#SBATCH --account=@SLURM_ACCOUNT@\n"
+    b"#SBATCH --partition=@SLURM_PARTITION@\n"
+    b"#SBATCH --time=00:15:00\n"
+    b"#SBATCH --nodes=1\n#SBATCH --ntasks=1\n#SBATCH --gpus-per-node=1\n"
+    b"#SBATCH --cpus-per-task=@CPUS_PER_TASK@\n"
+    b"#SBATCH --output=@SCRATCH_LOG_DIR@/%x-%j.out\n"
+    b"#SBATCH --error=@SCRATCH_LOG_DIR@/%x-%j.err\n"
+    b"\nset -euo pipefail\necho start\n"
+)
+
+
+def submit_with_template(tmp_path, data):
+    root = handoff(tmp_path)
+    _rewrite_template(root, data)
+    wsreg = registry(root)
+    cfg = settings()
+    cfg.training_account, cfg.training_partition = "def-yeli", "compute"
+    tool = create_scinet_training_tool(wsreg, cfg, tmp_path / "state")
+    with patch.object(training, "_identity", return_value=identity(wsreg.get("cranary"))), \
+         patch.object(training, "_call") as call:
+        call.side_effect = stage_receipt
+        staged = tool["scinet_stage"]("cranary")
+        call.reset_mock()
+        ok = {"exit_code": 0, "stdout": b"", "stderr": b"", "timed_out": False, "truncated": False}
+        call.side_effect = [ok, ok, {**ok, "stdout": b"12345"}]
+        try:
+            result = tool["scinet_submit"]("cranary", staged["stage_id"])
+        except ValueError as exc:
+            return None, call, exc
+    return result, call, None
+
+
+def test_rendered_script_passes_slurm_validator_with_exports_after_directives(tmp_path):
+    result, call, _ = submit_with_template(tmp_path, REAL_TEMPLATE)
+    assert result["success"] is True
+    rendered = call.call_args_list[1].kwargs["input_bytes"]
+    directives = slurm_validate(rendered)
+    logs = "/scratch/project/cranary-laya"
+    assert "#SBATCH --account=def-yeli" in directives
+    assert "#SBATCH --partition=compute" in directives
+    assert "#SBATCH --gpus-per-node=1" in directives
+    assert "#SBATCH --time=00:15:00" in directives
+    assert any(d.startswith("#SBATCH --output=") and "/logs/%x-%j.out" in d for d in directives)
+    assert any(d.startswith("#SBATCH --error=") and "/logs/%x-%j.err" in d for d in directives)
+    assert all("/home/" not in d for d in directives) and logs
+    text = rendered.decode()
+    assert text.index("export CRANARY_SCRATCH=") > text.rindex("#SBATCH")
+    assert text.index("set -euo pipefail") > text.index("export CRANARY_PYTHON=")
+    # gate and approval preflight still ran before publish/sbatch
+    assert call.call_args_list[0].args[2][0] == "/bin/bash"
+    assert "verify-bundle" in call.call_args_list[0].args[2][2]
+
+
+def test_submit_rejects_directives_after_executable_statement(tmp_path):
+    bad = REAL_TEMPLATE.replace(b"#SBATCH --nodes=1\n", b"echo hi\n#SBATCH --nodes=1\n")
+    result, call, exc = submit_with_template(tmp_path, bad)
+    assert exc is not None and "precede executable" in str(exc)
+    assert call.call_count == 0
