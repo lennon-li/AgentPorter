@@ -37,6 +37,27 @@ a stale socket or failed login, stop and ask the operator to resolve it; do not
 retry-loop. Never paste passwords, private keys, or Duo codes into an agent
 conversation.
 
+The broker checks that SciNet responds to a harmless command before reporting
+`authenticated`; a local SSH process alone is not sufficient. SSH heartbeats
+detect a lost connection after three unanswered 30-second checks. A
+`scinet_connection_unresponsive` result requires one fresh operator-approved
+login, not a loop of approval-recording retries.
+
+## Long local checks
+
+Run lengthy Cranary checks and test suites with `exec_start`, then poll
+`job_status` and retrieve `job_output`/`job_result`. Set an appropriate bounded
+job timeout. `exec_run` is for short commands; a command hitting its requested
+120-second limit does not establish that the Asgard gateway is unavailable.
+For Cranary screening, exit code 2 means `review_required` or `unknown`; inspect
+the findings rather than treating it as a connection failure. A successful
+`R CMD check` can coexist with separate rules requiring human review.
+
+If approval recording reports `approval_recording_timeout`, first restore the
+connection and run preflight to inspect the existing approvals. The remote
+write may have completed before the connection failed; do not assume it failed
+or resubmit a GPU job based on a missing response.
+
 ## Training workflow
 
 1. Run `scinet_environment_check` and confirm the account, partition, Python,

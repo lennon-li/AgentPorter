@@ -16,8 +16,12 @@ After=network.target
 
 [Service]
 Type=simple
-# If installed in virtualenv or via pipx/uv, adjust executable path accordingly:
-ExecStart=%h/.local/bin/agentporter serve --host 127.0.0.1 --port 8765
+# Runs the immutable release selected by the human-run agentporter-deploy
+# (docs/deployment.md), never the agent-writable repo checkout or its .venv.
+# -I: ignore PYTHONPATH, user site-packages and the current directory.
+ExecStart=%h/.local/share/agentporter/current/venv/bin/python -I -m agentporter.cli serve --host 127.0.0.1 --port 8765
+UnsetEnvironment=PYTHONPATH PYTHONHOME PYTHONSTARTUP VIRTUAL_ENV
+Environment=PYTHONNOUSERSITE=1
 Restart=always
 RestartSec=5
 KillMode=process

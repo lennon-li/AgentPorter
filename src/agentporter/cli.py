@@ -238,6 +238,79 @@ def agents(config_dir):
         click.echo()
 
 
+@main.command(name="deploy-check")
+@click.option("--url", default=None, help="Server base URL (default: http://<config host>:<port>)")
+@click.option("--wait", default=0.0, type=float, help="Seconds to poll until the live server matches disk")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+@click.option("--expect-fingerprint", default=None, help="Expected live fingerprint (e.g. from a release RELEASE.json) instead of this process's disk")
+@click.option("--expect-path", default=None, help="Expected live package path (e.g. the release site-packages/agentporter)")
+@click.option("--expect-pid", default=None, type=int, help="Expected live server PID (systemd MainPID); catches a duplicate port owner")
+def deploy_check(url, wait, config_dir, expect_fingerprint, expect_path, expect_pid):
+    """Read-only: prove the live server runs the expected source (exit 0) or not (exit 1).
+
+    Never restarts, writes or deploys anything.
+    """
+    import json
+    import time
+    import httpx
+    from importlib import metadata
+    from agentporter.deployinfo import PACKAGE_ROOT, source_fingerprint
+
+    cfg = Config(config_dir=config_dir)
+    disk = expect_fingerprint or source_fingerprint()
+    want_path = Path(expect_path).resolve() if expect_path else PACKAGE_ROOT
+    click.echo(f"Expected path:     {want_path}")
+    try:
+        direct = metadata.distribution("agentporter").read_text("direct_url.json") or ""
+        editable = bool(json.loads(direct).get("dir_info", {}).get("editable")) if direct else False
+    except Exception:
+        editable = False
+    click.echo(f"Editable install:  {editable}")
+    click.echo(f"Expected fp:       {disk}")
+
+    base = (url or f"http://{cfg.server.host}:{cfg.server.port}").rstrip("/")
+    headers = {cfg.security.header_name: cfg.api_key}
+    deadline = time.monotonic() + max(wait, 0.0)
+    live, error = None, None
+    while True:
+        try:
+            # trust_env=False: never send the API key through env-configured proxies.
+            resp = httpx.get(f"{base}/api/v1/server/deploy-info", headers=headers, timeout=5.0,
+                             trust_env=False)
+            if resp.status_code == 200:
+                live, error = resp.json(), None
+            else:
+                live, error = None, f"HTTP {resp.status_code}"
+        except httpx.HTTPError as exc:
+            live, error = None, f"{type(exc).__name__}: {exc}"
+        if (live and live.get("loaded_fingerprint") == disk and not live.get("stale")
+                and (expect_pid is None or live.get("pid") == expect_pid)):
+            break
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(1.0)
+
+    if live is None:
+        click.echo(f"Live server:       unreachable or pre-fingerprint build ({error})")
+        click.echo("RESULT: UNVERIFIED - restart/activate the service, then re-run deploy-check.")
+        sys.exit(1)
+    click.echo(f"Live pid/started:  {live.get('pid')} @ {live.get('started_at')}")
+    click.echo(f"Live package path: {live.get('package_path')}")
+    click.echo(f"Live loaded fp:    {live.get('loaded_fingerprint')}")
+    for name, path in (live.get("modules") or {}).items():
+        click.echo(f"  {name}: {path}")
+    if expect_pid is not None and live.get("pid") != expect_pid:
+        click.echo(f"RESULT: MISMATCH - port served by pid {live.get('pid')}, not the unit's MainPID {expect_pid} (duplicate/stray server).")
+        sys.exit(1)
+    if Path(str(live.get("package_path"))).resolve() != want_path:
+        click.echo("RESULT: MISMATCH - live server imports a different package copy (shadow install).")
+        sys.exit(1)
+    if live.get("loaded_fingerprint") != disk or live.get("stale"):
+        click.echo("RESULT: STALE - live server code differs from the expected fingerprint.")
+        sys.exit(1)
+    click.echo("RESULT: ACTIVE - live server runs exactly the expected source.")
+
+
 @main.group()
 def key():
     """Manage AgentPorter API authentication keys."""

@@ -37,7 +37,7 @@ class ScinetSetupRequest(BaseModel):
     experiment: ScinetExperiment = "laya_smoke"
     # Only for record_approvals.
     reviewer: str | None = Field(default=None, max_length=64)
-    confirmation: str | None = Field(default=None, max_length=64)
+    confirmation: str | None = Field(default=None, max_length=128)
     approved_fields: list[str] | None = Field(default=None, max_length=5)
     device: Literal["cuda"] | None = None
 

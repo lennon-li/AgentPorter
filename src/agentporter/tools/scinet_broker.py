@@ -287,7 +287,22 @@ class ScinetBroker:
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, timeout=5, check=False,
             )
-            return result.returncode == 0
+            if result.returncode != 0:
+                return False
+            # A mux listener can survive a dead TCP connection. Verify the
+            # cluster responds without permitting a fresh authentication.
+            probe = subprocess.run(
+                [
+                    "/usr/bin/ssh", "-F", "/dev/null", "-S", path, "-T",
+                    "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+                    "-o", "ProxyCommand=/bin/false", "-o", "ControlMaster=no",
+                    "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes",
+                    "-l", self.user, self.host, "/usr/bin/true",
+                ],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, timeout=5, check=False,
+            )
+            return probe.returncode == 0
         except (OSError, subprocess.TimeoutExpired):
             return False
 
@@ -298,6 +313,9 @@ class ScinetBroker:
                 self._login_reason = None
             return {"state": "authenticated", "success": True}
         with self._login_lock:
+            if self._login_state == "authenticated":
+                self._login_state = "failed"
+                self._login_reason = "scinet_connection_unresponsive"
             state = self._login_state
             reason = self._login_reason
         return {"state": state, "success": False, **({"reason": reason} if reason else {})}
@@ -307,6 +325,7 @@ class ScinetBroker:
             "/usr/bin/ssh", "-F", "/dev/null", "-M", "-S",
             control_socket or self.login_control_socket,
             "-N", "-T", "-f", "-o", "ControlPersist=12h", "-o", "BatchMode=no",
+            "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3",
             # Some SciNet accounts require an existing host public key before Duo.
             "-o", "PreferredAuthentications=publickey,keyboard-interactive",
             "-o", "KbdInteractiveAuthentication=yes", "-o", "HostbasedAuthentication=no",

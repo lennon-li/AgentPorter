@@ -13,7 +13,11 @@ chmod 700 "$runtime"
 
 if ssh -S "$socket" -O check \
     -l yeli -o BatchMode=yes -o StrictHostKeyChecking=yes \
-    trillium-gpu.alliancecan.ca >/dev/null 2>&1; then
+  trillium-gpu.alliancecan.ca >/dev/null 2>&1 &&
+  timeout 8s ssh -S "$socket" -T -l yeli \
+    -o BatchMode=yes -o StrictHostKeyChecking=yes \
+    -o ProxyCommand=/bin/false -o ControlMaster=no \
+    trillium-gpu.alliancecan.ca /usr/bin/true >/dev/null 2>&1; then
   echo "SciNet broker session is already authenticated"
   exit 0
 fi
@@ -24,6 +28,8 @@ fi
 
 exec ssh -M -S "$socket" -N -T -f \
   -o ControlPersist=12h \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
   -o BatchMode=no \
   -o PreferredAuthentications=publickey,keyboard-interactive \
   -o KbdInteractiveAuthentication=yes \

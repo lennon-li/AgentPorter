@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from agentporter import __version__
+from agentporter.deployinfo import deploy_info
 from agentporter.config import Config
 from agentporter.auth import RateLimiter
 from agentporter.middleware import SecurityMiddleware
@@ -184,6 +185,12 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         return _scinet_login(workspace_id=workspace_id, action=action)
 
     @mcp.tool()
+    @monitored_tool("server_deploy_info")
+    def server_deploy_info() -> dict:
+        """Report the running AgentPorter code fingerprint and whether src/ changed since startup."""
+        return deploy_info()
+
+    @mcp.tool()
     @monitored_tool("scinet_stage")
     def scinet_stage(workspace_id: str) -> dict:
         """Stage the approved Laya handoff into a dedicated SciNet directory."""
@@ -245,7 +252,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         workspace_id: str, stage_id: str, reviewer: str, confirmation: str,
         approved_fields: list[str], device: str = "cuda", experiment: str = "laya_smoke",
     ) -> dict:
-        """Record the five explicit human smoke approvals for one staged SciNet run."""
+        """Record explicit human approvals (laya_smoke, laya_expA or stage-bound laya_expB) for one staged SciNet run."""
         return _scinet_training["scinet_record_approvals"](
             workspace_id=workspace_id, stage_id=stage_id, reviewer=reviewer,
             confirmation=confirmation, approved_fields=approved_fields,
@@ -559,6 +566,12 @@ def create_asgi_app(config: Config) -> ASGIApp:
     @app.get("/health")
     async def health():
         return JSONResponse({"status": "healthy"})
+
+    # Authenticated (not in the public allowlist) so source fingerprints and
+    # host paths are never exposed through the tunnel without the API key.
+    @app.get("/api/v1/server/deploy-info", operation_id="server_deploy_info")
+    async def server_deploy_info():
+        return JSONResponse(deploy_info())
     
     app.include_router(api_router, prefix="/api/v1")
     # streamable_http_app already serves its endpoint at /mcp. Mounting it at
@@ -589,6 +602,7 @@ def create_asgi_app(config: Config) -> ASGIApp:
         # Asgard and BCC alike (read_file/exec_run cover artifacts).
         action_schema_exclusions = {
             "health",
+            "server_deploy_info",
             "git_branch",
             "git_show",
         "git_status",

@@ -374,3 +374,45 @@ def test_submit_rejects_directives_after_executable_statement(tmp_path):
     result, call, exc = submit_with_template(tmp_path, bad)
     assert exc is not None and "precede executable" in str(exc)
     assert call.call_count == 0
+
+
+def _run_reader(root, job_id, kind, exp="laya-smoke"):
+    import subprocess
+    import sys
+    proc = subprocess.run([sys.executable, "-c", training.REMOTE_FILE_READER, str(root), job_id, kind, exp],
+                          capture_output=True)
+    return proc.returncode, proc.stdout
+
+
+def test_job_logs_expose_only_allowlisted_extract_time(tmp_path):
+    import base64
+    job = tmp_path / "laya-smoke" / "1089384"
+    (job / "sub").mkdir(parents=True)
+    (job / "A-extract.time").write_text("real 1.5\n")
+    (job / "sub" / "A-extract.time").write_text("nested")
+    (job / "other.time").write_text("nope")
+    (job / "metrics.json").write_text("{}")
+    for kind in ("all", "metrics"):
+        code, out = _run_reader(tmp_path, "1089384", kind)
+        assert code == 0
+        files = {f["path"]: f for f in json.loads(out)["files"]}
+        assert set(files) == {"laya-smoke/1089384/A-extract.time", "laya-smoke/1089384/metrics.json"}
+        item = files["laya-smoke/1089384/A-extract.time"]
+        assert base64.b64decode(item["content_base64"]) == b"real 1.5\n"
+    code, out = _run_reader(tmp_path, "1089384", "stdout")
+    assert json.loads(out)["files"] == []
+
+
+def test_extract_time_symlink_oversize_and_bad_job_id(tmp_path):
+    job = tmp_path / "laya-smoke" / "1089384"
+    job.mkdir(parents=True)
+    secret = tmp_path / "secret"
+    secret.write_text("s")
+    (job / "A-extract.time").symlink_to(secret)
+    code, out = _run_reader(tmp_path, "1089384", "all")
+    assert json.loads(out)["files"] == []
+    (job / "A-extract.time").unlink()
+    (job / "A-extract.time").write_bytes(b"x" * 300000)
+    item = json.loads(_run_reader(tmp_path, "1089384", "all")[1])["files"][0]
+    assert item["size"] == 300000 and "content_base64" not in item
+    assert _run_reader(tmp_path, "../x", "all")[0] == 64

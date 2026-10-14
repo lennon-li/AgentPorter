@@ -149,8 +149,40 @@ def test_login_argv_allows_host_public_key_then_duo_with_fixed_target(tmp_path):
     assert "StrictHostKeyChecking=yes" in argv
     assert "ClearAllForwardings=yes" in argv
     assert "ForwardAgent=no" in argv
+    assert "ServerAliveInterval=30" in argv
+    assert "ServerAliveCountMax=3" in argv
     assert not any(arg in {"-L", "-R", "-D", "-W"} for arg in argv)
     assert not any(arg.startswith("ProxyCommand=") for arg in argv)
+
+
+@pytest.mark.parametrize("timeout_probe", [False, True])
+def test_master_health_requires_remote_response_not_just_mux_listener(tmp_path, timeout_probe):
+    import subprocess
+
+    broker = ScinetBroker(str(tmp_path / "broker.sock"), str(tmp_path / "control.sock"),
+                          "trillium-gpu.alliancecan.ca", "yeli")
+    probe = subprocess.TimeoutExpired("ssh", 5) if timeout_probe else SimpleNamespace(returncode=255)
+    with (
+        patch("agentporter.tools.scinet_broker._control_socket_available", return_value=True),
+        patch("agentporter.tools.scinet_broker.subprocess.run",
+              side_effect=[SimpleNamespace(returncode=0), probe]) as run,
+    ):
+        assert broker._master_is_running() is False
+        argv = run.call_args.args[0]
+        assert argv[-1] == "/usr/bin/true"
+        assert "ProxyCommand=/bin/false" in argv
+        assert "BatchMode=yes" in argv
+        assert run.call_args.kwargs["timeout"] == 5
+
+
+def test_stale_authenticated_status_is_reported_as_connection_failure(tmp_path):
+    broker = ScinetBroker(str(tmp_path / "broker.sock"), str(tmp_path / "control.sock"),
+                          "trillium-gpu.alliancecan.ca", "yeli")
+    broker._login_state = "authenticated"
+    with patch.object(broker, "_master_is_running", return_value=False):
+        assert broker._login_status() == {
+            "state": "failed", "success": False, "reason": "scinet_connection_unresponsive",
+        }
 
 
 def test_login_status_only_reports_verified_master(tmp_path):

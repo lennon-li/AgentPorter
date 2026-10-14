@@ -68,8 +68,34 @@ has the separate allow_scinet_training permission.
   `I approve all 5` as `confirmation`, `reviewer` equal to the authorized
   reviewer (`AGENTPORTER_SCINET_APPROVAL_REVIEWER`, default = the broker's
   SciNet `user`; agent-like names are rejected), `approved_fields` listing
-  exactly those five, and a stage created by the calling workspace. Only
-  laya_smoke is supported; no paths or commands are accepted. On SciNet a
+  exactly those five, and a stage created by the calling workspace.
+  `experiment: laya_expA` is also supported: it records only
+  head_contract_reviewed_by, compute_approved_by and gpu_allocation_approved_by
+  (plus `device: cuda`) and requires the exact confirmation
+  `I approve laya_expA on 1 H100 GPU for at most 01:00:00`. The approved
+  limits (1 GPU, H100, max 01:00:00) are stored in the stage ledger;
+  scinet_preflight then reports `resource_limits` and is not ready, and
+  scinet_submit refuses laya_expA, if the configured training_full_walltime
+  exceeds 01:00:00. It does not enable full runs (training_allow_full_runs is
+  still required) and writes none of the smoke/expB-only fields.
+  `experiment: laya_expB` records only experiment_b_approved_by (plus
+  `device: cuda`) and requires a **separate, stage-bound** confirmation that
+  embeds the exact 32-hex stage id:
+  `I approve laya_expB for stage <stage_id> on 1 H100 GPU for at most 01:00:00`.
+  For the current B stage that is exactly
+  `I approve laya_expB for stage 9879564934e94665b71d8947ef74d896 on 1 H100 GPU for at most 01:00:00`.
+  The A and smoke confirmations never satisfy it, and a confirmation for one
+  stage is refused on any other. The ledger entry stores reviewer, stage_id,
+  confirmation and limits (1 GPU, H100, max 01:00:00). laya_expB is fail-closed
+  on that ledger entry: scinet_preflight reports `ledgered_approval` and is not
+  ready, and scinet_submit refuses laya_expB before any remote call, unless an
+  untampered entry for this exact stage exists and (preflight) the pins.json
+  approver equals its reviewer. A pins.json value alone (for example
+  experiment_b_approved_by written by the smoke approval or by hand) does not
+  authorize a full B run through AgentPorter. The same 01:00:00 walltime cap,
+  training_allow_full_runs opt-in and once-per-stage rule apply. Only the human
+  may state the B confirmation; agents must never supply it on their own. No
+  paths or commands are accepted. On SciNet a
   fixed script takes an exclusive lock, refuses null-only exceptions (any
   existing non-null value differing from the request, including device,
   aborts with no change), updates atomically (temp file + fsync + rename),
@@ -91,7 +117,10 @@ has the separate allow_scinet_training permission.
   15 minutes. laya_expA / laya_expB are refused unless the private config
   sets training_allow_full_runs: true; walltime comes only from
   training_full_walltime (HH:MM:SS, under 24 h, default 02:00:00), the staged
-  template hash must match, nodes/GPU are exactly 1, and a stage can submit
+  template hash must match, nodes/GPU are exactly 1, the template must contain
+  exactly one `#SBATCH --time=@WALLTIME_HH_MM_SS@` and no other Slurm time
+  directive (the placeholder may recur outside `#SBATCH` lines, e.g. a soft
+  trainer budget, and receives the same walltime), and a stage can submit
   each full experiment only once. Published sbatch names embed the script hash
   so retries are idempotent.
 - scinet_job_status(workspace_id, job_id) accepts only job IDs recorded from
@@ -113,7 +142,8 @@ socket must already be authenticated; missing or expired masters fail closed.
    scinet_setup and poll scinet_setup_status until complete.
 4. Run scinet_preflight; a human reviews pins.json and the gates, then either
    edits the approvals themselves or explicitly states "I approve all 5" so
-   scinet_record_approvals can record them under their identity.
+   scinet_record_approvals can record them under their identity. laya_expB
+   needs its own later statement of the stage-bound B confirmation above.
 5. Re-run scinet_preflight until ready, then scinet_submit laya_smoke; full
    A/B only after private opt-in.
 6. Monitor with scinet_job_status and retrieve bounded results with

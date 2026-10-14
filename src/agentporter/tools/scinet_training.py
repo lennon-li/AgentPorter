@@ -2,8 +2,9 @@
 
 Fixed actions cover stage, login-node setup, preflight, bounded submission,
 status and logs.  Approvals are recorded only by the audited scinet_record_approvals action, which
-needs explicit human confirmation, a fixed authorized reviewer, the exact stage
-and the five smoke fields; they are never inferred.  Duo is never automated.
+needs explicit per-experiment human confirmation, a fixed authorized reviewer,
+the exact stage and that experiment's exact fields (laya_smoke, laya_expA, and
+laya_expB with a stage-bound confirmation); they are never inferred.  Duo is never automated.
 """
 
 from __future__ import annotations
@@ -40,6 +41,20 @@ APPROVAL_FIELDS = {
     "laya_expB": ["experiment_b_approved_by"],
 }
 APPROVAL_CONFIRMATION = "I approve all 5"
+# laya_expB's confirmation is stage-bound: {stage_id} is replaced by the exact 32-hex stage id.
+APPROVAL_CONFIRMATIONS = {
+    "laya_smoke": APPROVAL_CONFIRMATION,
+    "laya_expA": "I approve laya_expA on 1 H100 GPU for at most 01:00:00",
+    "laya_expB": "I approve laya_expB for stage {stage_id} on 1 H100 GPU for at most 01:00:00",
+}
+# Resource bounds the human approved together with the experiment; enforced at preflight and submit.
+APPROVAL_LIMITS = {
+    "laya_expA": {"gpus": 1, "gpu_type": "H100", "max_walltime": "01:00:00"},
+    "laya_expB": {"gpus": 1, "gpu_type": "H100", "max_walltime": "01:00:00"},
+}
+# Experiments that can only be preflight-ready / submitted after an AgentPorter-ledgered approval
+# for this exact stage (pins alone are not enough, e.g. smoke also writes experiment_b_approved_by).
+LEDGERED_APPROVAL_REQUIRED = frozenset({"laya_expB"})
 APPROVAL_DEVICE = "cuda"
 AGENT_APPROVER_RE = re.compile(r"agent|copilot|phil|claude|gpt|bot|automat|agentporter", re.I)
 SETUP_MAX_ATTEMPTS = 5
@@ -225,12 +240,20 @@ print(json.dumps({"pins_sha256": hashlib.sha256(raw).hexdigest(), "pins": out}, 
 REMOTE_APPROVAL_RECORDER = r'''
 import fcntl, hashlib, json, os, re, sys, tempfile, time
 pins, reviewer, device, fields_json, stage_id, workspace_id = sys.argv[1:7]
+experiment = sys.argv[7] if len(sys.argv) > 7 else "laya_smoke"
 fields = json.loads(fields_json)
+EXPECTED = {
+    "laya_smoke": ["compute_approved_by", "experiment_b_approved_by", "gpu_allocation_approved_by",
+                   "head_contract_reviewed_by", "smoke_approved_by"],
+    "laya_expA": ["compute_approved_by", "gpu_allocation_approved_by", "head_contract_reviewed_by"],
+    "laya_expB": ["experiment_b_approved_by"],
+}
 def out(state, code, **extra):
     print(json.dumps(dict(extra, state=state), sort_keys=True))
     raise SystemExit(code)
 if not re.fullmatch(r"[a-f0-9]{32}", stage_id) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", reviewer) \
-        or device != "cuda" or not isinstance(fields, list) or not fields:
+        or device != "cuda" or not isinstance(fields, list) or not fields \
+        or experiment not in EXPECTED or sorted(map(str, fields)) != EXPECTED[experiment]:
     out("refused", 64, error="invalid_arguments")
 if os.path.islink(pins) or not os.path.isfile(pins) or os.path.islink(os.path.dirname(pins)):
     out("refused", 66, error="pins_missing_or_unsafe")
@@ -271,7 +294,8 @@ with open(os.path.join(pdir, ".approvals.lock"), "a") as lock:
             os.unlink(tmp)
         raise
     entry = {"time": time.strftime("%FT%TZ", time.gmtime()), "stage_id": stage_id,
-             "workspace_id": workspace_id, "reviewer": reviewer, "changed_fields": changed,
+             "workspace_id": workspace_id, "experiment": experiment,
+             "reviewer": reviewer, "changed_fields": changed,
              "pins_sha256_before": before, "pins_sha256_after": after, "via": "agentporter"}
     afd = os.open(os.path.join(pdir, "approvals.audit.jsonl"),
                   os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
@@ -315,6 +339,8 @@ if exp_dir not in {"laya-smoke", "laya-expA", "laya-expB"}:
 job_root, log_root = os.path.join(root, exp_dir, job_id), os.path.join(root, "logs")
 if kind not in {"all", "stdout", "stderr", "metrics", "manifests", "checkpoints"}:
     raise SystemExit(64)
+if not job_id.isdigit():
+    raise SystemExit(64)
 metrics = {"run.json", "metrics.json", "input-hashes.txt", "pip-freeze.txt"}
 manifests = {"bundle_manifest.json", "HANDOFF.json", "SHA256SUMS", "pins.json", "input-hashes.txt"}
 files, seen, total = [], set(), 0
@@ -331,6 +357,8 @@ for base in (log_root, job_root):
             checkpoint = entry.endswith((".safetensors", ".npz"))
             textlog = entry.endswith((".out", ".err"))
             ismetric, ismanifest = entry in metrics, entry in manifests
+            if entry == "A-extract.time" and current == job_root:
+                ismetric = True
             selected = kind == "all" and (checkpoint or textlog or ismetric or ismanifest)
             selected |= kind == "stdout" and entry.endswith(".out")
             selected |= kind == "stderr" and entry.endswith(".err")
@@ -412,11 +440,57 @@ def _gate_script(py: str, repo: str, pins: str, experiment: str) -> list[list[st
     return [verify, ("gate-expB", [py, lora, "gate", *gate_b])]
 
 
+def _seconds(walltime: str) -> int:
+    h, m, s = (int(x) for x in walltime.split(":"))
+    return h * 3600 + m * 60 + s
+
+
+def _approved_limits(record: dict, experiment: str) -> dict | None:
+    """Tightest resource limits recorded with this stage's approvals for experiment."""
+    limits = [a.get("limits") for a in record.get("approvals") or []
+              if a.get("experiment") == experiment and isinstance(a.get("limits"), dict)]
+    if not limits:
+        return None
+    return min(limits, key=lambda x: _seconds(x["max_walltime"]))
+
+
+def _required_confirmation(experiment: str, stage_id: str) -> str:
+    return APPROVAL_CONFIRMATIONS[experiment].replace("{stage_id}", stage_id)
+
+
+def _ledgered_approval_reviewers(record: dict, experiment: str, stage_id: str) -> set[str]:
+    """Reviewers of AgentPorter-recorded approvals bound to this stage and experiment."""
+    return {a.get("reviewer") for a in record.get("approvals") or []
+            if a.get("experiment") == experiment and a.get("stage_id") == stage_id
+            and a.get("confirmation") == _required_confirmation(experiment, stage_id)
+            and a.get("limits") == APPROVAL_LIMITS.get(experiment) and a.get("reviewer")}
+
+
 def _full_walltime(settings) -> str:
     walltime = str(getattr(settings, "training_full_walltime", "") or "")
     if not WALLTIME_RE.fullmatch(walltime) or walltime == "00:00:00":
         raise PermissionError("SciNet full-run walltime is not configured safely")
     return walltime
+
+
+FULL_TIME_DIRECTIVE = "#SBATCH --time=@WALLTIME_HH_MM_SS@"
+
+
+def _validate_full_walltime_placeholders(script: str) -> None:
+    """Require one exact Slurm time directive; the placeholder may recur only outside #SBATCH lines."""
+    time_directives, placeholder_directives = [], []
+    for line in script.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("#SBATCH"):
+            continue
+        args = stripped[len("#SBATCH"):].split()
+        if args and (args[0].startswith("--time") or args[0].startswith("-t")):
+            time_directives.append(line)
+        if "@WALLTIME_HH_MM_SS@" in line:
+            placeholder_directives.append(line)
+    if time_directives != [FULL_TIME_DIRECTIVE] or placeholder_directives != [FULL_TIME_DIRECTIVE]:
+        raise ValueError("Full-run template must have exactly one "
+                         f"'{FULL_TIME_DIRECTIVE}' directive and no other Slurm time directive")
 
 
 def _settings_ready(settings) -> None:
@@ -721,17 +795,37 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
             value = (pins_info or {}).get("pins", {}).get(field)
             approvals[field] = {"recorded": bool(value), "approver": value if value else None,
                                 "suspect_agent_identity": bool(value and AGENT_APPROVER_RE.search(str(value)))}
+        stage_record = ledger.stage(stage_id)
+        limits = _approved_limits(stage_record, experiment)
+        resources_ok = True
+        if limits is not None:
+            walltime = str(getattr(settings, "training_full_walltime", "") or "")
+            resources_ok = bool(WALLTIME_RE.fullmatch(walltime)) and walltime != "00:00:00" \
+                and _seconds(walltime) <= _seconds(limits["max_walltime"])
+            response["resource_limits"] = {
+                "approved": limits, "configured_walltime": walltime, "configured_gpus": 1,
+                "full_runs_enabled": bool(getattr(settings, "training_allow_full_runs", False)),
+                "within_approved_limits": resources_ok}
+        if experiment in LEDGERED_APPROVAL_REQUIRED:
+            reviewers = _ledgered_approval_reviewers(stage_record, experiment, stage_id)
+            bound = bool(reviewers) and limits is not None \
+                and all(a["approver"] in reviewers for a in approvals.values())
+            resources_ok = resources_ok and bound
+            response["ledgered_approval"] = {"required": True, "recorded": bool(reviewers),
+                                             "bound_to_pins": bound}
         response.update({
             "gates": gates, "approvals": approvals,
             "pins_sha256": (pins_info or {}).get("pins_sha256"),
             "pins": (pins_info or {}).get("pins"),
             "pins_missing": pins_info is None,
             "ready": expected <= passed and pins_info is not None
-            and all(a["recorded"] and not a["suspect_agent_identity"] for a in approvals.values()),
-            "setup_state": ledger.stage(stage_id).get("setup_state"),
+            and all(a["recorded"] and not a["suspect_agent_identity"] for a in approvals.values())
+            and resources_ok,
+            "setup_state": stage_record.get("setup_state"),
             "human_approval_steps": [
                 "On a SciNet login node, as yourself, review " + pins + " and the gate output above.",
-                "Either edit the null *_by fields with your own name, AgentPorter never writes them without explicit human confirmation via scinet_record_approvals ('I approve all 5').",
+                "Either edit the null *_by fields with your own name, AgentPorter never writes them without explicit human confirmation via scinet_record_approvals ("
+                + repr(_required_confirmation(experiment, stage_id)) + ").",
                 "Re-run scinet_preflight and confirm pins_sha256 matches what you reviewed before scinet_submit.",
             ],
         })
@@ -742,33 +836,50 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
                                 confirmation: str, approved_fields: list[str],
                                 device: str = APPROVAL_DEVICE,
                                 experiment: str = "laya_smoke") -> dict:
-        """Record the five explicit human smoke approvals for one staged run; fail closed."""
+        """Record explicit human approvals (laya_smoke, laya_expA or stage-bound laya_expB); fail closed."""
+        if experiment not in APPROVAL_CONFIRMATIONS:
+            raise ValueError("Approvals can only be recorded for laya_smoke, laya_expA or laya_expB")
         user, _, record = _staged(workspace_id, stage_id)
         authorized = str(getattr(settings, "approval_reviewer", "") or settings.user)
-        if experiment != "laya_smoke":
-            raise ValueError("Approvals can only be recorded for laya_smoke")
-        if confirmation != APPROVAL_CONFIRMATION:
-            raise PermissionError("explicit human confirmation is required: " + APPROVAL_CONFIRMATION)
+        required = _required_confirmation(experiment, stage_id)
+        if confirmation != required:
+            raise PermissionError("explicit human confirmation is required: " + required)
         if reviewer != authorized or AGENT_APPROVER_RE.search(reviewer):
             raise PermissionError("reviewer is not the authorized human reviewer")
         if device != APPROVAL_DEVICE:
             raise ValueError("device must be cuda")
-        fields = APPROVAL_FIELDS["laya_smoke"]
+        fields = APPROVAL_FIELDS[experiment]
         if not isinstance(approved_fields, list) or sorted(approved_fields) != sorted(fields):
-            raise ValueError("approved_fields must be exactly the five smoke approval fields")
+            raise ValueError(f"approved_fields must be exactly the {experiment} approval fields: "
+                             + ", ".join(fields))
         pins = record["remote_runtime"] + "/pinned/pins.json"
         result = _call(settings, user, _remote_python_command(
             _validate_python(settings.training_bootstrap_python, "bootstrap Python"),
             REMOTE_APPROVAL_RECORDER,
-            [pins, reviewer, device, json.dumps(fields), stage_id, workspace_id]), timeout=60)
+            [pins, reviewer, device, json.dumps(fields), stage_id, workspace_id, experiment]), timeout=60)
         response = _result(result)
         response.update({"command": "scinet_record_approvals", "stage_id": stage_id,
                          "experiment": experiment, "success": False, "reviewer": reviewer})
-        if result.get("error") in {"scinet_auth_required", "scinet_broker_unavailable"}:
+        if experiment in APPROVAL_LIMITS:
+            response["approved_limits"] = APPROVAL_LIMITS[experiment]
+        if result.get("error"):
             response["error"] = result["error"]
+            return response
+        if response["timed_out"]:
+            response["error"] = "approval_recording_timeout"
+            response["next"] = "run scinet_preflight to check pins before retrying approval recording"
+            return response
+        if response["truncated"]:
+            response["error"] = "invalid_approval_receipt"
+            response["reason"] = "approval_receipt_truncated"
+            return response
+        if result.get("exit_code") != 0 and not response["stdout"].strip():
+            response["error"] = "approval_recording_failed"
             return response
         try:
             report = json.loads(response["stdout"].strip().splitlines()[-1])
+            if not isinstance(report, dict):
+                raise ValueError("approval receipt must be an object")
         except (ValueError, IndexError, KeyError):
             response["error"] = "invalid_approval_receipt"
             return response
@@ -777,11 +888,16 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
         response.update(report)
         if report.get("state") in {"recorded", "unchanged"} and result.get("exit_code") == 0:
             response["success"] = True
-            if report["state"] == "recorded":
+            limits = APPROVAL_LIMITS.get(experiment)
+            # Limits are ledgered even when pins were already set so submit can enforce them.
+            if report["state"] == "recorded" or (limits and _approved_limits(record, experiment) is None):
                 entry = {"time": report.get("audit_time"), "reviewer": reviewer,
-                         "workspace_id": workspace_id, "device": device,
-                         "changed_fields": report.get("changed_fields"),
+                         "workspace_id": workspace_id, "stage_id": stage_id, "device": device,
+                         "experiment": experiment, "confirmation": required,
+                         "changed_fields": report.get("changed_fields") or [],
                          "pins_sha256": report.get("pins_sha256")}
+                if limits:
+                    entry["limits"] = dict(limits)
                 ledger.update_stage(stage_id, approvals=(record.get("approvals") or []) + [entry])
             response["next"] = "run scinet_preflight to verify gates against the updated pins"
         else:
@@ -839,6 +955,15 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
         record = ledger.stage(stage_id)
         if not record or record.get("workspace_id") != workspace_id:
             raise PermissionError("stage_id was not created by this workspace")
+        limits = _approved_limits(record, experiment)
+        if limits is not None and (limits.get("gpus") != 1 or
+                                   _seconds(walltime) > _seconds(limits["max_walltime"])):
+            raise PermissionError(f"Configured walltime {walltime} exceeds the human-approved "
+                                  f"{experiment} limit of {limits['max_walltime']} on 1 GPU")
+        if experiment in LEDGERED_APPROVAL_REQUIRED and (
+                limits is None or not _ledgered_approval_reviewers(record, experiment, stage_id)):
+            raise PermissionError(f"{experiment} requires a human approval recorded for this stage "
+                                  "via scinet_record_approvals")
         if full and ledger.jobs_for(stage_id, experiment):
             return {"target": "scinet_training", "command": "scinet_submit", "success": False,
                     "error": "already_submitted", "job_id": ledger.jobs_for(stage_id, experiment)[-1]["job_id"]}
@@ -854,8 +979,8 @@ def create_scinet_training_tool(registry, settings=None, state_dir: Path | None 
         script = script.replace("@SLURM_ACCOUNT@", account).replace("@CPUS_PER_TASK@", str(settings.training_cpus_per_task))
         script = script.replace("@SCRATCH_LOG_DIR@", logs)
         if full:
-            if script.count("@WALLTIME_HH_MM_SS@") != 1:
-                raise ValueError("Full-run template must have exactly one walltime placeholder")
+            _validate_full_walltime_placeholders(script)
+            # The Slurm directive and any soft trainer budget share the same validated walltime.
             script = script.replace("@WALLTIME_HH_MM_SS@", walltime)
         partition_in_template = script.count("@SLURM_PARTITION@")
         if partition_in_template > 1:
