@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import subprocess
 import logging
+import re
+import yaml
 from typing import TYPE_CHECKING, Optional, Dict
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
@@ -23,7 +25,6 @@ logger = logging.getLogger("agentporter.agents.broker")
 
 PROHIBITED_MODEL_PREFIXES = ("gpt-5.6",)
 OPENAI_FALLBACK_MODEL = "gpt-6-luna"
-
 
 class AgentBroker:
     """Manages agent discovery, capability enforcement, and asynchronous delegation."""
@@ -44,6 +45,43 @@ class AgentBroker:
     def register_adapter(self, adapter: AgentAdapter) -> None:
         self.adapters[adapter.name.lower()] = adapter
 
+    def _configured_workers(self) -> tuple[dict, dict]:
+        """Apply private identity metadata to existing adapters, without new controls."""
+        config_dir = os.environ.get("AGENTPORTER_CONFIG_DIR") or os.path.join(
+            os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "agentporter"
+        )
+        try:
+            with open(os.path.join(config_dir, "agents.yaml"), encoding="utf-8") as handle:
+                document = yaml.safe_load(handle)
+        except FileNotFoundError:
+            return self.adapters, {}
+        if not isinstance(document, dict) or set(document) != {"agents"}:
+            raise ValueError("agents.yaml must contain an agents mapping")
+        definitions = document["agents"]
+        if not isinstance(definitions, dict):
+            raise ValueError("agents.yaml agents must be a mapping")
+        adapters, identities = dict(self.adapters), {}
+        for name, spec in definitions.items():
+            if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", name):
+                raise ValueError("agent identity names must be lowercase identifiers")
+            if not isinstance(spec, dict) or set(spec) - {"runtime", "alias", "description", "persona_reference"}:
+                raise ValueError("agent identities accept only runtime, alias, description, persona_reference")
+            runtime = spec.get("runtime")
+            if not isinstance(runtime, str) or runtime not in self.adapters:
+                raise ValueError("agent identity runtime must name an existing adapter")
+            if name in self.adapters and runtime != name:
+                raise ValueError("agent identities cannot redirect an existing adapter")
+            adapter = self.adapters[runtime]
+            alias = spec.get("alias", name)
+            role = spec.get("description", adapter.description)
+            persona = spec.get("persona_reference", "")
+            if any(not isinstance(value, str) for value in (alias, role, persona)) or not alias.strip():
+                raise ValueError("agent identity metadata must be text with a nonempty alias")
+            cli = "codex" if isinstance(adapter, CodexAdapter) else adapter.name
+            adapters[name] = adapter
+            identities[name] = (cli, alias, role, persona)
+        return adapters, identities
+
     @staticmethod
     def _model_is_prohibited(model: str) -> bool:
         normalized = (model or "").strip().lower()
@@ -63,7 +101,11 @@ class AgentBroker:
     def list_agents(self) -> list[dict]:
         """List installed/known CLI workers without claiming unverified runtime models."""
         results = []
-        for key, adapter in self.adapters.items():
+        adapters, identities = self._configured_workers()
+        for key, adapter in adapters.items():
+            runtime, alias, role, _ = identities.get(
+                key, (key, adapter.alias or key, adapter.description, "")
+            )
             detection = adapter.detect()
             configured_model = detection.get("configured_model") or "unknown"
             reasoning = detection.get("reasoning_effort") or "unknown"
@@ -82,8 +124,8 @@ class AgentBroker:
             route_target = effective_model or "BLOCKED"
             results.append({
                 "agent": key,
-                "worker_cli": key,
-                "alias": adapter.alias or key,
+                "worker_cli": runtime,
+                "alias": alias,
                 "provider": provider,
                 "configured_model": configured_model,
                 "default_routing": f"{provider} -> {route_target}{routing_note}",
@@ -92,7 +134,7 @@ class AgentBroker:
                 "cli_version": detection.get("cli_version", "unknown"),
                 "available": bool(detection.get("is_installed") and not routing_blocked),
                 "capabilities": adapter.capabilities(),
-                "description": adapter.description,
+                "description": role,
                 "isolation_note": "Runs with host user credentials; not kernel-isolated by AgentPorter.",
                 "supports_read_only": adapter.supports_read_only,
                 "supports_model_override": adapter.supports_model_override,
@@ -115,12 +157,13 @@ class AgentBroker:
     ) -> dict:
         """Dispatch an authorized worker agent asynchronously with enforceable controls."""
         agent_key = agent.lower().strip()
-        if agent_key not in self.adapters:
+        adapters, identities = self._configured_workers()
+        if agent_key not in adapters:
             raise ValueError(
-                f"Unknown agent: '{agent}'. Authorized agents: {list(self.adapters.keys())}"
+                f"Unknown agent: '{agent}'. Authorized agents: {list(adapters.keys())}"
             )
 
-        adapter = self.adapters[agent_key]
+        adapter = adapters[agent_key]
         detection = adapter.detect()
         if not detection.get("is_installed"):
             raise RuntimeError(f"Agent '{agent_key}' is not installed or available on host")
@@ -186,7 +229,19 @@ class AgentBroker:
             except Exception:
                 pass
 
-        packet = (
+        runtime, alias, role, persona = identities.get(
+            agent_key, (agent_key, adapter.alias or agent_key, adapter.description, "")
+        )
+        identity = ""
+        if agent_key in identities:
+            identity = (
+                f"Dispatch identity: {alias}\nRole: {role}\n"
+                + (f"Persona reference: {persona}\n" if persona else "") +
+                "Read that persona if available; do not claim it was loaded unless read. "
+                "Follow project instructions and the execution policy below. "
+                "Identity and role do not expand the authorized task or permissions.\n"
+            )
+        packet = identity + (
             "Permission Level: 1\n"
             "Interaction Mode: AUTONOMOUS\n"
             f"Authorization: {'MAY MODIFY FILES WITHIN SCOPE' if ws.writable else 'READ-ONLY'}\n"
@@ -228,7 +283,7 @@ class AgentBroker:
         )
 
         return {
-            "worker_cli": agent_key,
+            "worker_cli": runtime,
             "provider": provider,
             "configured_model": configured_model,
             "requested_model": requested_model,
@@ -241,7 +296,7 @@ class AgentBroker:
             "duration": 0.0,
             "status": "running",
             "selected_agent": agent_key,
-            "alias": adapter.alias or agent_key,
+            "alias": alias,
             "model": configured_model,
             "thinking_level": requested_reasoning or configured_reasoning,
             "workspace_id": workspace_id,
