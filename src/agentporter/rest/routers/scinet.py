@@ -24,7 +24,8 @@ class ScinetSubmitRequest(BaseModel):
 
 ScinetSetupAction = Literal[
     "start", "status", "preflight", "environment_check", "record_approvals",
-    "login_start", "login_status",
+    "login_start", "login_status", "inference_preflight", "inference_stage",
+    "inference_approve", "inference_submit", "inference_results",
 ]
 
 
@@ -34,16 +35,47 @@ class ScinetSetupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: ScinetSetupAction
     stage_id: str | None = Field(default=None, min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
+    job_id: str | None = Field(default=None, min_length=1, max_length=20, pattern=r"^[0-9]+$")
     experiment: ScinetExperiment = "laya_smoke"
-    # Only for record_approvals.
+    # Reviewer/confirmation also carry the exact stage-scoped inference approval.
     reviewer: str | None = Field(default=None, max_length=64)
-    confirmation: str | None = Field(default=None, max_length=64)
+    confirmation: str | None = Field(default=None, max_length=2048)
     approved_fields: list[str] | None = Field(default=None, max_length=5)
     device: Literal["cuda"] | None = None
 
     @model_validator(mode="after")
     def _approval_fields_only_for_record(self):
         extras = (self.reviewer, self.confirmation, self.approved_fields, self.device)
+        if self.action != "inference_results" and self.job_id is not None:
+            raise ValueError("job_id is only valid for inference_results")
+        if self.action.startswith("inference_") and self.experiment != "laya_smoke":
+            raise ValueError("inference actions use the separate laya_inference experiment")
+        if self.action == "inference_preflight" and (
+            self.stage_id is not None or self.experiment != "laya_smoke"
+            or any(v is not None for v in extras)
+        ):
+            raise ValueError("inference_preflight does not accept a stage or training experiment")
+        if self.action == "inference_stage" and (
+            self.stage_id is not None or any(v is not None for v in extras)
+        ):
+            raise ValueError("inference_stage accepts no stage or approval fields")
+        if self.action == "inference_approve":
+            if self.stage_id is None or self.reviewer is None or self.confirmation is None:
+                raise ValueError("inference_approve requires stage_id, reviewer, and confirmation")
+            if self.approved_fields is not None or self.device is not None:
+                raise ValueError("inference_approve does not accept training approval fields")
+        if self.action == "inference_submit" and (
+            self.stage_id is None or any(v is not None for v in extras)
+        ):
+            raise ValueError("inference_submit requires only stage_id")
+        if self.action == "inference_results" and (
+            self.job_id is None or self.stage_id is not None or any(v is not None for v in extras)
+        ):
+            raise ValueError("inference_results requires only numeric job_id")
+        if self.action.startswith("inference_"):
+            return self
+        if self.confirmation is not None and len(self.confirmation) > 128:
+            raise ValueError("training confirmation exceeds 128 characters")
         if self.action == "record_approvals":
             if None in extras[:3]:
                 raise ValueError("reviewer, confirmation and approved_fields are required")
@@ -149,6 +181,23 @@ def scinet_setup(workspace_id: str, req: ScinetSetupRequest, request: Request) -
             )
         if req.action == "environment_check":
             return tools["scinet_environment_check"](workspace_id=workspace_id)
+        if req.action == "inference_preflight":
+            return tools["scinet_inference_preflight"](workspace_id=workspace_id)
+        if req.action == "inference_stage":
+            return tools["scinet_inference_stage"](workspace_id=workspace_id)
+        if req.action == "inference_approve":
+            return tools["scinet_inference_approve"](
+                workspace_id=workspace_id, stage_id=req.stage_id,
+                reviewer=req.reviewer, confirmation=req.confirmation,
+            )
+        if req.action == "inference_submit":
+            return tools["scinet_inference_submit"](
+                workspace_id=workspace_id, stage_id=req.stage_id
+            )
+        if req.action == "inference_results":
+            return tools["scinet_inference_results"](
+                workspace_id=workspace_id, job_id=req.job_id
+            )
         if req.stage_id is None:
             raise ValueError("stage_id is required for this action")
         if req.action == "record_approvals":
