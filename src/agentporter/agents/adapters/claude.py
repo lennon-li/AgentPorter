@@ -3,6 +3,7 @@
 import re
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
+from agentporter.agents.policy import ExecutionPolicy
 
 
 class ClaudeAdapter(AgentAdapter):
@@ -48,12 +49,24 @@ class ClaudeAdapter(AgentAdapter):
         model: str = "",
         reasoning_effort: str = "",
         writable: bool = True,
+        policy: ExecutionPolicy | None = None,
     ) -> list[str]:
         exe = self.find_executable(["claude", "~/.npm-global/bin/claude", "~/.local/bin/claude"])
         if not exe:
             raise RuntimeError("Claude Code CLI executable not found on host")
-        if not writable:
+        policy = policy or ExecutionPolicy.for_workspace(writable=writable)
+        if not policy.workspace_write:
             raise RuntimeError("Claude adapter does not yet enforce read-only execution")
         if model or reasoning_effort:
             raise RuntimeError("Claude adapter does not yet enforce model/reasoning overrides")
-        return [exe, "-p", packet]
+        # Per-invocation permissions only; never enable bypassPermissions.
+        # Exclude project permission overrides; managed organization policy wins.
+        denied = [f"Bash({command}*)" for command in policy.denied_commands()]
+        return [
+            exe, "--setting-sources", "user",
+            "--settings", '{"permissions":{"ask":[]}}',
+            "--permission-mode", "dontAsk",
+            "--allowedTools", "Read", "Grep", "Glob", "Edit", "Write",
+            "NotebookEdit", "Bash", "--disallowedTools", *denied,
+            "-p", packet,
+        ]

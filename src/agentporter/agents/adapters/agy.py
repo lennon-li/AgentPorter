@@ -54,4 +54,5 @@ class AgyAdapter(AgentAdapter):
             raise RuntimeError("Agy adapter does not yet enforce read-only execution")
         if model or reasoning_effort:
             raise RuntimeError("Agy adapter does not yet enforce model/reasoning overrides")
-        return [exe, "-p", packet]
+        # Approve workspace file edits, not unrestricted terminal execution.
+        return [exe, "--mode", "accept-edits", "--sandbox", "-p", packet]

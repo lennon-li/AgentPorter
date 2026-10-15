@@ -38,7 +38,12 @@ def test_default_policy_constrains_sensitive_actions():
 
 def test_claude_model_override_and_non_interactive(fake_exe):
     adapter = ClaudeAdapter(executable_override=fake_exe)
-    assert adapter.build_argv(WS, "PACKET") == [fake_exe, "-p", "PACKET"]
+    argv = adapter.build_argv(WS, "PACKET")
+    assert argv[0] == fake_exe
+    assert argv[-2:] == ["-p", "PACKET"]
+    assert argv[argv.index("--permission-mode") + 1] == "dontAsk"
+    assert "Edit" in argv and "Write" in argv
+    assert "Bash(git push*)" in argv
     if adapter.supports_model_override:
         assert adapter.build_argv(WS, "PACKET", "sonnet") == [fake_exe, "--model", "sonnet", "-p", "PACKET"]
     else:
@@ -121,10 +126,14 @@ def test_phil_is_registered_with_broker():
     assert isinstance(AgentBroker(None, None).adapters["phil"], PhilAdapter)
 
 
-def test_opencode_supported_controls_fail_closed(fake_exe):
+def test_opencode_supported_controls_fail_closed(fake_exe, monkeypatch):
+    monkeypatch.setattr("agentporter.agents.adapters.opencode.subprocess.run",
+                        lambda *a, **kw: type("Result", (), {"stdout": "1.19.0"})())
     adapter = OpenCodeAdapter(executable_override=fake_exe)
     argv = adapter.build_argv(WS, "PACKET", "vertex/x")
-    assert argv == [fake_exe, "run", "-m", "vertex/x", "PACKET"]
+    assert argv[2:] == [fake_exe, "run", "--agent", "dispatch", "-m", "vertex/x", "PACKET"]
+    profile = json.loads(argv[1].split("=", 1)[1])
+    assert profile["agent"]["dispatch"]["permission"]["edit"] == "allow"
     assert not adapter.supports_read_only
     assert not adapter.supports_reasoning_override
     with pytest.raises(RuntimeError, match="read-only"):

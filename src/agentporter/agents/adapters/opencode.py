@@ -5,6 +5,7 @@ import re
 import json
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
+from agentporter.agents.policy import ExecutionPolicy
 
 
 class OpenCodeAdapter(AgentAdapter):
@@ -63,15 +64,55 @@ class OpenCodeAdapter(AgentAdapter):
         model: str = "",
         reasoning_effort: str = "",
         writable: bool = True,
+        policy: ExecutionPolicy | None = None,
     ) -> list[str]:
         exe = self.find_executable(["opencode", "~/.npm-global/bin/opencode", "~/.local/bin/opencode"])
         if not exe:
             raise RuntimeError("OpenCode CLI executable not found on host")
-        if not writable:
+        policy = policy or ExecutionPolicy.for_workspace(writable=writable)
+        if not policy.workspace_write:
             raise RuntimeError("OpenCode adapter does not yet enforce read-only execution")
         if reasoning_effort:
             raise RuntimeError("OpenCode adapter does not yet enforce reasoning overrides")
-        cmd = [exe, "run"]
+        # OpenCode changed its permission schema in v2. Never silently launch
+        # without the per-run profile on an unknown/undetectable version.
+        try:
+            version = subprocess.run(
+                [exe, "--version"], capture_output=True, text=True, timeout=5,
+                check=True,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise RuntimeError("Cannot verify OpenCode permission schema") from exc
+        match = re.fullmatch(r"(?:opencode\s+)?v?([12])\.\d+\.\d+(?:[-+][\w.-]+)?", version)
+        if not match:
+            raise RuntimeError("Unsupported OpenCode permission schema version")
+        major = int(match.group(1))
+        if major == 1:
+            permissions = {
+                "edit": "allow", "external_directory": "deny",
+                "bash": {"*": "allow", **{
+                    f"{command}*": "deny" for command in policy.denied_commands()
+                }},
+            }
+            profile = {"agent": {"dispatch": {
+                "description": "Bounded workspace worker", "mode": "primary",
+                "permission": permissions,
+            }}}
+        else:
+            permissions = [
+                {"action": "edit", "resource": "*", "effect": "allow"},
+                {"action": "external_directory", "resource": "*", "effect": "deny"},
+                {"action": "shell", "resource": "*", "effect": "allow"},
+                *({"action": "shell", "resource": f"{command}*", "effect": "deny"}
+                  for command in policy.denied_commands()),
+            ]
+            profile = {"agents": {"dispatch": {
+                "mode": "primary", "permissions": permissions,
+            }}}
+        cmd = ["/usr/bin/env", "OPENCODE_CONFIG_CONTENT=" + json.dumps(profile),
+               exe, "run", "--agent", "dispatch"]
+        if major == 2:
+            cmd.append("--standalone")
         if model:
             cmd.extend(["-m", model])
         cmd.append(packet)

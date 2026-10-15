@@ -2,6 +2,40 @@
 
 AgentPorter worker delegation is asynchronous. A successful `dispatch_agent` response means the worker process started; it does **not** mean the worker finished or that its final answer has been collected.
 
+## Writing within authorized workspaces
+
+An implementation task requires both `writable: true` and
+`allow_agent_dispatch: true` on its registered workspace. Use that workspace ID,
+not a host path or an unrelated workspace. Private identities in `agents.yaml`
+inherit their runtime's launch controls; a name or persona does not add access.
+Keep personal worker names and roles in local configuration, not package code.
+
+Writable launches use these per-invocation controls:
+
+- Codex identities: `--sandbox workspace-write`.
+- Copilot: workspace directory plus tool permissions and central command denials.
+- Claude: headless `dontAsk` with explicit read/edit/write/shell tools and central
+  command denials; no permission-bypass mode or global settings change.
+- OpenCode: a temporary invocation-only dispatch profile permits edits, denies
+  external-directory tools and central restricted command prefixes. The CLI
+  version selects its v1/v2 permission schema; unknown versions fail closed.
+- Antigravity: `--mode accept-edits --sandbox`. This CLI does not expose the same
+  fine-grained command-denial controls; terminal operations may still require
+  approval or fail. Do not represent it as equivalent enforcement to the others.
+
+These are trusted host-user CLI workers, not AgentPorter's ordinary Bubblewrap
+execution sandbox. CLI permissions and command-prefix rules are defense in
+depth, not OS-level confinement or protection against arbitrary shell syntax.
+Do not use delegation for untrusted tasks or to grant unrestricted host access.
+Commit, push, credentials, deployment and administrative operations remain
+separate from permission to edit project files. Read-only workspaces are refused
+by adapters that cannot enforce read-only operation.
+
+After a code change, a restart alone does not update an immutable release.
+Follow [deployment.md](deployment.md) for owner-controlled activation. Verify
+live `list_agents`, then dispatch a bounded file-write check in the intended
+workspace and collect its result before claiming remote editing works.
+
 ## 1. Preflight
 
 Always call `list_agents` before dispatching substantial work.

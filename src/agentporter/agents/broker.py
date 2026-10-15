@@ -258,7 +258,7 @@ class AgentBroker:
 
         controls = (
             {"policy": policy}
-            if isinstance(adapter, (CodexAdapter, CopilotAdapter))
+            if isinstance(adapter, (CodexAdapter, CopilotAdapter, ClaudeAdapter, OpenCodeAdapter))
             else {"writable": ws.writable}
         )
         cmd = adapter.build_argv(
