@@ -1,14 +1,21 @@
 import hashlib
 import base64
 import json
+import os
+import stat
+import shlex
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from agentporter.tools import scinet_inference as inference
 
 
+PRODUCTION_OWNER_GATE = inference._trusted_key_owner_uid
 RELEASE_MANIFEST = inference.MANIFEST_SHA256
 RELEASE_TEMPLATE = inference.TEMPLATE_SHA256
 RUNTIME_DIGEST = "d" * 64
@@ -18,10 +25,35 @@ CACHE = SCRATCH + "/model-cache"
 
 
 @pytest.fixture(autouse=True)
-def restore_release_pins(monkeypatch):
+def restore_release_pins(monkeypatch, tmp_path):
     # Legacy fixture generation must never leak fake release pins into other tests.
     monkeypatch.setattr(inference, "MANIFEST_SHA256", RELEASE_MANIFEST)
     monkeypatch.setattr(inference, "TEMPLATE_SHA256", RELEASE_TEMPLATE)
+    parent = tmp_path / "trusted-key"
+    parent.mkdir(mode=0o755)
+    monkeypatch.setattr(inference, "TRUSTED_APPROVAL_PUBLIC_KEY_PATH", parent / "approval.pub")
+    monkeypatch.setattr(inference, "_trusted_key_owner_uid", os.getuid)
+
+
+def _test_signer(settings):
+    settings.host = getattr(settings, "host", "trillium.example")
+    settings.user = getattr(settings, "user", "user")
+    private_key = getattr(settings, "_test_private_key", None)
+    if private_key is None:
+        private_key = Ed25519PrivateKey.generate()
+        public_bytes = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        inference.TRUSTED_APPROVAL_PUBLIC_KEY_PATH.write_bytes(base64.b64encode(public_bytes) + b"\n")
+        inference.TRUSTED_APPROVAL_PUBLIC_KEY_PATH.chmod(0o644)
+        settings._test_private_key = private_key
+    return private_key
+
+
+def _sign_challenge(staged, settings):
+    raw = base64.b64decode(staged["approval_payload_base64"], validate=True)
+    return base64.b64encode(_test_signer(settings).sign(raw)).decode("ascii")
 
 
 def runtime_metadata():
@@ -221,7 +253,8 @@ def test_remote_reader_consumes_manifest_case_inventory_not_synthetic_range():
     assert 'case_ids=case_list.split(",")' in reader
     assert 'expected={c+".json" for c in case_ids}' in reader
     assert '"P%04d_%s.json"' not in reader
-    assert 'state.split()[0]!="COMPLETED"' in reader
+    assert 'state_name=state.strip()' in reader
+    assert inference.TRES_NORMALIZER_SOURCE in reader
     assert 'names.append(entry.name)' in reader  # reject extra filenames
 
 
@@ -369,27 +402,44 @@ def test_template_digest_resources_and_walltime_are_fixed(monkeypatch):
         inference.render_inference_template(too_long, "acct", "gpu", "/scratch/u/r")
 
 
-def test_approval_phrase_binds_generated_stage_and_digest():
-    stage_id = "1" * 32
-    digest = "a" * 64
-    confirmation = inference.approval_confirmation(
-        stage_id, digest, "/scratch/laya", "acct", "gpu", RUNTIME_DIGEST
+def test_approval_payload_binds_stage_runtime_destination_reviewer_and_nonce():
+    payload = inference._approval_payload(
+        "a" * 32, "b" * 64, RUNTIME_DIGEST, SCRATCH, "acct", "gpu", "lennon", "c" * 64,
+        context={"test": "context"}, issued_at=100, not_after=3700,
     )
-    assert stage_id in confirmation and digest in confirmation and RUNTIME_DIGEST in confirmation
-    assert "/scratch/laya" in confirmation and "acct" in confirmation and "gpu" in confirmation
-    assert "1 H100" in confirmation and "00:30:00" in confirmation
+    assert payload == {
+        "domain": inference.APPROVAL_DOMAIN,
+        "stage_id": "a" * 32,
+        "manifest_sha256": "b" * 64,
+        "runtime_catalog_sha256": RUNTIME_DIGEST,
+        "destination": {"scratch": SCRATCH, "account": "acct", "partition": "gpu"},
+        "resources": {"gpu_count": 1, "gpu_type": "H100", "max_walltime": "00:30:00"},
+        "reviewer": "lennon", "nonce": "c" * 64,
+        "context": {"test": "context"}, "issued_at": 100, "not_after": 3700,
+    }
+    assert inference._canonical_json(payload).endswith(b"\n")
 
 
-def test_approval_refuses_nonhuman_identity_and_wrong_confirmation(monkeypatch, tmp_path):
+def test_approval_refuses_forged_reviewer_and_bad_signature(monkeypatch, tmp_path):
     stage_id = "3" * 32
     workspace = SimpleNamespace(path=tmp_path, allow_execute=True, allow_scinet_training=True)
     registry = SimpleNamespace(get=lambda _: workspace)
     settings = SimpleNamespace(inference_approval_reviewer="lennon",
                                training_account="acct", training_partition="gpu",
+                               training_bootstrap_python="/usr/bin/python3",
                                inference_runtime_catalog_sha256=RUNTIME_DIGEST)
+    private_key = _test_signer(settings)
+    nonce = "c" * 64
+    context = inference._approval_context(settings, "cranary", tmp_path, PYTHON, CACHE)
+    issued_at = int(time.time())
+    payload = inference._approval_payload(
+        stage_id, inference.MANIFEST_SHA256, RUNTIME_DIGEST,
+        SCRATCH, "acct", "gpu", "lennon", nonce,
+        context=context, issued_at=issued_at, not_after=issued_at + 3600,
+    )
+    digest = hashlib.sha256(inference._canonical_json(payload)).hexdigest()
     monkeypatch.setattr(inference, "_inference_settings", lambda *_: (
-        "user", workspace, "/scratch/root", "/scratch/user/run",
-        PYTHON, CACHE, "acct", "gpu",
+        "user", workspace, "/scratch/root", SCRATCH, PYTHON, CACHE, "acct", "gpu",
     ))
     tools = inference.create_scinet_inference_tools(registry, settings, tmp_path / "state")
     ledger = inference._InferenceLedger(tmp_path / "state")
@@ -398,12 +448,27 @@ def test_approval_refuses_nonhuman_identity_and_wrong_confirmation(monkeypatch, 
             "workspace_id": "cranary", "stage_id": stage_id,
             "manifest_sha256": inference.MANIFEST_SHA256, "state": "staged",
             "bundle": f"{SCRATCH}/stages/{stage_id}", **runtime_metadata(),
-            "scratch": "/scratch/user/run", "account": "acct", "partition": "gpu",
+            "scratch": SCRATCH, "account": "acct", "partition": "gpu",
+            "approval_nonce": nonce, "approval_reviewer": "lennon",
+            "approval_payload_sha256": digest,
+            "approval_context": context, "approval_issued_at": issued_at,
+            "approval_not_after": issued_at + 3600,
         }}
-    with pytest.raises(PermissionError, match="configured human approver"):
-        tools["scinet_inference_approve"]("cranary", stage_id, "agentporter", "approval")
-    with pytest.raises(ValueError, match="exactly match"):
-        tools["scinet_inference_approve"]("cranary", stage_id, "lennon", "approval")
+    valid_signature = base64.b64encode(private_key.sign(inference._canonical_json(payload))).decode("ascii")
+    with pytest.raises(PermissionError, match="reviewer"):
+        tools["scinet_inference_approve"]("cranary", stage_id, "agentporter", valid_signature)
+    with pytest.raises(PermissionError, match="signature verification"):
+        tools["scinet_inference_approve"]("cranary", stage_id, "lennon", base64.b64encode(b"x" * 64).decode())
+    wrong_stage_payload = inference._approval_payload(
+        "4" * 32, inference.MANIFEST_SHA256, RUNTIME_DIGEST,
+        SCRATCH, "acct", "gpu", "lennon", nonce,
+        context=context, issued_at=issued_at, not_after=issued_at + 3600,
+    )
+    wrong_stage_signature = base64.b64encode(
+        private_key.sign(inference._canonical_json(wrong_stage_payload))
+    ).decode("ascii")
+    with pytest.raises(PermissionError, match="signature verification"):
+        tools["scinet_inference_approve"]("cranary", stage_id, "lennon", wrong_stage_signature)
     with ledger.locked() as data:
         assert data["stages"][stage_id].get("approval") is None
 
@@ -413,7 +478,10 @@ def test_submit_rejects_missing_approval_and_prevents_replay(monkeypatch, tmp_pa
     workspace = SimpleNamespace(path=tmp_path, allow_execute=True, allow_scinet_training=True)
     registry = SimpleNamespace(get=lambda _: workspace)
     settings = SimpleNamespace(training_account="acct", training_partition="gpu",
-                               inference_runtime_catalog_sha256=RUNTIME_DIGEST)
+                               inference_runtime_catalog_sha256=RUNTIME_DIGEST,
+                               training_bootstrap_python="/usr/bin/python3",
+                               inference_approval_reviewer="lennon")
+    _test_signer(settings)
     monkeypatch.setattr(inference, "_inference_settings", lambda *_: (
         "user", workspace, "/scratch/root", "/scratch/user/run",
         PYTHON, CACHE, "acct", "gpu",
@@ -427,8 +495,10 @@ def test_submit_rejects_missing_approval_and_prevents_replay(monkeypatch, tmp_pa
             "bundle": f"/scratch/user/run/stages/{stage_id}",
             "scratch": "/scratch/user/run", "account": "acct", "partition": "gpu",
             "files": {}, "state": "staged", **runtime_metadata(),
+            "approval_reviewer": "lennon", "approval_nonce": "c" * 64,
+            "approval_payload_sha256": "d" * 64,
         }}
-    with pytest.raises(PermissionError, match="stage-scoped"):
+    with pytest.raises(PermissionError, match="signed stage-scoped"):
         tools["scinet_inference_submit"]("cranary", stage_id)
     with ledger.locked() as data:
         data["stages"][stage_id]["state"] = "submitting"
@@ -445,6 +515,7 @@ def setup_flow(monkeypatch, tmp_path):
                                inference_runtime_catalog_sha256=RUNTIME_DIGEST,
                                inference_approval_reviewer='lennon',
                                training_bootstrap_python='/usr/bin/python3')
+    _test_signer(settings)
     monkeypatch.setattr(inference, '_inference_settings', lambda *_: (
         'user', workspace, '/scratch/root', SCRATCH, PYTHON, CACHE, 'acct', 'gpu'))
     monkeypatch.setattr(inference, 'inference_bundle_path', lambda _: bundle)
@@ -477,6 +548,18 @@ def setup_flow(monkeypatch, tmp_path):
     return tools, settings, calls, remote
 
 
+def test_stage_fails_closed_without_trusted_public_key_or_configured_reviewer(monkeypatch, tmp_path):
+    tools, settings, calls, _ = setup_flow(monkeypatch, tmp_path)
+    monkeypatch.setattr(inference, "TRUSTED_APPROVAL_PUBLIC_KEY_PATH", tmp_path / "missing.pub")
+    with pytest.raises(PermissionError, match="public key file is missing"):
+        tools["scinet_inference_stage"]("cranary")
+    assert calls == []
+    settings.inference_approval_reviewer = ""
+    with pytest.raises(PermissionError, match="reviewer is not configured"):
+        tools["scinet_inference_stage"]("cranary")
+    assert calls == []
+
+
 def test_v2_stage_approval_submit_exports_and_no_replay(monkeypatch, tmp_path):
     tools, settings, calls, _ = setup_flow(monkeypatch, tmp_path)
     staged = tools['scinet_inference_stage']('cranary')
@@ -484,11 +567,12 @@ def test_v2_stage_approval_submit_exports_and_no_replay(monkeypatch, tmp_path):
     assert stage[0].isalpha() and len(stage) == 32
     assert staged['runtime_catalog_sha256'] == RUNTIME_DIGEST
     assert staged['trusted_retrieval_available'] is False
+    assert 'approval_confirmation' not in staged
     approval = tools['scinet_inference_approve'](
-        'cranary', stage, 'lennon', staged['approval_confirmation'])
+        'cranary', stage, 'lennon', _sign_challenge(staged, settings))
     assert approval['success']
     with pytest.raises(PermissionError, match='already recorded'):
-        tools['scinet_inference_approve']('cranary', stage, 'lennon', staged['approval_confirmation'])
+        tools['scinet_inference_approve']('cranary', stage, 'lennon', _sign_challenge(staged, settings))
     result = tools['scinet_inference_submit']('cranary', stage)
     assert result['job_id'] == '123456'
     assert len(calls) == 3
@@ -498,7 +582,9 @@ def test_v2_stage_approval_submit_exports_and_no_replay(monkeypatch, tmp_path):
     for value in (f'CRANARY_INFERENCE_STAGE_ID={stage}',
                   f'CRANARY_INFERENCE_RUNTIME_SHA256={RUNTIME_DIGEST}',
                   f'CRANARY_INFERENCE_RUNTIME_CATALOG={SCRATCH}/runtime-catalog.json',
-                  '--time=00:30:00', '--gpus-per-node=h100:1'):
+                  '--time=00:30:00', '--gpus-per-node=h100:1',
+                  'test ! -L /scratch/user/run/submissions',
+                  'chmod 700 /scratch/user/run/submissions'):
         assert value in script
     with pytest.raises(PermissionError, match='already reserved'):
         tools['scinet_inference_submit']('cranary', stage)
@@ -515,7 +601,7 @@ def test_v2_stage_approval_submit_exports_and_no_replay(monkeypatch, tmp_path):
 def test_bad_runtime_preflight_never_reaches_sbatch(monkeypatch, tmp_path, preflight_result):
     tools, settings, calls, remote = setup_flow(monkeypatch, tmp_path)
     staged = tools['scinet_inference_stage']('cranary')
-    tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', staged['approval_confirmation'])
+    tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', _sign_challenge(staged, settings))
     attempted = []
     monkeypatch.setattr(inference, '_call', lambda *a, **k: attempted.append(a[2]) or preflight_result)
     assert not tools['scinet_inference_submit']('cranary', staged['stage_id'])['success']
@@ -530,7 +616,7 @@ def test_changed_stage_contract_blocks_all_remote_calls(monkeypatch, tmp_path, c
     tools, settings, calls, _ = setup_flow(monkeypatch, tmp_path)
     staged = tools['scinet_inference_stage']('cranary')
     stage = staged['stage_id']
-    tools['scinet_inference_approve']('cranary', stage, 'lennon', staged['approval_confirmation'])
+    tools['scinet_inference_approve']('cranary', stage, 'lennon', _sign_challenge(staged, settings))
     if change == 'digest':
         settings.inference_runtime_catalog_sha256 = 'e' * 64
     elif change == 'missing_catalog':
@@ -543,7 +629,7 @@ def test_changed_stage_contract_blocks_all_remote_calls(monkeypatch, tmp_path, c
             elif change == 'missing_approval':
                 record.pop('approval')
             else:
-                record['approval']['limits']['gpus'] = 2
+                record['approval']['signature'] = base64.b64encode(b'x' * 64).decode()
     with pytest.raises(PermissionError):
         tools['scinet_inference_submit']('cranary', stage)
     assert len(calls) == 1
@@ -629,18 +715,360 @@ def test_remote_readonly_preflight_refuses_absent_catalog_before_imports(tmp_pat
     assert not result.stdout
 
 
-def test_rest_accepts_full_stage_runtime_confirmation_only_for_inference():
+def test_rest_requires_bounded_signature_for_inference_approval():
     from pydantic import ValidationError
     from agentporter.rest.routers.scinet import ScinetSetupRequest
     stage = 'a' * 32
-    confirmation = inference.approval_confirmation(stage, RELEASE_MANIFEST, SCRATCH,
-                                                   'acct', 'gpu', RUNTIME_DIGEST)
-    assert len(confirmation) > 128
+    signature = base64.b64encode(b'x' * 64).decode('ascii')
     request = ScinetSetupRequest(action='inference_approve', stage_id=stage,
-                                 reviewer='lennon', confirmation=confirmation)
-    assert request.confirmation == confirmation
+                                 reviewer='lennon', signature=signature)
+    assert request.signature == signature
+    with pytest.raises(ValidationError):
+        ScinetSetupRequest(action='inference_approve', stage_id=stage,
+                           reviewer='lennon', confirmation='I approve')
+    with pytest.raises(ValidationError):
+        ScinetSetupRequest(action='inference_approve', stage_id=stage,
+                           reviewer='lennon', signature=signature + 'x')
     with pytest.raises(ValidationError):
         ScinetSetupRequest(action='record_approvals', reviewer='lennon',
-                           confirmation=confirmation, approved_fields=['x'])
-    with pytest.raises(ValidationError):
-        ScinetSetupRequest(action='inference_preflight', reviewer='lennon')
+                           confirmation='I approve', approved_fields=['x'], signature=signature)
+
+
+@pytest.mark.parametrize('encoding', ['raw', 'base64', 'base64-lf'])
+def test_trusted_key_accepts_only_documented_formats(encoding):
+    settings = SimpleNamespace()
+    private = _test_signer(settings)
+    raw = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    encoded = raw if encoding == 'raw' else base64.b64encode(raw)
+    if encoding == 'base64-lf':
+        encoded += b'\n'
+    inference.TRUSTED_APPROVAL_PUBLIC_KEY_PATH.write_bytes(encoded)
+    inference._approval_public_key().verify(private.sign(b'challenge'), b'challenge')
+
+
+@pytest.mark.parametrize('unsafe', [
+    'missing', 'file-symlink', 'parent-symlink', 'directory', 'fifo', 'hardlink',
+    'file-group-write', 'file-other-write', 'parent-group-write', 'parent-other-write',
+    'file-owner', 'parent-owner', 'oversized', 'bad-base64', 'extra-newline', 'noncanonical',
+])
+def test_untrusted_public_key_file_fails_closed(monkeypatch, unsafe):
+    _test_signer(SimpleNamespace())
+    path = inference.TRUSTED_APPROVAL_PUBLIC_KEY_PATH
+    if unsafe == 'missing':
+        monkeypatch.setattr(inference, 'TRUSTED_APPROVAL_PUBLIC_KEY_PATH', path.parent / 'missing')
+    elif unsafe == 'file-symlink':
+        target = path.with_suffix('.target')
+        path.rename(target)
+        path.symlink_to(target)
+    elif unsafe == 'parent-symlink':
+        link = path.parent.with_name('parent-link')
+        link.symlink_to(path.parent, target_is_directory=True)
+        monkeypatch.setattr(inference, 'TRUSTED_APPROVAL_PUBLIC_KEY_PATH', link / path.name)
+    elif unsafe in ('directory', 'fifo'):
+        path.rename(path.with_suffix('.original'))
+        path.mkdir() if unsafe == 'directory' else os.mkfifo(path)
+    elif unsafe == 'hardlink':
+        os.link(path, path.with_suffix('.link'))
+    elif unsafe.endswith('write'):
+        target = path.parent if unsafe.startswith('parent') else path
+        target.chmod(target.stat().st_mode | (0o020 if 'group' in unsafe else 0o002))
+    elif unsafe.endswith('owner'):
+        original = Path.lstat if unsafe == 'parent-owner' else inference.os.stat
+        def wrong_owner(*args, **kwargs):
+            info = original(*args, **kwargs)
+            if str(args[0]) == (str(path.parent) if unsafe == 'parent-owner' else path.name):
+                fields = list(info)
+                fields[4] = os.getuid() + 1
+                return os.stat_result(fields)
+            return info
+        if unsafe == 'parent-owner':
+            monkeypatch.setattr(Path, 'lstat', wrong_owner)
+        else:
+            monkeypatch.setattr(inference.os, 'stat', wrong_owner)
+    else:
+        path.write_bytes({
+            'oversized': b'x' * 46, 'bad-base64': b'!' * 44,
+            'extra-newline': b'A' * 43 + b'=\n\n',
+            'noncanonical': b'A' * 42 + b'B=',
+        }[unsafe])
+    with pytest.raises(PermissionError, match='public key file'):
+        inference._approval_public_key()
+
+
+def test_root_owner_gate_is_not_derived_from_settings_or_environment(monkeypatch):
+    assert PRODUCTION_OWNER_GATE() == 0
+    monkeypatch.setattr(inference, '_trusted_key_owner_uid', PRODUCTION_OWNER_GATE)
+    _test_signer(SimpleNamespace())
+    if os.getuid() != 0:
+        with pytest.raises(PermissionError, match='public key file'):
+            inference._approval_public_key()
+
+
+def test_wrong_key_and_config_env_substitution_do_not_authorize(monkeypatch, tmp_path):
+    tools, settings, calls, _ = setup_flow(monkeypatch, tmp_path)
+    staged = tools['scinet_inference_stage']('cranary')
+    attacker = Ed25519PrivateKey.generate()
+    public = attacker.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    settings.inference_approval_public_key = base64.b64encode(public).decode()
+    monkeypatch.setenv('AGENTPORTER_SCINET_INFERENCE_APPROVAL_PUBLIC_KEY', settings.inference_approval_public_key)
+    monkeypatch.setenv('AGENTPORTER_SCINET_INFERENCE_APPROVAL_PUBLIC_KEY_PATH', '/agent/writable/key')
+    signature = base64.b64encode(attacker.sign(base64.b64decode(staged['approval_payload_base64']))).decode()
+    with pytest.raises(PermissionError, match='signature verification'):
+        tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', signature)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize('tres,valid', [
+    ('cpu=8,mem=64G,node=1,billing=8,gres/gpu=1,gres/gpu:nvidia_h100_80gb_hbm3=1', True),
+    ('gres/gpu:h100=1', True),
+    (' gres/gpu:H100 = 1 , gres/gpu = 1 , node = 1 ', True),
+    ('gres/gpu=1,gres/gpu:a100=1', False),
+    ('gres/gpu=1', False), ('cpu=8', False), ('', False),
+    ('gres/gpu:h100=1,gres/gpu:a100=1', False),
+    ('gres/gpu:h100=1,gres/gpu:nvidia_h100_80gb_hbm3=1', False),
+    ('gres/gpu=2,gres/gpu:h100=1', False), ('gres/gpu:h100=2', False),
+    ('gres/gpu:h100=1,node=2', False), ('gres/gpu:h100=1,node=0', False),
+    ('gres/gpu:h100=1,gres/gpu=0', False),
+    ('gres/gpu:h100=1,gres/gpu:h100=1', False),
+    ('gres/gpu:h100=1,gres/gpu:a100=0', False),
+    ('gres/gpu:h100=1,', False), ('gres/gpu:h100=1,garbage', False),
+    ('gres/gpu:h100=1.0', False), ('gres/gpu:h100=1G', False),
+    ('gres/gpu:h100=1,gres/gpu=1,gres/gpu=2', False),
+])
+def test_identical_remote_and_local_h100_tres_validation(monkeypatch, tmp_path, tres, valid):
+    # Extract and execute the actual remote function, not a second hand-written parser.
+    import ast
+    module = ast.parse(inference.REMOTE_INFERENCE_RESULTS)
+    function = next(n for n in module.body if isinstance(n, ast.FunctionDef))
+    namespace = {'re': __import__('re')}
+    exec(compile(ast.Module(body=[function], type_ignores=[]), '<remote-tres>', 'exec'), namespace)
+    assert namespace['_one_h100_allocation'](tres) is valid
+    assert inference._one_h100_allocation(tres) is valid
+    tools, _, _, job = _setup_results(monkeypatch, tmp_path)
+    transfer = _result_transfer('a' * 32, alloc_tres=tres)
+    monkeypatch.setattr(inference, '_call', lambda *a, **k: {
+        'exit_code': 0, 'stdout': json.dumps(transfer).encode()})
+    if valid:
+        assert tools['scinet_inference_results']('cranary', job)['success']
+    else:
+        with pytest.raises(PermissionError, match='Slurm did not attest'):
+            tools['scinet_inference_results']('cranary', job)
+
+
+def test_results_use_fixed_system_interpreter_and_pinned_code(monkeypatch, tmp_path):
+    tools, _, _, job = _setup_results(monkeypatch, tmp_path)
+    calls = []
+    def remote(_settings, _user, command, **kwargs):
+        calls.append(command)
+        tokens = command
+        assert kwargs['operation'] == 'inference_results'
+        assert kwargs['timeout'] == 60
+        assert kwargs['max_output'] == inference.MAX_RESULT_RESPONSE_BYTES
+        assert tokens[:4] == ['/usr/bin/python3', '-I', '-B', '-c']
+        assert hashlib.sha256(tokens[4].encode()).hexdigest() == inference.RESULT_READER_SHA256
+        return {'exit_code': 0, 'stdout': json.dumps(_result_transfer('a' * 32)).encode()}
+    monkeypatch.setattr(inference, '_call', remote)
+    assert tools['scinet_inference_results']('cranary', job)['success']
+    monkeypatch.setattr(inference, 'REMOTE_INFERENCE_RESULTS', inference.REMOTE_INFERENCE_RESULTS + '\n# mutated')
+    with pytest.raises(PermissionError, match='reader digest mismatch'):
+        tools['scinet_inference_results']('cranary', job)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize('use_broker', [False, True])
+def test_recorded_results_reach_real_transport_with_exact_tokens(monkeypatch, tmp_path, use_broker):
+    from agentporter.tools import scinet, scinet_broker, scinet_training
+    _, _, stage, job = _setup_results(monkeypatch, tmp_path)
+    workspace = SimpleNamespace(path=tmp_path, allow_execute=True, allow_scinet_training=True)
+    settings = SimpleNamespace(inference_runtime_catalog_sha256=RUNTIME_DIGEST,
+                               host='cluster.example', user='user', control_socket='~/.ssh/master',
+                               broker_socket=str(tmp_path / 'broker') if use_broker else '')
+    monkeypatch.setattr(inference, '_inference_settings', lambda *_: (
+        SimpleNamespace(pw_dir=str(tmp_path)), workspace, '/scratch/root', SCRATCH,
+        PYTHON, CACHE, 'acct', 'gpu'))
+    monkeypatch.setattr(inference, '_call', scinet_training._call)
+    monkeypatch.setattr(scinet_broker, '_control_socket_available', lambda _: True)
+    service = scinet_broker.ScinetBroker(str(tmp_path / 'broker'), str(tmp_path / 'master'),
+                                         settings.host, settings.user)
+    seen = []
+    def host(argv, home, **kwargs):
+        seen.append(argv)
+        tokens = shlex.split(argv[-1])
+        assert tokens[:6] == ['exec', '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin',
+                              '/usr/bin/timeout', '60s']
+        assert tokens[6:11] == ['/usr/bin/python3', '-I', '-B', '-c', inference.REMOTE_INFERENCE_RESULTS]
+        assert tokens[11:14] == [SCRATCH, job, stage]
+        assert tokens[14].split(',') == list(_cohort_for_test())
+        assert len(tokens) == 15 and kwargs['input_bytes'] is None
+        assert kwargs['max_output'] == inference.MAX_RESULT_RESPONSE_BYTES
+        return {'exit_code': 0, 'stdout': json.dumps(_result_transfer(stage)).encode(), 'stderr': b''}
+    def _cohort_for_test():
+        return [f'P{i:04d}_{kind}' for i in range(1, 22) for kind in ('pos', 'ctl')]
+    def fake_broker(settings, remote, **kwargs):
+        assert kwargs['operation'] == 'inference_results'
+        response = service._request(dict(version=1, operation=kwargs['operation'], remote=remote,
+                                         input_length=0, max_output=kwargs['max_output']), b'')
+        return {**response, 'stdout': base64.b64decode(response['stdout']),
+                'stderr': base64.b64decode(response['stderr'])}
+    monkeypatch.setattr(scinet, 'run_host_bytes', host)
+    monkeypatch.setattr(scinet_broker, 'run_host_bytes', host)
+    monkeypatch.setattr(scinet, 'broker_request', fake_broker)
+    tools = inference.create_scinet_inference_tools(SimpleNamespace(get=lambda _: workspace),
+                                                    settings, tmp_path / 'state')
+    assert tools['scinet_inference_results']('cranary', job)['success']
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize('change', ['host', 'user', 'workspace', 'python', 'bootstrap', 'cache', 'template', 'expiry', 'future', 'forged-time'])
+@pytest.mark.parametrize('phase', ['approve', 'submit'])
+def test_signed_approval_binds_context_and_validity(monkeypatch, tmp_path, change, phase):
+    tools, settings, calls, _ = setup_flow(monkeypatch, tmp_path)
+    staged = tools['scinet_inference_stage']('cranary')
+    signature = _sign_challenge(staged, settings)
+    if phase == 'submit':
+        tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', signature)
+    if change in ('host', 'user'):
+        setattr(settings, change, 'attacker.example')
+    elif change == 'bootstrap':
+        settings.training_bootstrap_python = '/scratch/attacker/python'
+    elif change == 'template':
+        monkeypatch.setattr(inference, 'TEMPLATE_SHA256', 'f' * 64)
+    elif change in ('expiry', 'future'):
+        now = staged['approval_payload']['not_after'] if change == 'expiry' else staged['approval_payload']['issued_at'] - 1
+        monkeypatch.setattr(inference.time, 'time', lambda: now)
+    elif change == 'forged-time':
+        with inference._InferenceLedger(tmp_path / 'state').locked() as data:
+            data['stages'][staged['stage_id']]['approval_not_after'] -= 1
+    else:
+        with inference._InferenceLedger(tmp_path / 'state').locked() as data:
+            context = data['stages'][staged['stage_id']]['approval_context']
+            if change == 'workspace':
+                context['workspace']['path'] = '/different/workspace'
+            else:
+                context['python' if change == 'python' else 'hf_cache'] += '/changed'
+    with pytest.raises((PermissionError, ValueError)):
+        if phase == 'approve':
+            tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', signature)
+        else:
+            tools['scinet_inference_submit']('cranary', staged['stage_id'])
+    assert len(calls) == 1
+
+
+def test_expiry_during_preflight_prevents_sbatch(monkeypatch, tmp_path):
+    tools, settings, calls, remote = setup_flow(monkeypatch, tmp_path)
+    staged = tools['scinet_inference_stage']('cranary')
+    tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', _sign_challenge(staged, settings))
+    def slow_remote(*args, **kwargs):
+        result = remote(*args, **kwargs)
+        monkeypatch.setattr(inference.time, 'time', lambda: staged['approval_payload']['not_after'])
+        return result
+    monkeypatch.setattr(inference, '_call', slow_remote)
+    with pytest.raises(PermissionError, match='expired'):
+        tools['scinet_inference_submit']('cranary', staged['stage_id'])
+    assert len(calls) == 2
+
+
+def test_bootstrap_drift_during_preflight_prevents_sbatch(monkeypatch, tmp_path):
+    tools, settings, calls, remote = setup_flow(monkeypatch, tmp_path)
+    staged = tools['scinet_inference_stage']('cranary')
+    assert staged['approval_payload']['context']['bootstrap_python'] == '/usr/bin/python3'
+    tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', _sign_challenge(staged, settings))
+    def changed_remote(*args, **kwargs):
+        result = remote(*args, **kwargs)
+        settings.training_bootstrap_python = '/scratch/attacker/python'
+        return result
+    monkeypatch.setattr(inference, '_call', changed_remote)
+    with pytest.raises(PermissionError, match='runtime context changed'):
+        tools['scinet_inference_submit']('cranary', staged['stage_id'])
+    assert len(calls) == 2  # Stage plus preflight; no sbatch call.
+
+
+@pytest.mark.parametrize('bootstrap', ['', 'python3', '/usr/bin/python3;id', None])
+def test_stage_rejects_invalid_bootstrap_before_remote_call(monkeypatch, tmp_path, bootstrap):
+    tools, settings, calls, _ = setup_flow(monkeypatch, tmp_path)
+    settings.training_bootstrap_python = bootstrap
+    with pytest.raises(PermissionError, match='bootstrap Python'):
+        tools['scinet_inference_stage']('cranary')
+    assert calls == []
+
+
+@pytest.mark.parametrize('target,change', [
+    ('parent', 'owner'), ('parent', 'mode'), ('parent', 'inode'),
+    ('file', 'owner'), ('file', 'mode'), ('file', 'inode'), ('file', 'type'),
+])
+def test_opened_public_key_metadata_must_remain_trusted(monkeypatch, target, change):
+    _test_signer(SimpleNamespace())
+    original = os.fstat
+    def changed(fd):
+        info = original(fd)
+        is_parent = stat.S_ISDIR(info.st_mode)
+        if is_parent != (target == 'parent'):
+            return info
+        fields = list(info)
+        if change == 'owner':
+            fields[4] = os.getuid() + 1
+        elif change == 'mode':
+            fields[0] |= 0o002
+        elif change == 'type':
+            fields[0] = stat.S_IFIFO | 0o644
+        else:
+            fields[1] += 1
+        return os.stat_result(fields)
+    monkeypatch.setattr(inference.os, 'fstat', changed)
+    with pytest.raises(PermissionError, match='public key file'):
+        inference._approval_public_key()
+
+
+def test_signature_cannot_replay_between_stages(monkeypatch, tmp_path):
+    tools, settings, calls, _ = setup_flow(monkeypatch, tmp_path)
+    first = tools['scinet_inference_stage']('cranary')
+    second = tools['scinet_inference_stage']('cranary')
+    assert first['approval_payload']['nonce'] != second['approval_payload']['nonce']
+    with pytest.raises(PermissionError, match='signature verification'):
+        tools['scinet_inference_approve']('cranary', second['stage_id'], 'lennon', _sign_challenge(first, settings))
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('state,exit_code,tres,valid', [
+    ('COMPLETED', '0:0', 'cpu=8,mem=64G,node=1,gres/gpu=1,gres/gpu:nvidia_h100_80gb_hbm3=1', True),
+    ('COMPLETED', '0:0', 'gres/gpu:h100=1', True),
+    ('COMPLETED+', '0:0', 'gres/gpu:h100=1', False),
+    ('COMPLETED garbage', '0:0', 'gres/gpu:h100=1', False),
+    ('FAILED', '0:0', 'gres/gpu:h100=1', False),
+    ('COMPLETED', '0:1', 'gres/gpu:h100=1', False),
+    ('COMPLETED', '0:0', 'gres/gpu:h100=1,gres/gpu:a100=1', False),
+    ('COMPLETED', '0:0', 'gres/gpu=2,gres/gpu:h100=1', False),
+    ('COMPLETED', '0:0', 'gres/gpu:a100=1', False),
+    ('MISSING_SACCT', '0:0', 'gres/gpu:h100=1', False),
+])
+def test_actual_system_python_remote_reader_scheduler_gate(tmp_path, state, exit_code, tres, valid):
+    import subprocess
+    bundle = tmp_path / 'bundle'
+    make_bundle(bundle)
+    transfer = _result_transfer('a' * 32)
+    scratch = tmp_path / 'scratch'
+    results = scratch / 'runs' / '123456' / 'results'
+    results.mkdir(parents=True)
+    for entry in transfer['files']:
+        (results / entry['name']).write_bytes(base64.b64decode(entry['data']))
+    # Keep fixed code intact except the scratch-prefix guard for local fixtures.
+    script = inference.REMOTE_INFERENCE_RESULTS.replace('r"/scratch/[A-Za-z0-9_./-]+"', 'r"/[A-Za-z0-9_./-]+"', 1)
+    row = f'123456|{state}|{exit_code}|{tres}\n'.encode()
+    stub = ('import subprocess,types\n'
+            'def scheduler(argv,**kw):\n'
+            ' assert argv == ["/usr/bin/sacct","-n","-P","-j","123456","-o","JobIDRaw,State,ExitCode,AllocTRES"]\n'
+            ' assert kw["stdin"] == subprocess.DEVNULL\n'
+            + (' raise FileNotFoundError("missing absolute sacct")\n' if state == 'MISSING_SACCT' else
+               f' return types.SimpleNamespace(returncode=0,stdout={row!r})\n')
+            + 'subprocess.run=scheduler\n')
+    cases = ','.join(entry['name'][:-5] for entry in transfer['files'])
+    result = subprocess.run(['/usr/bin/python3', '-I', '-B', '-c', stub + script,
+                             str(scratch), '123456', 'a' * 32, cases], capture_output=True, timeout=10)
+    assert result.returncode == (0 if valid else 65), result.stderr
+    returned = json.loads(result.stdout)
+    if valid:
+        assert returned['files'] == sorted(transfer['files'], key=lambda item: item['name'])
+        assert returned['job']['alloc_tres'] == tres
+    else:
+        assert returned == {'error': 'remote_read_failed' if state == 'MISSING_SACCT'
+                            else 'scheduler_attestation_failed'}

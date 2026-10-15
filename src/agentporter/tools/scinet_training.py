@@ -498,7 +498,8 @@ def _remote_python_command(python: str, script: str, args: list[str]) -> list[st
     return ["/bin/bash", "-lc", shlex.join([python, "-c", script, *args])]
 
 def _call(settings, user, remote: list[str], *, input_bytes=None,
-          timeout: float = 60, max_output: int = MAX_REMOTE_OUTPUT) -> dict:
+          timeout: float = 60, max_output: int = MAX_REMOTE_OUTPUT,
+          operation: str = "training") -> dict:
     return run_scinet_bytes(
         settings,
         user,
@@ -506,7 +507,7 @@ def _call(settings, user, remote: list[str], *, input_bytes=None,
         input_bytes=input_bytes,
         max_output=max_output,
         timeout=timeout,
-        operation="training",
+        operation=operation,
     )
 
 def _result(result: dict) -> dict:

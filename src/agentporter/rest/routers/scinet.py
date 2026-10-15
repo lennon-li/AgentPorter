@@ -37,9 +37,10 @@ class ScinetSetupRequest(BaseModel):
     stage_id: str | None = Field(default=None, min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
     job_id: str | None = Field(default=None, min_length=1, max_length=20, pattern=r"^[0-9]+$")
     experiment: ScinetExperiment = "laya_smoke"
-    # Reviewer/confirmation also carry the exact stage-scoped inference approval.
+    # Reviewer and signature carry the exact stage-scoped inference approval.
     reviewer: str | None = Field(default=None, max_length=64)
     confirmation: str | None = Field(default=None, max_length=2048)
+    signature: str | None = Field(default=None, min_length=88, max_length=88)
     approved_fields: list[str] | None = Field(default=None, max_length=5)
     device: Literal["cuda"] | None = None
 
@@ -56,24 +57,27 @@ class ScinetSetupRequest(BaseModel):
         ):
             raise ValueError("inference_preflight does not accept a stage or training experiment")
         if self.action == "inference_stage" and (
-            self.stage_id is not None or any(v is not None for v in extras)
+            self.stage_id is not None or any(v is not None for v in extras) or self.signature is not None
         ):
             raise ValueError("inference_stage accepts no stage or approval fields")
         if self.action == "inference_approve":
-            if self.stage_id is None or self.reviewer is None or self.confirmation is None:
-                raise ValueError("inference_approve requires stage_id, reviewer, and confirmation")
-            if self.approved_fields is not None or self.device is not None:
-                raise ValueError("inference_approve does not accept training approval fields")
+            if self.stage_id is None or self.reviewer is None or self.signature is None:
+                raise ValueError("inference_approve requires stage_id, reviewer, and Ed25519 signature")
+            if self.confirmation is not None or self.approved_fields is not None or self.device is not None:
+                raise ValueError("inference_approve accepts only the signed challenge fields")
         if self.action == "inference_submit" and (
-            self.stage_id is None or any(v is not None for v in extras)
+            self.stage_id is None or any(v is not None for v in extras) or self.signature is not None
         ):
             raise ValueError("inference_submit requires only stage_id")
         if self.action == "inference_results" and (
             self.job_id is None or self.stage_id is not None or any(v is not None for v in extras)
+            or self.signature is not None
         ):
             raise ValueError("inference_results requires only numeric job_id")
         if self.action.startswith("inference_"):
             return self
+        if self.signature is not None:
+            raise ValueError("signature is only valid for inference_approve")
         if self.confirmation is not None and len(self.confirmation) > 128:
             raise ValueError("training confirmation exceeds 128 characters")
         if self.action == "record_approvals":
@@ -188,7 +192,7 @@ def scinet_setup(workspace_id: str, req: ScinetSetupRequest, request: Request) -
         if req.action == "inference_approve":
             return tools["scinet_inference_approve"](
                 workspace_id=workspace_id, stage_id=req.stage_id,
-                reviewer=req.reviewer, confirmation=req.confirmation,
+                reviewer=req.reviewer, signature=req.signature,
             )
         if req.action == "inference_submit":
             return tools["scinet_inference_submit"](

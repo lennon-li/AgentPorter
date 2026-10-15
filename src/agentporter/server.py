@@ -255,16 +255,12 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     @mcp.tool()
     @monitored_tool("scinet_inference_approve")
     def scinet_inference_approve(
-        workspace_id: str, stage_id: str, reviewer: str, confirmation: str
+        workspace_id: str, stage_id: str, reviewer: str, signature: str
     ) -> dict:
-        """Record caller-asserted approval for one stage/manifest/runtime digest.
-
-        Not cryptographically authenticated. NEVER call without an explicit
-        user prompt approving this stage and its exact confirmation.
-        """
+        """Verify an offline human Ed25519 signature for this exact stage challenge."""
         return _scinet_inference["scinet_inference_approve"](
             workspace_id=workspace_id, stage_id=stage_id,
-            reviewer=reviewer, confirmation=confirmation,
+            reviewer=reviewer, signature=signature,
         )
 
     @mcp.tool()

@@ -112,3 +112,17 @@ def test_inference_runtime_catalog_rejects_malformed_digest(tmp_path):
     (cfg_dir / 'config.yaml').write_text('scinet:\n  inference_runtime_catalog_sha256: unreviewed\n')
     with pytest.raises(ValueError, match='inference_runtime_catalog_sha256'):
         Config(config_dir=cfg_dir, state_dir=tmp_path / 'state')
+
+
+@pytest.mark.parametrize("encoded", ["not-a-key", "a" * 44])
+def test_inference_approval_public_key_cannot_be_configured(tmp_path, monkeypatch, encoded):
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        f"scinet:\n  inference_approval_public_key: {encoded}\n"
+        "  inference_approval_reviewer: lennon\n"
+    )
+    monkeypatch.setenv("AGENTPORTER_SCINET_INFERENCE_APPROVAL_PUBLIC_KEY", encoded)
+    cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / "st", cache_dir=tmp_path / "cache")
+    assert not hasattr(cfg.scinet, "inference_approval_public_key")
+    assert cfg.scinet.inference_approval_reviewer == "lennon"

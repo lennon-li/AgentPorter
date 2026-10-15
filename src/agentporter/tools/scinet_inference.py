@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import secrets
 import base64
 import csv
 import io
@@ -18,6 +19,8 @@ import uuid
 import fcntl
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from agentporter.tools.scinet_training import (
     ID_RE,
@@ -28,6 +31,7 @@ from agentporter.tools.scinet_training import (
     _result,
     _validate_remote_root,
     _validate_token,
+    _validate_python,
 )
 
 STAGE = "standalone-inference"
@@ -87,14 +91,40 @@ CHECKPOINT_SHA256 = "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc
 RESUME_PROTOCOL_SHA256 = "1bdc5716853b98b887895d7088c70b0e0c5bb37d643adfa4a10de70896d7a6b4"
 
 
-REMOTE_INFERENCE_RESULTS = r'''import base64,json,os,re,stat,subprocess,sys
+# One fixed snippet is executed locally and embedded verbatim in the remote reader.
+# Generic GPU totals cannot establish H100 type without a typed allocation.
+TRES_NORMALIZER_SOURCE = r'''def _one_h100_allocation(tres):
+    if not isinstance(tres,str) or not tres or len(tres)>8192:
+        return False
+    resources={}
+    for item in tres.split(","):
+        parts=item.strip().lower().split("=")
+        if len(parts)!=2:
+            return False
+        name,count=(p.strip() for p in parts)
+        if not name or name in resources or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?(?:[kmgtpe](?:i?b)?)?",count):
+            return False
+        resources[name]=count
+    if "gres/gpu" in resources and resources["gres/gpu"]!="1":
+        return False
+    if "node" in resources and resources["node"]!="1":
+        return False
+    typed=[(k,v) for k,v in resources.items() if k.startswith("gres/gpu:")]
+    if len(typed)!=1 or typed[0][0] not in {"gres/gpu:h100","gres/gpu:nvidia_h100_80gb_hbm3"} or typed[0][1]!="1":
+        return False
+    return True
+'''
+exec(TRES_NORMALIZER_SOURCE)
+
+RESULT_READER_PYTHON = "/usr/bin/python3"
+REMOTE_INFERENCE_RESULTS = 'import base64,json,os,re,stat,subprocess,sys\n' + TRES_NORMALIZER_SOURCE + r'''
 scratch,job,stage,case_list=sys.argv[1:5]
 if not re.fullmatch(r"[1-9][0-9]{0,19}",job) or not re.fullmatch(r"[a-f0-9]{32}",stage): raise SystemExit(64)
 if not re.fullmatch(r"/scratch/[A-Za-z0-9_./-]+",scratch) or ".." in scratch.split("/") or "//" in scratch: raise SystemExit(64)
 root=scratch+"/runs/"+job+"/results"
 if os.path.islink(root) or os.path.realpath(root)!=root or not os.path.isdir(root): raise SystemExit(65)
 try:
- p=subprocess.run(["sacct","-n","-P","-j",job,"-o","JobIDRaw,State,ExitCode,AllocTRES"],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=30,check=False)
+ p=subprocess.run(["/usr/bin/sacct","-n","-P","-j",job,"-o","JobIDRaw,State,ExitCode,AllocTRES"],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=30,check=False)
  if p.returncode!=0: raise ValueError("scheduler_unavailable")
  rows=[]
  for line in p.stdout.decode("utf-8","strict").splitlines():
@@ -102,7 +132,8 @@ try:
   if len(fields)==4 and fields[0]==job: rows.append(fields)
  if len(rows)!=1: raise ValueError("scheduler_job_missing_or_ambiguous")
  jobid,state,exitcode,tres=rows[0]
- if state.split()[0]!="COMPLETED" or exitcode!="0:0" or not re.search(r"(?:^|,)gres/gpu:h100=1(?:,|$)",tres,re.I): raise ValueError("scheduler_attestation_failed")
+ state_name=state.strip()
+ if state_name!="COMPLETED" or exitcode.strip()!="0:0" or not _one_h100_allocation(tres): raise ValueError("scheduler_attestation_failed")
  names=[]
  with os.scandir(root) as it:
   for entry in it:
@@ -126,7 +157,7 @@ try:
   total+=len(data)
   if total>163840: raise ValueError("result_transfer_too_large")
   files.append({"name":name,"data":base64.b64encode(data).decode("ascii")})
- out={"job":{"job_id":jobid,"state":state.split()[0],"exit_code":exitcode,"alloc_tres":tres},"files":files}
+ out={"job":{"job_id":jobid,"state":state_name,"exit_code":exitcode.strip(),"alloc_tres":tres},"files":files}
  raw=json.dumps(out,sort_keys=True,separators=(",",":" )).encode()
  if len(raw)>262144: raise ValueError("result_response_too_large")
  sys.stdout.buffer.write(raw)
@@ -134,6 +165,9 @@ except Exception as e:
  print(json.dumps({"error":str(e) if isinstance(e,ValueError) else "remote_read_failed"},separators=(",",":")))
  raise SystemExit(65)
 '''
+
+
+RESULT_READER_SHA256 = "c0bb58eefab06f9bb5428b422d920168eb1a4de363c401054dd6d1b0140e7a61"
 
 
 def _sha256(path: Path) -> str:
@@ -335,6 +369,156 @@ def _verify_bundle(
     if files["code/inference.sbatch.template"] != TEMPLATE_SHA256:
         raise ValueError("inference Slurm template differs from the reviewed template")
     return manifest
+
+
+APPROVAL_DOMAIN = "agentporter.scinet.laya-inference.approval.v2"
+APPROVAL_LIFETIME_SECONDS = 3600
+TRUSTED_APPROVAL_PUBLIC_KEY_PATH = Path("/etc/agentporter/laya-inference-approval.pub")
+MAX_APPROVAL_PUBLIC_KEY_BYTES = 45  # raw 32 bytes or canonical base64 with optional LF
+
+
+def _trusted_key_owner_uid() -> int:
+    """Root is the production trust anchor; tests may patch this function only."""
+    return 0
+
+
+def _configured_reviewer(settings: Any) -> str:
+    reviewer = str(getattr(settings, "inference_approval_reviewer", "") or "").strip()
+    if not reviewer:
+        raise PermissionError("explicit SciNet inference approval reviewer is not configured")
+    return reviewer
+
+
+def _approval_public_key() -> Ed25519PublicKey:
+    """Read only the fixed operator-installed key, never agent configuration."""
+    path = TRUSTED_APPROVAL_PUBLIC_KEY_PATH
+    parent_fd = key_fd = None
+    try:
+        owner = _trusted_key_owner_uid()
+        parent = path.parent.lstat()
+        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != owner
+                or parent.st_mode & 0o022 or path.parent.resolve(strict=True) != path.parent):
+            raise ValueError("untrusted public key parent")
+        parent_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        opened_parent = os.fstat(parent_fd)
+        if (not stat.S_ISDIR(opened_parent.st_mode) or opened_parent.st_uid != owner
+                or opened_parent.st_mode & 0o022
+                or (parent.st_dev, parent.st_ino) != (opened_parent.st_dev, opened_parent.st_ino)):
+            raise ValueError("public key parent changed")
+        info = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != owner
+                or info.st_mode & 0o022 or info.st_nlink != 1
+                or info.st_size > MAX_APPROVAL_PUBLIC_KEY_BYTES):
+            raise ValueError("untrusted public key file")
+        key_fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
+        opened = os.fstat(key_fd)
+        if (not stat.S_ISREG(opened.st_mode) or opened.st_uid != owner
+                or opened.st_mode & 0o022 or opened.st_nlink != 1
+                or opened.st_size > MAX_APPROVAL_PUBLIC_KEY_BYTES
+                or (info.st_dev, info.st_ino) != (opened.st_dev, opened.st_ino)):
+            raise ValueError("public key file changed")
+        encoded = os.read(key_fd, MAX_APPROVAL_PUBLIC_KEY_BYTES + 1)
+        if len(encoded) > MAX_APPROVAL_PUBLIC_KEY_BYTES:
+            raise ValueError("oversized public key")
+        if len(encoded) == 32:
+            raw = encoded
+        else:
+            encoded = encoded.removesuffix(b"\n")
+            raw = base64.b64decode(encoded, validate=True)
+            if len(raw) != 32 or base64.b64encode(raw) != encoded:
+                raise ValueError("invalid key encoding")
+        return Ed25519PublicKey.from_public_bytes(raw)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise PermissionError("trusted SciNet inference public key file is missing, unsafe, or invalid") from exc
+    finally:
+        if key_fd is not None:
+            os.close(key_fd)
+        if parent_fd is not None:
+            os.close(parent_fd)
+
+
+def _approval_payload(stage_id: str, manifest_sha256: str, runtime_catalog_sha256: str,
+                      scratch: str, account: str, partition: str, reviewer: str,
+                      nonce: str, *, context: dict[str, Any], issued_at: int,
+                      not_after: int) -> dict[str, Any]:
+    return {
+        "domain": APPROVAL_DOMAIN,
+        "stage_id": stage_id,
+        "manifest_sha256": manifest_sha256,
+        "runtime_catalog_sha256": runtime_catalog_sha256,
+        "destination": {"scratch": scratch, "account": account, "partition": partition},
+        "resources": {"gpu_count": 1, "gpu_type": "H100", "max_walltime": MAX_WALLTIME},
+        "reviewer": reviewer,
+        "nonce": nonce,
+        "context": context,
+        "issued_at": issued_at,
+        "not_after": not_after,
+    }
+
+
+def _approval_context(settings, workspace_id, workspace_path, python, hf_cache):
+    host = str(getattr(settings, "host", "") or "")
+    user = str(getattr(settings, "user", "") or "")
+    if not host or not user:
+        raise PermissionError("explicit inference SSH host and user are required")
+    bootstrap = getattr(settings, "training_bootstrap_python", "")
+    if not isinstance(bootstrap, str):
+        raise PermissionError("inference bootstrap Python is not configured safely")
+    bootstrap = _validate_python(bootstrap, "bootstrap Python")
+    return {
+        "workspace": {"id": workspace_id, "path": str(Path(workspace_path).resolve())},
+        "ssh": {"host": host, "user": user},
+        "python": python, "bootstrap_python": bootstrap,
+        "hf_cache": hf_cache, "template_sha256": TEMPLATE_SHA256,
+    }
+
+
+def _record_approval_payload(record, settings, context):
+    issued_at, not_after = record.get("approval_issued_at"), record.get("approval_not_after")
+    now = int(time.time())
+    if (type(issued_at) is not int or type(not_after) is not int
+            or not issued_at <= now < not_after
+            or not 0 < not_after - issued_at <= APPROVAL_LIFETIME_SECONDS):
+        raise PermissionError("inference approval challenge is expired or has invalid validity times")
+    if record.get("approval_context") != context:
+        raise PermissionError("inference approval workspace, SSH, or runtime context changed")
+    return _approval_payload(
+        record["stage_id"], record["manifest_sha256"], record["runtime_catalog_sha256"],
+        record["scratch"], record["account"], record["partition"], _configured_reviewer(settings),
+        record["approval_nonce"], context=context, issued_at=issued_at, not_after=not_after,
+    )
+
+
+def _signature_bytes(encoded: str) -> bytes:
+    if not isinstance(encoded, str) or len(encoded) != 88:
+        raise ValueError("Ed25519 signature must be base64 encoded 64 bytes")
+    try:
+        signature = base64.b64decode(encoded, validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise ValueError("Ed25519 signature must be base64 encoded 64 bytes") from exc
+    if len(signature) != 64 or base64.b64encode(signature).decode("ascii") != encoded:
+        raise ValueError("Ed25519 signature must be base64 encoded 64 bytes")
+    return signature
+
+
+def _verify_approval(record: dict[str, Any], settings: Any, context: dict[str, Any]) -> None:
+    reviewer = _configured_reviewer(settings)
+    if record.get("approval_reviewer") != reviewer:
+        raise PermissionError("inference approval reviewer configuration changed")
+    if not isinstance(record.get("approval"), dict):
+        raise PermissionError("signed stage-scoped inference approval is required")
+    payload = _record_approval_payload(record, settings, context)
+    raw = _canonical_json(payload)
+    digest = hashlib.sha256(raw).hexdigest()
+    approval = record.get("approval")
+    if (not isinstance(approval, dict) or approval.get("payload_sha256") != digest
+            or approval.get("payload_sha256") != record.get("approval_payload_sha256")
+            or approval.get("reviewer") != reviewer):
+        raise PermissionError("signed stage-scoped inference approval is required")
+    try:
+        _approval_public_key().verify(_signature_bytes(approval.get("signature", "")), raw)
+    except InvalidSignature as exc:
+        raise PermissionError("inference approval signature verification failed") from exc
 
 
 def create_scinet_inference_preflight_tool(registry, settings):
@@ -675,11 +859,7 @@ def _bundle_files(bundle: Path, expected: str, workspace_root: str | Path | None
 
 
 def create_scinet_inference_tools(registry, settings=None, state_dir=None):
-    """Create dedicated inference stage, approval, and submit tools.
-
-    Approval is caller asserted, not cryptographically authenticated. Agents
-    MUST NEVER invoke approve without an explicit user prompt for that stage.
-    """
+    """Create inference stage, signature verification, submit, and result tools."""
     ledger = _InferenceLedger(state_dir)
 
     def scinet_inference_results(workspace_id: str, job_id: str) -> dict[str, Any]:
@@ -737,12 +917,13 @@ def create_scinet_inference_tools(registry, settings=None, state_dir=None):
         # The source-bound manifest contains nonconsecutive package IDs;
         # never assume cases are numbered P0001..P0021.
         fixed_case_ids = ",".join(manifest["cases"])
-        remote = _isolated_remote_python_command(
-            python, REMOTE_INFERENCE_RESULTS,
-            [scratch, job_id, stage_id_from_ledger, fixed_case_ids]
-        )
+        if hashlib.sha256(REMOTE_INFERENCE_RESULTS.encode("utf-8")).hexdigest() != RESULT_READER_SHA256:
+            raise PermissionError("fixed inference result reader digest mismatch")
+        remote = [RESULT_READER_PYTHON, "-I", "-B", "-c", REMOTE_INFERENCE_RESULTS,
+                  scratch, job_id, stage_id_from_ledger, fixed_case_ids]
         transport = _call(settings, user, remote, timeout=60,
-                          max_output=MAX_RESULT_RESPONSE_BYTES)
+                          max_output=MAX_RESULT_RESPONSE_BYTES,
+                          operation="inference_results")
         stdout = transport.get("stdout", b"")
         if not isinstance(stdout, bytes):
             stdout = str(stdout).encode("utf-8")
@@ -759,9 +940,7 @@ def create_scinet_inference_tools(registry, settings=None, state_dir=None):
         if (not isinstance(scheduler, dict) or scheduler.get("job_id") != job_id
                 or scheduler.get("state") != "COMPLETED"
                 or scheduler.get("exit_code") != "0:0"
-                or not isinstance(scheduler.get("alloc_tres"), str)
-                or not re.search(r"(?:^|,)gres/gpu:h100=1(?:,|$)",
-                                 scheduler["alloc_tres"], re.IGNORECASE)):
+                or not _one_h100_allocation(scheduler.get("alloc_tres"))):
             raise PermissionError("Slurm did not attest COMPLETED, ExitCode 0:0, and one H100")
         entries = transfer["files"]
         expected_names = {f"{case}.json" for case in manifest["cases"]}
@@ -851,9 +1030,13 @@ def create_scinet_inference_tools(registry, settings=None, state_dir=None):
         )
         expected = _expected_manifest(settings)
         runtime = _runtime_metadata(settings, scratch, _python, _cache)
+        reviewer = _configured_reviewer(settings)
+        context = _approval_context(settings, workspace_id, ws.path, _python, _cache)
+        _approval_public_key()
         bundle = inference_bundle_path(ws.path)
         manifest, files = _bundle_files(bundle, expected, ws.path)
         stage_id = "a" + uuid.uuid4().hex[1:]  # v2 handoff requires an initial letter
+        nonce = secrets.token_hex(32)
         stage_root = f"{scratch}/stages"
         entries = [{"name": n, "size": p.stat().st_size, "sha256": h} for n, p, h in files]
         payload = json.dumps({"files": entries, "manifest_sha256": expected},
@@ -881,72 +1064,99 @@ def create_scinet_inference_tools(registry, settings=None, state_dir=None):
                 or receipt.get("bundle") != expected_remote_bundle):
             parsed["error"] = receipt.get("error", "inference_stage_rejected")
             return parsed
+        issued_at = int(time.time())
+        not_after = issued_at + APPROVAL_LIFETIME_SECONDS
+        approval_payload = _approval_payload(
+            stage_id, expected, runtime["runtime_catalog_sha256"], scratch, account,
+            partition, reviewer, nonce, context=context, issued_at=issued_at, not_after=not_after,
+        )
+        approval_payload_sha256 = hashlib.sha256(_canonical_json(approval_payload)).hexdigest()
         with ledger.locked() as data:
-            data.setdefault("stages", {})[stage_id] = {
+            stages = data.setdefault("stages", {})
+            if any(isinstance(item, dict) and item.get("approval_nonce") == nonce for item in stages.values()):
+                raise PermissionError("inference approval challenge replay detected")
+            stages[stage_id] = {
                 "workspace_id": workspace_id, "stage_id": stage_id,
                 "manifest_sha256": expected, "bundle": receipt["bundle"],
                 "scratch": scratch, "account": account, "partition": partition,
                 **runtime,
                 "files": manifest["files"],
+                "approval_nonce": nonce,
+                "approval_reviewer": reviewer,
+                "approval_payload_sha256": approval_payload_sha256,
+                "approval_context": context,
+                "approval_issued_at": issued_at, "approval_not_after": not_after,
                 "state": "staged", "created_at": int(time.time()),
             }
         return {"target": "scinet_inference", "command": "scinet_inference_stage",
                 "success": True, "experiment": INFERENCE_EXPERIMENT,
                 "stage_id": stage_id, "manifest_sha256": expected,
                 "bundle_path": receipt["bundle"], **runtime,
-                "approval_authentication": "caller_asserted_not_cryptographically_authenticated",
+                "approval_authentication": "ed25519_signature_required",
                 "trusted_retrieval_available": False,
                 "destination": {"scratch": scratch, "account": account,
                                 "partition": partition},
                 "resources": {"gpus": 1, "gpu_type": "H100", "walltime": MAX_WALLTIME},
-                "approval_confirmation": approval_confirmation(
-                    stage_id, expected, scratch, account, partition, runtime["runtime_catalog_sha256"]
-                )}
+                "approval_payload": approval_payload,
+                "approval_payload_sha256": approval_payload_sha256,
+                "approval_payload_base64": base64.b64encode(_canonical_json(approval_payload)).decode("ascii"),
+                "approval_signature_encoding": "base64-ed25519-64-byte-signature"}
 
     def scinet_inference_approve(
-        workspace_id: str, stage_id: str, reviewer: str, confirmation: str
+        workspace_id: str, stage_id: str, reviewer: str, signature: str
     ) -> dict[str, Any]:
         if not isinstance(stage_id, str) or not ID_RE.fullmatch(stage_id):
             raise ValueError("Invalid SciNet inference stage_id")
-        user, _ws, _root, scratch, _python, _cache, account, partition = _inference_settings(
+        if not isinstance(signature, str) or len(signature) > 88:
+            raise ValueError("Ed25519 signature exceeds the 88-character limit")
+        _signature_bytes(signature)
+        _user, _ws, _root, scratch, python, _cache, account, partition = _inference_settings(
             registry, settings, workspace_id
         )
-        runtime = _runtime_metadata(settings, scratch, _python, _cache)
-        expected_reviewer = str(getattr(settings, "inference_approval_reviewer", "") or
-                                getattr(settings, "approval_reviewer", "") or user)
-        if reviewer != expected_reviewer or not reviewer or re.search(
-            r"agent|copilot|phil|claude|gpt|bot|automat|agentporter", reviewer, re.I
-        ):
-            raise PermissionError("reviewer is not the configured human approver")
+        runtime = _runtime_metadata(settings, scratch, python, _cache)
+        expected_reviewer = _configured_reviewer(settings)
+        if not isinstance(reviewer, str) or reviewer != expected_reviewer:
+            raise PermissionError("reviewer must exactly match configured human approver")
+        verifier = _approval_public_key()
         with ledger.locked() as data:
             record = data.get("stages", {}).get(stage_id)
             if not record or record.get("workspace_id") != workspace_id:
                 raise PermissionError("inference stage was not created by this workspace")
             _validate_stage_record(record, stage_id, scratch, runtime)
             if record.get("state") != "staged":
-                raise PermissionError("inference stage is no longer awaiting approval")
+                raise PermissionError("inference stage no longer awaiting approval")
             destination = {"scratch": scratch, "account": account, "partition": partition}
-            if any(record.get(k) != v for k, v in destination.items()):
+            if any(record.get(key) != value for key, value in destination.items()):
                 raise PermissionError("inference stage destination configuration changed")
-            required = approval_confirmation(
-                stage_id, record["manifest_sha256"], scratch, account, partition,
-                runtime["runtime_catalog_sha256"]
+            if record.get("approval_reviewer") != expected_reviewer:
+                raise PermissionError("reviewer differs from the reviewer shown in the signed challenge")
+            payload = _record_approval_payload(
+                record, settings,
+                _approval_context(settings, workspace_id, _ws.path, python, _cache),
             )
-            if confirmation != required:
-                raise ValueError("confirmation must exactly match this stage and manifest digest")
+            raw_payload = _canonical_json(payload)
+            payload_digest = hashlib.sha256(raw_payload).hexdigest()
+            if payload_digest != record.get("approval_payload_sha256"):
+                raise PermissionError("inference approval challenge is stale or forged")
             if record.get("approval"):
-                raise PermissionError("inference stage approval is already recorded")
-            record["approval"] = {"reviewer": reviewer, "confirmation": required,
-                                   "manifest_sha256": record["manifest_sha256"],
-                                   **runtime,
-                                   "authentication": "caller_asserted_not_cryptographically_authenticated",
-                                   "limits": {"gpus": 1, "gpu_type": "H100",
-                                              "max_walltime": MAX_WALLTIME},
-                                   "approved_at": int(time.time())}
-        return {"target": "scinet_inference", "command": "scinet_inference_approve",
-                "success": True, "stage_id": stage_id,
-                "manifest_sha256": record["manifest_sha256"],
-                "reviewer": reviewer, "resources": record["approval"]["limits"]}
+                raise PermissionError("inference stage approval already recorded")
+            try:
+                verifier.verify(_signature_bytes(signature), raw_payload)
+            except InvalidSignature as exc:
+                raise PermissionError("inference approval signature verification failed") from exc
+            record["approval"] = {
+                "reviewer": expected_reviewer,
+                "signature": signature,
+                "payload_sha256": payload_digest,
+                "signed_at": int(time.time()),
+            }
+        return {
+            "target": "scinet_inference", "command": "scinet_inference_approve",
+            "success": True, "stage_id": stage_id, "reviewer": expected_reviewer,
+            "approval_payload_sha256": payload_digest,
+            "authentication": "ed25519_verified",
+            "resources": {"gpus": 1, "gpu_type": "H100", "walltime": MAX_WALLTIME},
+        }
 
     def scinet_inference_submit(workspace_id: str, stage_id: str) -> dict[str, Any]:
         if not isinstance(stage_id, str) or not ID_RE.fullmatch(stage_id):
@@ -966,15 +1176,8 @@ def create_scinet_inference_tools(registry, settings=None, state_dir=None):
             if record.get("state") != "staged":
                 raise PermissionError("inference stage submission is already reserved or complete")
             _validate_stage_record(record, stage_id, scratch, runtime)
-            approval = record.get("approval")
-            if not approval or approval.get("confirmation") != approval_confirmation(
-                stage_id, record["manifest_sha256"], scratch, account, partition,
-                runtime["runtime_catalog_sha256"]
-            ) or approval.get("manifest_sha256") != record["manifest_sha256"] or any(
-                approval.get(k) != v for k, v in runtime.items()
-            ) or approval.get("limits") != {"gpus": 1, "gpu_type": "H100",
-                                           "max_walltime": MAX_WALLTIME}:
-                raise PermissionError("explicit stage-scoped inference approval is required")
+            _verify_approval(record, settings,
+                             _approval_context(settings, workspace_id, _ws.path, python, hf_cache))
             bundle = inference_bundle_path(registry.get(workspace_id).path)
             manifest, _files = _bundle_files(
                 bundle, record["manifest_sha256"], registry.get(workspace_id).path
@@ -1018,7 +1221,9 @@ def create_scinet_inference_tools(registry, settings=None, state_dir=None):
         bundle_path = record["bundle"]
         submit_script = "set -eu; umask 077; marker=" + shlex.quote(
             f"{scratch}/submissions/{stage_id}"
-        ) + "; mkdir -p " + shlex.quote(f"{scratch}/submissions") + "; " \
+        ) + "; mkdir -p -m 700 " + shlex.quote(f"{scratch}/submissions") + "; " \
+        + "test ! -L " + shlex.quote(f"{scratch}/submissions") + "; chmod 700 " \
+        + shlex.quote(f"{scratch}/submissions") + "; " \
             + "mkdir -p -m 700 " + shlex.quote(f"{scratch}/logs") + "; " \
             + "test ! -L " + shlex.quote(f"{scratch}/logs") + "; chmod 700 " \
             + shlex.quote(f"{scratch}/logs") + "; mkdir \"$marker\" || exit 73; " \
@@ -1041,6 +1246,9 @@ def create_scinet_inference_tools(registry, settings=None, state_dir=None):
                     "PATH": "/usr/bin:/bin",
                 }.items()
             ) + " --wrap=" + shlex.quote(wrapped_command)
+        # A slow preflight must not carry an expired challenge into allocation.
+        _verify_approval(record, settings,
+                         _approval_context(settings, workspace_id, _ws.path, python, hf_cache))
         result = _call(settings, user, ["/bin/bash", "-lc", submit_script], timeout=120)
         output = _result(result)
         job_id = output["stdout"].strip()
@@ -1064,15 +1272,6 @@ def create_scinet_inference_tools(registry, settings=None, state_dir=None):
             "scinet_inference_approve": scinet_inference_approve,
             "scinet_inference_submit": scinet_inference_submit,
             "scinet_inference_results": scinet_inference_results}
-
-
-def approval_confirmation(
-    stage_id: str, manifest_sha256: str, scratch: str, account: str, partition: str,
-    runtime_catalog_sha256: str
-) -> str:
-    return (f"I approve standalone Laya inference stage {stage_id} manifest {manifest_sha256} "
-            f"runtime {runtime_catalog_sha256} destination {scratch} account {account} partition {partition} "
-            f"on 1 H100 for at most {MAX_WALLTIME}; inference only")
 
 
 JOB_ID_RE = re.compile(r"[0-9]+\Z")

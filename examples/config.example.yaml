@@ -35,6 +35,10 @@ sandbox:
 # it is a same-user RPC endpoint owned by agentporter-scinet-broker.service.
 # Do not put credentials or ~/.ssh paths in this package example.
 scinet:
+  # Configure a human identity and a separately managed offline Ed25519 public key.
+  # The private signing key must never be stored on this host or in this repository.
+  # inference_approval_reviewer: "reviewer@example.org"
+  # Public key is installed by root at /etc/agentporter/laya-inference-approval.pub
   host: "trillium-gpu.alliancecan.ca"
   user: "yeli"
   machine: "asgard"
