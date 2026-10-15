@@ -7,6 +7,17 @@ from agentporter.agents.broker import AgentBroker, OPENAI_FALLBACK_MODEL
 from agentporter.tools.jobs import JobManager
 
 
+@pytest.fixture(autouse=True)
+def _isolate_host_agent_identity_config(monkeypatch, tmp_path):
+    """Unit tests must not import Asgard's real agents.yaml identities.
+
+    The broker intentionally loads the host's configured worker identities,
+    but these fixture-only tests replace its adapter registry with synthetic
+    adapters. Using the host config can map those names to nonexistent runtimes.
+    """
+    monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(tmp_path / "isolated-agent-config"))
+
+
 class FakeOpenAIAdapter(AgentAdapter):
     name = "fake-openai"
     alias = "Fake OpenAI"

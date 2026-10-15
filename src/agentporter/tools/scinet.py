@@ -8,7 +8,9 @@ import stat
 from typing import Literal
 
 from agentporter.tools.venkata import run_host_bytes
-from agentporter.tools.scinet_broker import broker_request, broker_socket_available
+from agentporter.tools.scinet_broker import (
+    broker_request, broker_socket_available, inference_results_command,
+)
 
 ScinetDiagnostic = Literal[
     "gpu_partitions",
@@ -122,6 +124,7 @@ def ssh_remote_argv(
     *,
     timeout_text: str = REMOTE_TIMEOUT,
     accepts_stdin: bool = False,
+    operation: str = "training",
 ) -> list[str]:
     """Build the fixed SSH envelope for server-generated remote commands."""
     socket_path = control_socket(settings, home)
@@ -137,8 +140,13 @@ def ssh_remote_argv(
     if not accepts_stdin:
         argv.append("-n")
     argv.extend(["-l", settings.user, settings.host])
-    command = shlex.join(["exec", "/usr/bin/timeout", timeout_text, *remote])
-    argv.append(shlex.join(["/bin/bash", "-lc", command]))
+    if operation == "inference_results":
+        if accepts_stdin:
+            raise PermissionError("inference results accepts no stdin")
+        argv.append(inference_results_command(remote))
+    else:
+        command = shlex.join(["exec", "/usr/bin/timeout", timeout_text, *remote])
+        argv.append(shlex.join(["/bin/bash", "-lc", command]))
     return argv
 
 
@@ -154,6 +162,10 @@ def run_scinet_bytes(
     command: str | None = None,
 ) -> dict:
     """Run through the broker when configured; retain legacy fallback only for deployment migration."""
+    if operation == "inference_results":
+        if input_bytes is not None or command is not None:
+            raise PermissionError("inference results accepts no stdin or command")
+        inference_results_command(remote)
     broker_socket = str(getattr(settings, "broker_socket", "") or "").strip()
     if broker_socket:
         return broker_request(
@@ -172,6 +184,7 @@ def run_scinet_bytes(
             remote,
             timeout_text=f"{max(1, int(timeout))}s",
             accepts_stdin=input_bytes is not None,
+            operation=operation,
         ),
         user.pw_dir,
         input_bytes=input_bytes,

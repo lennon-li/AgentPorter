@@ -14,6 +14,7 @@ training tool and are still sent through a fixed SSH envelope.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -73,6 +74,31 @@ FORBIDDEN_REMOTE_TOKENS = {
     "socat",
 }
 
+# Independent review pin: never derive this from a caller or the inference module.
+INFERENCE_RESULTS_READER_SHA256 = "c0bb58eefab06f9bb5428b422d920168eb1a4de363c401054dd6d1b0140e7a61"
+
+
+def inference_results_command(remote: list[str]) -> str:
+    """Allow only the reviewed results reader and its four bounded arguments."""
+    if (not isinstance(remote, list) or len(remote) != 9
+            or any(not isinstance(token, str) or "\x00" in token for token in remote)
+            or remote[:4] != ["/usr/bin/python3", "-I", "-B", "-c"]):
+        raise PermissionError("invalid inference results argv")
+    script, scratch, job, stage, cases = remote[4:]
+    if hashlib.sha256(script.encode("utf-8")).hexdigest() != INFERENCE_RESULTS_READER_SHA256:
+        raise PermissionError("inference results reader digest mismatch")
+    case_ids = cases.split(",")
+    if (not re.fullmatch(r"/scratch/[A-Za-z0-9_./-]+", scratch)
+            or ".." in scratch.split("/") or "//" in scratch
+            or not re.fullmatch(r"[1-9][0-9]{0,19}", job)
+            or not re.fullmatch(r"[0-9a-f]{32}", stage)
+            or len(case_ids) != 42 or len(set(case_ids)) != 42
+            or any(not re.fullmatch(r"P[0-9]{4}_(?:pos|ctl)", case) for case in case_ids)):
+        raise PermissionError("invalid inference results arguments")
+    # sshd still invokes the account shell; its startup behavior remains trusted.
+    return shlex.join(["exec", "/usr/bin/env", "-i", "PATH=/usr/bin:/bin",
+                       "/usr/bin/timeout", "60s", *remote])
+
 
 def _b64(value: bytes) -> str:
     return base64.b64encode(value).decode("ascii")
@@ -109,7 +135,8 @@ def _control_socket_available(path: str) -> bool:
     return stat.S_ISSOCK(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o077
 
 
-def _ssh_envelope(host: str, user: str, control_socket: str, remote: list[str]) -> list[str]:
+def _ssh_envelope(host: str, user: str, control_socket: str, remote: list[str],
+                  *, operation: str = "training") -> list[str]:
     """Build the only SSH envelope the broker can execute."""
     if not host or not user or not remote:
         raise ValueError("invalid SciNet broker request")
@@ -117,7 +144,11 @@ def _ssh_envelope(host: str, user: str, control_socket: str, remote: list[str]) 
         raise ValueError("invalid SciNet remote command")
     if any(token in FORBIDDEN_REMOTE_TOKENS for token in remote):
         raise PermissionError("broker remote command is not permitted")
-    command = shlex.join(["exec", "/usr/bin/timeout", "120s", *remote])
+    if operation == "inference_results":
+        command = inference_results_command(remote)
+    else:
+        command = shlex.join(["/bin/bash", "-lc", shlex.join(
+            ["exec", "/usr/bin/timeout", "120s", *remote])])
     return [
         "/usr/bin/ssh",
         "-F",
@@ -149,10 +180,11 @@ def _ssh_envelope(host: str, user: str, control_socket: str, remote: list[str]) 
         "ForwardAgent=no",
         "-o",
         "ClearAllForwardings=yes",
+        *(["-n"] if operation == "inference_results" else []),
         "-l",
         user,
         host,
-        shlex.join(["/bin/bash", "-lc", command]),
+        command,
     ]
 
 
@@ -456,11 +488,15 @@ class ScinetBroker:
                 daemon=True,
             ).start()
             return {"state": "starting", "success": False}
-        if operation not in {"diagnostic", "training"} or not isinstance(remote, list):
+        if operation not in {"diagnostic", "training", "inference_results"} or not isinstance(remote, list):
             raise ValueError("unsupported SciNet broker operation")
         length = record.get("input_length", 0)
         if not isinstance(length, int) or length < 0 or length != len(body):
             raise ValueError("invalid SciNet broker input length")
+        if operation == "inference_results":
+            if body or length != 0 or record.get("command") is not None:
+                raise PermissionError("inference results accepts no stdin or command")
+            inference_results_command(remote)
         if operation == "diagnostic":
             command = record.get("command")
             if command == "connection_status":
@@ -486,7 +522,7 @@ class ScinetBroker:
             if _control_socket_available(self.login_control_socket)
             else self.control_socket
         )
-        argv = _ssh_envelope(self.host, self.user, control_socket, remote)
+        argv = _ssh_envelope(self.host, self.user, control_socket, remote, operation=operation)
         result = run_host_bytes(
             argv,
             os.path.expanduser("~"),

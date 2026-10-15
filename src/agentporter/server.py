@@ -45,6 +45,10 @@ from agentporter.tools.scinet_training import (
     ScinetExperiment,
     ScinetLogKind,
 )
+from agentporter.tools.scinet_inference import (
+    create_scinet_inference_preflight_tool,
+    create_scinet_inference_tools,
+)
 
 logger = logging.getLogger("agentporter.server")
 
@@ -158,6 +162,12 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _scinet_training = create_scinet_training_tool(
         registry, getattr(config, "scinet", None), config.state_dir
     )
+    _scinet_inference_preflight = create_scinet_inference_preflight_tool(
+        registry, getattr(config, "scinet", None)
+    )
+    _scinet_inference = create_scinet_inference_tools(
+        registry, getattr(config, "scinet", None), config.state_dir
+    )
 
     @mcp.tool()
     @monitored_tool("venkata_transfer")
@@ -235,6 +245,46 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def scinet_setup_status(workspace_id: str, stage_id: str) -> dict:
         """Read fixed setup status and a bounded log tail for a staged run."""
         return _scinet_training["scinet_setup_status"](workspace_id=workspace_id, stage_id=stage_id)
+
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_preflight")
+    def scinet_inference_preflight(workspace_id: str) -> dict:
+        """Verify the fixed local Laya inference bundle; never contacts SciNet or submits."""
+        return _scinet_inference_preflight(workspace_id=workspace_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_stage")
+    def scinet_inference_stage(workspace_id: str) -> dict:
+        """Stage only the digest-pinned standalone inference bundle to fixed SciNet scratch."""
+        return _scinet_inference["scinet_inference_stage"](workspace_id=workspace_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_approve")
+    def scinet_inference_approve(
+        workspace_id: str, stage_id: str, reviewer: str, signature: str
+    ) -> dict:
+        """Verify an offline human Ed25519 signature for this exact stage challenge."""
+        return _scinet_inference["scinet_inference_approve"](
+            workspace_id=workspace_id, stage_id=stage_id,
+            reviewer=reviewer, signature=signature,
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_submit")
+    def scinet_inference_submit(workspace_id: str, stage_id: str) -> dict:
+        """Submit one approved fixed-template 1xH100, 30-minute inference allocation."""
+        return _scinet_inference["scinet_inference_submit"](
+            workspace_id=workspace_id, stage_id=stage_id
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_results")
+    def scinet_inference_results(workspace_id: str, job_id: str) -> dict:
+        """Preflight ledger-bound result retrieval; fail closed until trusted receipt transport exists."""
+        return _scinet_inference["scinet_inference_results"](
+            workspace_id=workspace_id, job_id=job_id
+        )
 
     @mcp.tool()
     @monitored_tool("scinet_preflight")
@@ -530,6 +580,11 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         "scinet_environment_check": scinet_environment_check,
         "scinet_setup": scinet_setup,
         "scinet_setup_status": scinet_setup_status,
+        "scinet_inference_preflight": scinet_inference_preflight,
+        "scinet_inference_stage": scinet_inference_stage,
+        "scinet_inference_approve": scinet_inference_approve,
+        "scinet_inference_submit": scinet_inference_submit,
+        "scinet_inference_results": scinet_inference_results,
         "scinet_preflight": scinet_preflight,
         "scinet_record_approvals": scinet_record_approvals,
         }

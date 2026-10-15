@@ -74,7 +74,11 @@ def test_private_scinet_training_settings_are_loaded(tmp_path: Path):
         "  training_partition: gpu\n"
         "  training_python: /scratch/project/laya/bin/python\n"
         "  training_cpus_per_task: 8\n"
-        "  training_max_stage_bytes: 123456\n",
+        "  training_max_stage_bytes: 123456\n"
+        "  inference_scratch_root: /scratch/cranary/laya\n"
+        "  inference_python: /scratch/project/laya/bin/python\n"
+        "  inference_hf_cache: /scratch/project/hf-cache\n"
+        "  inference_approval_reviewer: lennon\n",
         encoding="utf-8",
     )
     cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / "st", cache_dir=tmp_path / "cache")
@@ -84,3 +88,41 @@ def test_private_scinet_training_settings_are_loaded(tmp_path: Path):
     assert cfg.scinet.training_python == "/scratch/project/laya/bin/python"
     assert cfg.scinet.training_cpus_per_task == 8
     assert cfg.scinet.training_max_stage_bytes == 123456
+    assert cfg.scinet.inference_scratch_root == "/scratch/cranary/laya"
+    assert cfg.scinet.inference_python == "/scratch/project/laya/bin/python"
+    assert cfg.scinet.inference_hf_cache == "/scratch/project/hf-cache"
+    assert cfg.scinet.inference_approval_reviewer == "lennon"
+
+
+def test_inference_runtime_catalog_digest_configuration(tmp_path, monkeypatch):
+    cfg_dir = tmp_path / 'cfg'
+    cfg_dir.mkdir()
+    digest = 'c' * 64
+    (cfg_dir / 'config.yaml').write_text(f'scinet:\n  inference_runtime_catalog_sha256: {digest}\n')
+    cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / 'state')
+    assert cfg.scinet.inference_runtime_catalog_sha256 == digest
+    monkeypatch.setenv('AGENTPORTER_SCINET_INFERENCE_RUNTIME_CATALOG_SHA256', 'd' * 64)
+    cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / 'state')
+    assert cfg.scinet.inference_runtime_catalog_sha256 == 'd' * 64
+
+
+def test_inference_runtime_catalog_rejects_malformed_digest(tmp_path):
+    cfg_dir = tmp_path / 'cfg'
+    cfg_dir.mkdir()
+    (cfg_dir / 'config.yaml').write_text('scinet:\n  inference_runtime_catalog_sha256: unreviewed\n')
+    with pytest.raises(ValueError, match='inference_runtime_catalog_sha256'):
+        Config(config_dir=cfg_dir, state_dir=tmp_path / 'state')
+
+
+@pytest.mark.parametrize("encoded", ["not-a-key", "a" * 44])
+def test_inference_approval_public_key_cannot_be_configured(tmp_path, monkeypatch, encoded):
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        f"scinet:\n  inference_approval_public_key: {encoded}\n"
+        "  inference_approval_reviewer: lennon\n"
+    )
+    monkeypatch.setenv("AGENTPORTER_SCINET_INFERENCE_APPROVAL_PUBLIC_KEY", encoded)
+    cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / "st", cache_dir=tmp_path / "cache")
+    assert not hasattr(cfg.scinet, "inference_approval_public_key")
+    assert cfg.scinet.inference_approval_reviewer == "lennon"

@@ -8,6 +8,17 @@ from agentporter.agents.adapters.codex_identity import JaxAdapter, LizAdapter
 from agentporter.workspaces.registry import WorkspaceRegistry
 
 
+@pytest.fixture(autouse=True)
+def _isolate_host_agent_identity_config(monkeypatch, tmp_path):
+    """Unit tests must not import Asgard's real agents.yaml identities.
+
+    The broker intentionally loads the host's configured worker identities,
+    but these fixture-only tests replace its adapter registry with synthetic
+    adapters. Using the host config can map those names to nonexistent runtimes.
+    """
+    monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(tmp_path / "isolated-agent-config"))
+
+
 def test_action_metadata_uses_environment(monkeypatch):
     monkeypatch.setenv("AGENTPORTER_PUBLIC_URL", "https://bcc.example.test")
     monkeypatch.setenv("AGENTPORTER_ACTION_PREFIX", "bcc")

@@ -73,6 +73,15 @@ class ScinetSettings:
     training_account: str = ""
     training_partition: str = ""
     training_python: str = ""
+    # Repeated here for operator visibility; implementation accepts only code pin.
+    inference_manifest_sha256: str = ""
+    # Inference-only deployment paths are separate from the A/B training setup.
+    inference_scratch_root: str = ""
+    inference_python: str = ""
+    inference_hf_cache: str = ""
+    # Catalog path is fixed beneath scratch; digest must be independently reviewed.
+    inference_runtime_catalog_sha256: str = ""
+    inference_approval_reviewer: str = ""
     training_bootstrap_python: str = "/usr/bin/python3"
     training_cpus_per_task: int = 4
     training_max_stage_bytes: int = 512 * 1024 * 1024
@@ -116,6 +125,11 @@ class Config:
             "control_socket",
             "machine",
             "approval_reviewer",
+            "inference_scratch_root",
+            "inference_python",
+            "inference_hf_cache",
+            "inference_runtime_catalog_sha256",
+            "inference_approval_reviewer",
         ):
             value = os.environ.get("AGENTPORTER_SCINET_" + field.upper())
             if value is not None:
@@ -130,6 +144,9 @@ class Config:
             value = os.environ.get("AGENTPORTER_SCINET_" + field.upper())
             if value is not None:
                 setattr(self.scinet, field, value.strip())
+        value = os.environ.get("AGENTPORTER_SCINET_INFERENCE_MANIFEST_SHA256")
+        if value is not None:
+            self.scinet.inference_manifest_sha256 = value.strip()
         value = os.environ.get("AGENTPORTER_SCINET_TRAINING_CPUS_PER_TASK")
         if value is not None:
             self.scinet.training_cpus_per_task = int(value)
@@ -242,6 +259,35 @@ class Config:
             self.scinet.training_python = str(
                 sci.get("training_python", self.scinet.training_python) or ""
             ).strip()
+            self.scinet.inference_manifest_sha256 = str(
+                sci.get("inference_manifest_sha256", self.scinet.inference_manifest_sha256)
+                or ""
+            ).strip()
+            self.scinet.inference_scratch_root = str(
+                sci.get("inference_scratch_root", self.scinet.inference_scratch_root) or ""
+            ).strip()
+            self.scinet.inference_python = str(
+                sci.get("inference_python", self.scinet.inference_python) or ""
+            ).strip()
+            self.scinet.inference_hf_cache = str(
+                sci.get("inference_hf_cache", self.scinet.inference_hf_cache) or ""
+            ).strip()
+            self.scinet.inference_runtime_catalog_sha256 = str(
+                sci.get("inference_runtime_catalog_sha256",
+                        self.scinet.inference_runtime_catalog_sha256) or ""
+            ).strip()
+            if self.scinet.inference_runtime_catalog_sha256 and not re.fullmatch(
+                r"[0-9a-f]{64}", self.scinet.inference_runtime_catalog_sha256
+            ):
+                raise ValueError("scinet.inference_runtime_catalog_sha256 must be lowercase SHA-256")
+            self.scinet.inference_approval_reviewer = str(
+                sci.get("inference_approval_reviewer", self.scinet.inference_approval_reviewer)
+                or ""
+            ).strip()
+            if self.scinet.inference_manifest_sha256 and not re.fullmatch(
+                r"[0-9a-f]{64}", self.scinet.inference_manifest_sha256
+            ):
+                raise ValueError("scinet.inference_manifest_sha256 must be lowercase SHA-256")
             self.scinet.training_bootstrap_python = str(
                 sci.get("training_bootstrap_python", self.scinet.training_bootstrap_python) or ""
             ).strip()
