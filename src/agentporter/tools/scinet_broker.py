@@ -580,7 +580,7 @@ class ScinetBroker:
                         "success": False,
                         **({"reason": self._login_reason} if self._login_reason else {}),
                     }
-                if now - self._login_started < LOGIN_COOLDOWN_SECONDS:
+                if self._login_started and now - self._login_started < LOGIN_COOLDOWN_SECONDS:
                     return {"state": "cooldown", "success": False, "reason": "retry_cooldown"}
                 self._login_started = now
                 self._login_state = "starting"

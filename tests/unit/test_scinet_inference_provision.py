@@ -387,9 +387,10 @@ def make_package(root, monkeypatch, *, template=b"template\n"):
     files = {name: b"fixed reviewed fixture\n" for name in inference.STATIC_FILES}
     files["code/inference.sbatch.template"] = template
     files.update({f"contexts/{case}.json": b"{}\n" for case in cases})
+    empty_context_sha = hashlib.sha256(b"{}\n").hexdigest()
     files["data/cohort.csv"] = (
         "case_id,context_file_sha256,state_sha256\n"
-        + "".join(f"{case},{hashlib.sha256(b'{}\\n').hexdigest()},{'e' * 64}\n"
+        + "".join(f"{case},{empty_context_sha},{'e' * 64}\n"
                   for case in cases)
     ).encode()
     for name, data in files.items():
