@@ -187,6 +187,7 @@ def test_reviewed_manifest_and_driver_source_pins(reviewed_bundle):
     for name in ("code/prepare_runtime.sh", "code/runtime_preflight.py",
                  "code/requirements-inference.lock", "code/handoff.py"):
         assert reviewed_bundle["files"][name] in literals, f"remote driver lacks reviewed pin: {name}"
+    assert reviewed_bundle["files"]["code/offline_runner.py"] in inference.REMOTE_PROVISION_PREPARE
     for source, digest in (
         (inference.REMOTE_PROVISION_PREPARE, inference.PROVISION_PREPARE_SCRIPT_SHA256),
         (inference.REMOTE_PROVISION_INSPECT, inference.PROVISION_INSPECT_SCRIPT_SHA256),
@@ -324,14 +325,18 @@ def run_python(argv, timeout):
     call = f'''
 result = run_verified_preflight(sys.executable, {str(bundle / 'code')!r},
                                {str(root / 'model-cache')!r}, {str(root / 'wheelhouse')!r},
-                               {str(root / 'candidate.json')!r}, ["--help"])
+                               {str(root / 'candidate.json')!r}, [])
 print(json.dumps({{"returncode": result.returncode, "stderr": result.stderr.decode()}}))
 '''
     result = isolated(root.parent, definitions(inference.REMOTE_PROVISION_COMMON) + setup
                       + ast.unparse(node) + call)
     value = receipt(result)
+    # Real isolated candidate-generation invocation; tiny fixtures deliberately
+    # fail pinned artifact policy, but must pass the frozen sibling import phase.
     assert result.returncode == 0, result.stderr.decode()
-    assert value["returncode"] == 0, value
+    assert value["returncode"] == 3, value
+    assert "No module named 'offline_runner'" not in value["stderr"]
+    assert not (root / "candidate.json").exists()
 
 
 def test_prepare_candidate_review_and_resume_do_not_duplicate_work(provision_tree):
@@ -532,8 +537,11 @@ def test_prepare_never_writes_an_unreviewed_runtime_catalog(provision_tree):
 
 def test_prepare_refuses_mutated_script_at_immediate_exec_recheck(tmp_path):
     """Execute the actual final digest decision, not a mock receipt."""
-    branch = driver_node(lambda node: isinstance(node, ast.If) and
-                         contains(node, "reviewed_script_changed_before_execution"))
+    main = next(node for node in ast.parse(inference.REMOTE_PROVISION_PREPARE).body
+                if isinstance(node, ast.FunctionDef) and node.name == "main")
+    branch = next(node for node in ast.walk(main)
+                   if isinstance(node, ast.If)
+                   and contains(node, "reviewed_script_changed_before_execution"))
     source = (inference.REMOTE_PROVISION_COMMON
               + '\nscript_sha = "0" * 64\n'
               + 'preflight_sha = PINNED_BUNDLE_SCRIPTS["runtime_preflight.py"]\n'
@@ -544,3 +552,106 @@ def test_prepare_refuses_mutated_script_at_immediate_exec_recheck(tmp_path):
     assert result.returncode == 65, (value, result.stderr.decode())
     assert value["error"] == "reviewed_script_changed_before_execution"
     assert value["environment_provisioned"] is False
+
+
+def test_prepare_driver_stages_verified_bytes_before_source_path_mutation(tmp_path):
+    tree = ast.parse(inference.REMOTE_PROVISION_PREPARE)
+    main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+    stage_block = next(
+        node for node in main.body if isinstance(node, ast.Try)
+        and any(isinstance(child, ast.Name) and child.id == "verified_runtime_files"
+                for child in ast.walk(node))
+    )
+
+    code_root = tmp_path / "code"
+    code_root.mkdir(mode=0o700)
+    provisional = {
+        "prepare_runtime.sh": b'printf verified > "$1"\n',
+        "runtime_preflight.py": b"pass\n",
+        "handoff.py": b"pass\n",
+        "offline_runner.py": b"pass\n",
+        "requirements-inference.lock": b"pass\n",
+    }
+    pins = {}
+    for name, data in provisional.items():
+        private_file(code_root / name, data)
+        pins[name] = sha(data)
+    sources = {"laya_provenance.py": b"pass\n"}
+    source_pins = {name: sha(data) for name, data in sources.items()}
+    for name, data in sources.items():
+        private_file(tmp_path / "sources" / name, data)
+    provision_cache = tmp_path / "provision-cache"
+    (provision_cache / "tmp").mkdir(parents=True, mode=0o700)
+    output_path = tmp_path / "executed.txt"
+    real_subprocess = subprocess
+    source_script = code_root / "prepare_runtime.sh"
+
+    def mutate_original_then_run(argv, **kwargs):
+        assert argv[1].endswith("/code/prepare_runtime.sh"), argv
+        assert (Path(argv[1]).parents[1] / "sources/laya_provenance.py").is_file()
+        source_script.write_bytes(b'printf altered > "$1"\n')
+        return real_subprocess.run(argv, **kwargs)
+
+    namespace = {
+        "os": os,
+        "hashlib": hashlib,
+        "stat": __import__("stat"),
+        "subprocess": type("SubprocessProxy", (), {
+            "run": staticmethod(mutate_original_then_run),
+            "PIPE": subprocess.PIPE,
+            "DEVNULL": subprocess.DEVNULL,
+            "TimeoutExpired": subprocess.TimeoutExpired,
+        }),
+        "OFFLINE_ENV": {"PATH": "/usr/bin:/bin"},
+        "provision_cache": str(provision_cache),
+        "scratch": str(output_path),
+        "bootstrap": "/usr/bin/python3",
+        "wheelhouse": str(tmp_path / "wheelhouse"),
+        "cache": str(tmp_path / "cache"),
+        "catalog": str(tmp_path / "catalog.json"),
+        "catalog_digest": "none",
+        "code_root": str(code_root),
+        "bundle": str(tmp_path),
+        "PINNED_BUNDLE_SCRIPTS": pins,
+        "PINNED_BUNDLE_SOURCES": source_pins,
+        "read_pinned_bytes": lambda path, digest, bound: (
+            (lambda data: data if len(data) <= bound and sha(data) == digest
+             else (_ for _ in ()).throw(ValueError("digest mismatch")))(Path(path).read_bytes())
+        ),
+        "emit": lambda *args: (_ for _ in ()).throw(AssertionError(args)),
+    }
+    exec(compile(ast.Module(body=[stage_block], type_ignores=[]),
+                 "<prepare-driver-test>", "exec"), namespace)
+    assert namespace["prepared"].returncode == 0
+    assert output_path.read_text() == "verified"
+    assert source_script.read_bytes() == b'printf altered > "$1"\n'
+    assert list((provision_cache / "tmp").iterdir()) == []
+
+
+@pytest.mark.parametrize("target_kind", ["model_cache", "wheelhouse"])
+def test_secure_makedirs_rejects_symlinked_ancestor_before_leaf_creation(tmp_path, target_kind):
+    scratch = tmp_path / "scratch"
+    scratch.mkdir(mode=0o700)
+    outside = tmp_path / "outside"
+    outside.mkdir(mode=0o700)
+    if target_kind == "model_cache":
+        cache = scratch / "model-cache"
+        cache.mkdir(mode=0o700)
+        link = cache / "models--convaiinnovations--laya"
+        target = link / "snapshots" / inference.REVISION
+    else:
+        link = scratch / "wheelhouse"
+        target = link / "nested-leaf"
+    link.symlink_to(outside, target_is_directory=True)
+    code = inference.REMOTE_PROVISION_COMMON + f'''\ntry:
+ secure_makedirs({str(target)!r})
+except OSError:
+ print("rejected")
+else:
+ raise AssertionError("symlinked path ancestor was accepted")
+'''
+    result = isolated(tmp_path, code)
+    assert result.returncode == 0, result.stderr.decode()
+    assert result.stdout.decode().strip() == "rejected"
+    assert list(outside.iterdir()) == []
+    assert not target.exists()

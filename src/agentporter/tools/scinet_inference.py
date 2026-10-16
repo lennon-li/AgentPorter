@@ -723,7 +723,11 @@ PINNED_BUNDLE_SCRIPTS = {
     "prepare_runtime.sh": "635d728a21a2669a6dec2a7c7ecb1bed6d969b26305c9fec42cdda17df9a68ae",
     "runtime_preflight.py": "da6950a27095ad79af0ead3166290eaab9b8a96d358a51616e33ea41263fffbe",
     "handoff.py": "0c20ccd8f94c72c62b1528dbfbed703d115c49696f751f38a4e4d6746d34cfb7",
+    "offline_runner.py": "58c20176c5fd78304d806ff550443ab659f5d4a5cde0c8ec7bd50dd4553bfb5a",
     "requirements-inference.lock": "de2774a16bfbfad7d2f600130a8afccfbd8130805ebca90c2c46e03e41e1755b",
+}
+PINNED_BUNDLE_SOURCES = {
+    "laya_provenance.py": "5d07afc9fcf01aa1cd94afee71b97a0e010c5bcabbfee7f0af48ce62485bd0b9",
 }
 NAME_RE = re.compile(r"[A-Za-z0-9_.-]+\Z")
 REQUIRED_ARTIFACTS = ("model.safetensors", "rl_agent_config.json",
@@ -780,6 +784,59 @@ def sha_file(path, bound):
             raise ValueError("artifact changed during verification")
     return digest.hexdigest(), before.st_size
 
+
+def secure_makedirs(path):
+    path = os.path.abspath(path)
+    if not path.startswith("/scratch/") and not path.startswith("/tmp/"):
+        raise ValueError("provision path outside approved roots")
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    current = "/"
+    try:
+        for component in path.strip("/").split("/"):
+            try:
+                child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            except FileNotFoundError:
+                os.mkdir(component, 0o700, dir_fd=fd)
+                child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            info = os.fstat(child)
+            entry = os.stat(component, dir_fd=fd, follow_symlinks=False)
+            if not stat.S_ISDIR(info.st_mode) or info.st_dev != entry.st_dev or info.st_ino != entry.st_ino:
+                os.close(child)
+                raise ValueError("provision path component changed")
+            shared_root = current in ("/", "/scratch", "/tmp") and info.st_mode & stat.S_ISVTX
+            final_component = current == os.path.dirname(path)
+            if not shared_root and (info.st_uid not in (os.getuid(), 0) or info.st_mode & 0o022):
+                os.close(child)
+                raise ValueError("provision path component ownership or permissions unsafe: "
+                                 + current + "/" + component + " uid=" + str(info.st_uid)
+                                 + " mode=" + oct(info.st_mode))
+            if final_component and (info.st_uid != os.getuid() or info.st_mode & 0o077):
+                os.close(child)
+                raise ValueError("provision target directory ownership or permissions unsafe")
+            os.close(fd)
+            fd = child
+            current = ("/" + component) if current == "/" else os.path.join(current, component)
+    finally:
+        os.close(fd)
+    return path
+
+def read_pinned_bytes(path, digest, bound):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > bound:
+            raise ValueError("pinned runtime file is not a bounded regular file")
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            data = stream.read(bound + 1)
+        after = os.fstat(fd)
+        current = os.stat(path, follow_symlinks=False)
+        identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+        if (len(data) > bound or identity(before) != identity(after)
+                or identity(before) != identity(current) or hashlib.sha256(data).hexdigest() != digest):
+            raise ValueError("pinned runtime file changed or digest mismatched")
+        return data
+    finally:
+        os.close(fd)
 
 def guard_dir(value):
     if not os.path.lexists(value):
@@ -1053,33 +1110,47 @@ def run_python(argv, timeout):
 
 
 def run_verified_preflight(bootstrap, code_root, cache, wheelhouse, candidate, preflight_args=None):
-    loader = r"""import hashlib, os, sys, types
+    loader = r"""import hashlib, os, stat, sys, types
 root, cache, wheelhouse, candidate, *cli_args = sys.argv[1:]
 expected = {
     "handoff": ("handoff.py", "0c20ccd8f94c72c62b1528dbfbed703d115c49696f751f38a4e4d6746d34cfb7"),
     "runtime_preflight": ("runtime_preflight.py", "da6950a27095ad79af0ead3166290eaab9b8a96d358a51616e33ea41263fffbe"),
+    "offline_runner": ("offline_runner.py", "58c20176c5fd78304d806ff550443ab659f5d4a5cde0c8ec7bd50dd4553bfb5a"),
 }
+sources = {}
 for name, (filename, digest) in expected.items():
     path = os.path.join(root, filename)
-    with open(path, "rb") as stream:
-        source = stream.read(2 * 1024 * 1024 + 1)
-    if len(source) > 2 * 1024 * 1024 or hashlib.sha256(source).hexdigest() != digest:
-        raise SystemExit(74)
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > 2 * 1024 * 1024:
+            raise SystemExit(74)
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            source = stream.read(2 * 1024 * 1024 + 1)
+        after = os.fstat(fd)
+        current = os.stat(path, follow_symlinks=False)
+        identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+        if (len(source) > 2 * 1024 * 1024 or identity(before) != identity(after)
+                or identity(before) != identity(current) or hashlib.sha256(source).hexdigest() != digest):
+            raise SystemExit(74)
+        sources[name] = (path, source)
+    finally:
+        os.close(fd)
+modules = {}
+for name, (path, source) in sources.items():
     module = types.ModuleType(name)
     module.__file__ = path
     module.__package__ = ""
     sys.modules[name] = module
-    if name == "handoff":
-        exec(compile(source, path, "exec"), module.__dict__)
-preflight_path = os.path.join(root, "runtime_preflight.py")
-with open(preflight_path, "rb") as stream:
-    source = stream.read(2 * 1024 * 1024 + 1)
-module = sys.modules["runtime_preflight"]
-module.__dict__.update({"__name__": "__main__", "__file__": preflight_path})
-sys.argv = [preflight_path] + (cli_args if cli_args else [
-    "--hf-cache", cache, "--wheelhouse", wheelhouse,
-    "--candidate-out", candidate])
-exec(compile(source, preflight_path, "exec"), module.__dict__)
+    modules[name] = module
+for name in ("handoff", "runtime_preflight", "offline_runner"):
+    path, source = sources[name]
+    exec(compile(source, path, "exec"), modules[name].__dict__)
+path, source = sources["runtime_preflight"]
+module = modules["runtime_preflight"]
+module.__dict__.update({"__name__": "__main__", "__file__": path})
+sys.argv = [path, "--hf-cache", cache, "--wheelhouse", wheelhouse, "--candidate-out", candidate, *cli_args]
+exec(compile(source, path, "exec"), module.__dict__)
 """
     return run_python([bootstrap, "-I", "-B", "-c", loader,
                        code_root, cache, wheelhouse, candidate, *(preflight_args or [])], 600)
@@ -1203,14 +1274,14 @@ def main(argv):
               "runtime_catalog_promoted": False, "gpu_allocated": False,
               "internet_used": False,
               "trust_boundary": "no artifacts were copied or created"}, 3)
-    os.makedirs(wheelhouse, 0o700, exist_ok=True)
-    os.makedirs(provision_cache, 0o700, exist_ok=True)
-    os.makedirs(provision_cache + "/tmp", 0o700, exist_ok=True)
+    secure_makedirs(wheelhouse)
+    secure_makedirs(provision_cache)
+    secure_makedirs(provision_cache + "/tmp")
     if guard_dir(cache) == "missing":
-        os.makedirs(cache, 0o700)
-    os.makedirs(os.path.dirname(os.path.dirname(snapshot_root)), 0o700, exist_ok=True)
-    os.makedirs(os.path.dirname(snapshot_root), 0o700, exist_ok=True)
-    os.makedirs(snapshot_root, 0o700, exist_ok=True)
+        secure_makedirs(cache)
+    secure_makedirs(os.path.dirname(os.path.dirname(snapshot_root)))
+    secure_makedirs(os.path.dirname(snapshot_root))
+    secure_makedirs(snapshot_root)
     wheels = []
     wheel_bytes = 0
     for name in sorted(os.listdir(previous_wheels)):
@@ -1302,26 +1373,108 @@ def main(argv):
         emit({"success": False, "phase": "prepare", "blocked": True,
               "reason": "runtime_catalog_bytes_differ_from_reviewed_candidate",
               "runtime_catalog_promoted": False, "environment_provisioned": False}, 65)
-    script_sha = sha_file(code_root + "/prepare_runtime.sh", 1024 * 1024)[0]
-    preflight_sha = sha_file(code_root + "/runtime_preflight.py", 1024 * 1024)[0]
-    # Recheck immutable release digests immediately before executing the reviewed Bash driver.
-    if (script_sha != PINNED_BUNDLE_SCRIPTS["prepare_runtime.sh"]
-            or preflight_sha != PINNED_BUNDLE_SCRIPTS["runtime_preflight.py"]):
-        emit({"success": False, "phase": "prepare", "error": "reviewed_script_changed_before_execution",
-              "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
-    env = dict(OFFLINE_ENV)
-    env["TMPDIR"] = provision_cache + "/tmp"
-    env["XDG_CACHE_HOME"] = provision_cache
     try:
+        # Execute the frozen shell script from a new private directory that
+        # preserves its code/ and sources/ layout, including sibling imports.
+        verified_runtime_files = {
+            name: read_pinned_bytes(code_root + "/" + name, digest, 2 * 1024 * 1024)
+            for name, digest in PINNED_BUNDLE_SCRIPTS.items()
+        }
+        verified_source_files = {
+            name: read_pinned_bytes(bundle + "/sources/" + name, digest, 2 * 1024 * 1024)
+            for name, digest in PINNED_BUNDLE_SOURCES.items()
+        }
+        script_bytes = verified_runtime_files["prepare_runtime.sh"]
+        script_sha = hashlib.sha256(script_bytes).hexdigest()
+        preflight_sha = hashlib.sha256(verified_runtime_files["runtime_preflight.py"]).hexdigest()
+        script_stage = "prepare-" + os.urandom(16).hex()
+        script_stage_created = False
+        tmp_fd = os.open(provision_cache + "/tmp", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.mkdir(script_stage, 0o700, dir_fd=tmp_fd)
+            script_stage_created = True
+            stage_fd = os.open(script_stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=tmp_fd)
+            try:
+                for dirname, files in (("code", verified_runtime_files),
+                                       ("sources", verified_source_files)):
+                    os.mkdir(dirname, 0o700, dir_fd=stage_fd)
+                    child_fd = os.open(dirname, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                       dir_fd=stage_fd)
+                    try:
+                        for name, data in files.items():
+                            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                         0o400, dir_fd=child_fd)
+                            try:
+                                with os.fdopen(fd, "wb", closefd=False) as stream:
+                                    stream.write(data)
+                                    stream.flush()
+                                    os.fsync(stream.fileno())
+                                staged = os.fstat(fd)
+                                if (not stat.S_ISREG(staged.st_mode) or staged.st_nlink != 1
+                                        or staged.st_uid != os.getuid() or staged.st_mode & 0o077):
+                                    raise ValueError("private runtime staging file is unsafe")
+                            finally:
+                                os.close(fd)
+                        directory_stat = os.fstat(child_fd)
+                        if (directory_stat.st_uid != os.getuid()
+                                or directory_stat.st_mode & 0o077):
+                            raise ValueError("private staged subdirectory is unsafe")
+                    finally:
+                        os.close(child_fd)
+                stage_info = os.fstat(stage_fd)
+                if stage_info.st_uid != os.getuid() or stage_info.st_mode & 0o077:
+                    raise ValueError("private runtime staging directory is unsafe")
+            finally:
+                os.close(stage_fd)
+        finally:
+            os.close(tmp_fd)
+        if (script_sha != PINNED_BUNDLE_SCRIPTS["prepare_runtime.sh"]
+                or preflight_sha != PINNED_BUNDLE_SCRIPTS["runtime_preflight.py"]):
+            emit({"success": False, "phase": "prepare", "error": "reviewed_script_changed_before_execution",
+                  "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
+        env = dict(OFFLINE_ENV)
+        env["TMPDIR"] = provision_cache + "/tmp"
+        env["XDG_CACHE_HOME"] = provision_cache
         prepared = subprocess.run(
-            ["/bin/bash", code_root + "/prepare_runtime.sh", scratch, bootstrap,
-             wheelhouse, cache, catalog, catalog_digest],
+            ["/bin/bash", provision_cache + "/tmp/" + script_stage + "/code/prepare_runtime.sh",
+             scratch, bootstrap, wheelhouse, cache, catalog, catalog_digest],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             timeout=840, env=env, check=False)
     except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
         emit({"success": False, "phase": "prepare", "error": "prepare_runtime_failed",
-              "detail": str(exc)[-1500:], "prepare_runtime_sha256": script_sha,
+              "detail": str(exc)[-1500:], "prepare_runtime_sha256": script_sha if "script_sha" in locals() else None,
               "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
+    finally:
+        if locals().get("script_stage_created", False):
+            try:
+                tmp_fd = os.open(provision_cache + "/tmp", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                try:
+                    stage_fd = os.open(script_stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                       dir_fd=tmp_fd)
+                    try:
+                        for dirname, names in (("code", PINNED_BUNDLE_SCRIPTS),
+                                               ("sources", PINNED_BUNDLE_SOURCES)):
+                            try:
+                                child_fd = os.open(dirname, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                                   dir_fd=stage_fd)
+                            except FileNotFoundError:
+                                continue
+                            try:
+                                for name in names:
+                                    try:
+                                        os.unlink(name, dir_fd=child_fd)
+                                    except FileNotFoundError:
+                                        pass
+                            finally:
+                                os.close(child_fd)
+                            os.rmdir(dirname, dir_fd=stage_fd)
+                    finally:
+                        os.close(stage_fd)
+                    os.rmdir(script_stage, dir_fd=tmp_fd)
+                finally:
+                    os.close(tmp_fd)
+            except OSError:
+                pass
     if prepared.returncode != 0:
         emit({"success": False, "phase": "prepare", "error": "prepare_runtime_failed",
               "exit_code": prepared.returncode,
@@ -1350,8 +1503,8 @@ def main(argv):
 main(sys.argv)
 '''
 
-PROVISION_INSPECT_SCRIPT_SHA256 = "0fcb654d0d1457357cda44c4f511b7f26199609d3a17cbdce552319a6c0ffa68"
-PROVISION_PREPARE_SCRIPT_SHA256 = "6bd753204f82115368d56067dd72703dae76e2c1b52f31f7eab551f88acc9793"
+PROVISION_INSPECT_SCRIPT_SHA256 = "e266eb697d5d6cf12b25eefb12c2b75af5368460843fae409ba29116a942af6a"
+PROVISION_PREPARE_SCRIPT_SHA256 = "d44d05984ecba58be20931cd1c05da114a327bd3c33a410dcc52026de9d1d2b3"
 
 
 def _provision_argv(mode: str, bootstrap: str, scratch: str, cache: str,
