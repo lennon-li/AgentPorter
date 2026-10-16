@@ -7,7 +7,7 @@ import json
 import logging
 import functools
 from contextlib import asynccontextmanager
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 from logging.handlers import RotatingFileHandler
 from starlette.types import ASGIApp
 import uvicorn
@@ -47,6 +47,7 @@ from agentporter.tools.scinet_training import (
 )
 from agentporter.tools.scinet_inference import (
     create_scinet_inference_preflight_tool,
+    create_scinet_inference_provision_tool,
     create_scinet_inference_tools,
 )
 
@@ -168,6 +169,9 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _scinet_inference = create_scinet_inference_tools(
         registry, getattr(config, "scinet", None), config.state_dir
     )
+    _scinet_inference_provision = create_scinet_inference_provision_tool(
+        registry, getattr(config, "scinet", None), config.state_dir
+    )
 
     @mcp.tool()
     @monitored_tool("venkata_transfer")
@@ -258,6 +262,16 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def scinet_inference_stage(workspace_id: str) -> dict:
         """Stage only the digest-pinned standalone inference bundle to fixed SciNet scratch."""
         return _scinet_inference["scinet_inference_stage"](workspace_id=workspace_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_provision")
+    def scinet_inference_provision(
+        workspace_id: str, previous_run_id: str,
+        phase: Literal["inspect", "prepare"] = "inspect",
+    ) -> dict:
+        """Inspect (read-only) or prepare the fixed Laya inference runtime; destinations are server-generated."""
+        return _scinet_inference_provision(
+            workspace_id=workspace_id, phase=phase, previous_run_id=previous_run_id)
 
     @mcp.tool()
     @monitored_tool("scinet_inference_approve")
@@ -582,6 +596,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         "scinet_setup_status": scinet_setup_status,
         "scinet_inference_preflight": scinet_inference_preflight,
         "scinet_inference_stage": scinet_inference_stage,
+        "scinet_inference_provision": scinet_inference_provision,
         "scinet_inference_approve": scinet_inference_approve,
         "scinet_inference_submit": scinet_inference_submit,
         "scinet_inference_results": scinet_inference_results,

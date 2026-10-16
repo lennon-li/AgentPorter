@@ -90,6 +90,26 @@ REVISION = "7b928d828b7b0e022f929d9bd2e44165aa270148"
 CHECKPOINT_SHA256 = "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c"
 RESUME_PROTOCOL_SHA256 = "1bdc5716853b98b887895d7088c70b0e0c5bb37d643adfa4a10de70896d7a6b4"
 
+# Provisioning pins. The checkpoint byte size comes from the reviewed package-v2
+# README; the vetted frozen scripts bound every other artifact byte themselves.
+WEIGHTS_BYTES = 842609210
+PROVISION_RUN_RE = ID_RE
+PROVISION_BOOTSTRAP = "/usr/bin/python3"
+PACKAGE_SCRIPT_SHA256 = {
+    "code/prepare_runtime.sh": "635d728a21a2669a6dec2a7c7ecb1bed6d969b26305c9fec42cdda17df9a68ae",
+    "code/runtime_preflight.py": "da6950a27095ad79af0ead3166290eaab9b8a96d358a51616e33ea41263fffbe",
+    "code/handoff.py": "0c20ccd8f94c72c62b1528dbfbed703d115c49696f751f38a4e4d6746d34cfb7",
+    "code/requirements-inference.lock": "de2774a16bfbfad7d2f600130a8afccfbd8130805ebca90c2c46e03e41e1755b",
+}
+PROVISION_MAX_WHEELS = 128
+PROVISION_MAX_WHEEL_BYTES = 3 * 1024**3
+PROVISION_MAX_WHEELHOUSE_BYTES = 14 * 1024**3
+PROVISION_IMPOSSIBLE_MESSAGE = (
+    "previous inference run artifacts are insufficient; operator must supply the exact "
+    "missing provenance (missing snapshot artifacts or an independently reviewed complete "
+    "offline wheelhouse). Never download opportunistically or rewrite the frozen lock."
+)
+
 
 # One fixed snippet is executed locally and embedded verbatim in the remote reader.
 # Generic GPU totals cannot establish H100 type without a typed allocation.
@@ -581,6 +601,8 @@ def _expected_manifest(settings) -> str:
 
 
 REMOTE_INFERENCE_RECEIVER = r'''import hashlib,json,os,sys
+PINNED_MANIFEST="d0032d8a9bb6fc3580b2e1d9118bc5ca6f99defd6bfdfdf641a3e59fc02a91c7"
+PINNED_SCRIPTS={"code/prepare_runtime.sh":"635d728a21a2669a6dec2a7c7ecb1bed6d969b26305c9fec42cdda17df9a68ae","code/runtime_preflight.py":"da6950a27095ad79af0ead3166290eaab9b8a96d358a51616e33ea41263fffbe","code/handoff.py":"0c20ccd8f94c72c62b1528dbfbed703d115c49696f751f38a4e4d6746d34cfb7","code/requirements-inference.lock":"de2774a16bfbfad7d2f600130a8afccfbd8130805ebca90c2c46e03e41e1755b"}
 root,stage=sys.argv[1:3]
 if not stage.isalnum() or len(stage)!=32: raise SystemExit(64)
 if not root.startswith("/scratch/") or ".." in root.split("/"): raise SystemExit(64)
@@ -590,9 +612,12 @@ os.makedirs(scratch,mode=0o700,exist_ok=True)
 if os.path.islink(scratch) or os.path.realpath(scratch)!=scratch: raise SystemExit(64)
 si=os.stat(scratch,follow_symlinks=False)
 if si.st_uid!=os.getuid() or si.st_mode&0o077: raise SystemExit(64)
-header=json.loads(sys.stdin.buffer.readline())
-files=header.get("files")
-if not isinstance(files,list) or not files or len(files)>64: raise SystemExit(64)
+header_line=sys.stdin.buffer.readline(262145)
+if len(header_line)>262144 or not header_line.endswith(b"\n"): raise SystemExit(64)
+header=json.loads(header_line)
+if header.get("manifest_sha256") != PINNED_MANIFEST: raise SystemExit(64)
+entries=header.get("files")
+if not isinstance(entries,list) or len(entries)!=60: raise SystemExit(64)
 base=os.path.join(root,stage)
 os.makedirs(root,mode=0o700,exist_ok=True)
 if os.path.islink(root) or os.path.realpath(root)!=root: raise SystemExit(64)
@@ -602,7 +627,7 @@ try: os.mkdir(base,0o700)
 except FileExistsError: print(json.dumps({"success":False,"error":"destination_exists"})); raise SystemExit(73)
 try:
  total=0; seen=set()
- for item in files:
+ for item in entries:
   name=item["name"]; size=int(item["size"]); want=item["sha256"]
   parts=name.split("/")
   if not parts or any(p in ("",".","..") or p.startswith(".") for p in parts) or name in seen or size<0 or size>2097152: raise ValueError("invalid_file")
@@ -618,7 +643,19 @@ try:
     out.write(data); h.update(data); remaining-=len(data)
   if h.hexdigest()!=want: raise ValueError("file_sha256_mismatch")
  with open(os.path.join(base,"manifest.json"),"rb") as f: mh=hashlib.sha256(f.read()).hexdigest()
- if mh!=header.get("manifest_sha256"): raise ValueError("manifest_sha256_mismatch")
+ if mh!=PINNED_MANIFEST: raise ValueError("manifest_sha256_mismatch")
+ m=json.load(open(os.path.join(base,"manifest.json"),encoding="utf-8"))
+ files=m.get("files"); cases=m.get("cases")
+ if (not isinstance(files,dict) or len(files)!=59 or not isinstance(cases,list)
+     or len(cases)!=42 or m.get("schema")!="laya-scinet-inference-v2"
+     or m.get("stage")!="standalone-inference"):
+  raise ValueError("manifest_inventory_invalid")
+ expected=dict(files); expected["manifest.json"]=PINNED_MANIFEST
+ received={item["name"]:item["sha256"] for item in entries}
+ if len(received)!=60 or received!=expected:
+  raise ValueError("manifest_inventory_mismatch")
+ if any(files.get(name)!=digest for name,digest in PINNED_SCRIPTS.items()):
+  raise ValueError("reviewed_script_digest_mismatch")
  for current,dirs,names in os.walk(base,topdown=False):
   for d in dirs: os.chmod(os.path.join(current,d),0o500)
  os.chmod(base,0o500)
@@ -659,6 +696,989 @@ for current,dirs,names in os.walk(bundle,followlinks=False):
 if actual!=expected or files.get("code/inference.sbatch.template")!="5d41bf4b5b533e8147ba7c6a38e31fc4ef19bbe1d2d4f8c17f3d15d870e2b79f": raise SystemExit(71)
 print(json.dumps({"success":True,"manifest_sha256":want,"file_count":len(actual)+1}))
 '''
+
+
+# ---------------------------------------------------------------------------
+# Scoped inference runtime provisioning. Two fixed phases, each one
+# digest-pinned remote script (independently pinned in the SSH broker):
+# "inspect" is strictly read-only; "prepare" copies only pinned/reverified
+# artifacts into fixed scratch targets and invokes the bundle's frozen
+# prepare_runtime.sh. No user code, no Slurm submit, no GPU request, no
+# network egress, no approval signing, and no runtime-catalog promotion
+# happens here. A candidate catalog is never an attestation.
+# ---------------------------------------------------------------------------
+
+REMOTE_PROVISION_COMMON = r'''import hashlib, json, os, re, stat, subprocess, sys
+RUN_RE = re.compile(r"[0-9a-f]{32}\Z")
+HEX_RE = re.compile(r"[0-9a-f]{64}\Z")
+SCRATCH_RE = re.compile(r"/scratch/[A-Za-z0-9_./-]+\Z")
+EXE_RE = re.compile(r"/[A-Za-z0-9_./-]+\Z")
+REVISION = "7b928d828b7b0e022f929d9bd2e44165aa270148"
+CHECKPOINT_SHA256 = "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c"
+WEIGHTS_BYTES = 842609210
+LAYA_WHEEL = "laya-0.3.28-py3-none-any.whl"
+LAYA_WHEEL_SHA256 = "a1493cff474c0a5d84861db55c0c5c9b17f1db8561e458764da9a322dc542a88"
+LAYA_WHEEL_BYTES = 360039
+PINNED_BUNDLE_SCRIPTS = {
+    "prepare_runtime.sh": "635d728a21a2669a6dec2a7c7ecb1bed6d969b26305c9fec42cdda17df9a68ae",
+    "runtime_preflight.py": "da6950a27095ad79af0ead3166290eaab9b8a96d358a51616e33ea41263fffbe",
+    "handoff.py": "0c20ccd8f94c72c62b1528dbfbed703d115c49696f751f38a4e4d6746d34cfb7",
+    "requirements-inference.lock": "de2774a16bfbfad7d2f600130a8afccfbd8130805ebca90c2c46e03e41e1755b",
+}
+NAME_RE = re.compile(r"[A-Za-z0-9_.-]+\Z")
+REQUIRED_ARTIFACTS = ("model.safetensors", "rl_agent_config.json",
+                      "encoder/config.json", "tokenizer/tokenizer.json",
+                      "tokenizer/tokenizer_config.json")
+MAX_SMALL_BYTES = 256 * 1024**2
+MAX_WHEELS = 128
+MAX_WHEEL_BYTES = 3 * 1024**3
+MAX_TOTAL_BYTES = 14 * 1024**3
+OFFLINE_ENV = {"PATH": "/usr/bin:/bin", "TMPDIR": "/tmp", "HOME": "/tmp", "LANG": "C",
+               "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
+               "HF_DATASETS_OFFLINE": "1", "PYTHONNOUSERSITE": "1",
+               "PYTHONDONTWRITEBYTECODE": "1"}
+
+
+def emit(value, code):
+    print(json.dumps(value, sort_keys=True, separators=(",", ":")))
+    raise SystemExit(code)
+
+
+def invalid_arguments(message):
+    emit({"success": False, "error": "invalid_provision_arguments", "detail": message}, 64)
+
+
+def checkpoint_identity(path):
+    digest = hashlib.sha256()
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+    with os.fdopen(fd, "rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise ValueError("checkpoint is not a regular single-link file")
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+        if identity(os.fstat(stream.fileno())) != identity(before) or identity(os.stat(path)) != identity(before):
+            raise ValueError("checkpoint changed during verification")
+    return digest.hexdigest(), before.st_size
+
+
+def sha_file(path, bound):
+    st = os.stat(path, follow_symlinks=False)
+    if 0 <= bound < st.st_size:
+        raise ValueError("provision artifact exceeds bound")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    digest = hashlib.sha256()
+    identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+    with os.fdopen(fd, "rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise ValueError("artifact is not a regular single-link file")
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+        if identity(os.fstat(stream.fileno())) != identity(before) or identity(os.stat(path)) != identity(before):
+            raise ValueError("artifact changed during verification")
+    return digest.hexdigest(), before.st_size
+
+
+def guard_dir(value):
+    if not os.path.lexists(value):
+        return "missing"
+    info = os.lstat(value)
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+            or info.st_mode & 0o077 or os.path.realpath(value) != value):
+        return "unsafe"
+    return "ok"
+
+
+def collect_snapshot(source_root):
+    """Inventory only allowlisted snapshot artifact names; fail before any copy."""
+    collected, problems = {}, []
+    entries = sorted(os.listdir(source_root))
+    for name in entries:
+        path = os.path.join(source_root, name)
+        if name == "model.safetensors" or name == "rl_agent_config.json":
+            pass
+        elif not NAME_RE.fullmatch(name):
+            problems.append("unreviewed_file:" + name)
+            continue
+        st = os.lstat(path)
+        if stat.S_ISLNK(st.st_mode) or os.path.realpath(path) != path:
+            problems.append("unsafe_file:" + name)
+            continue
+        if name in ("encoder", "tokenizer"):
+            if not stat.S_ISDIR(st.st_mode) or st.st_mode & 0o077:
+                problems.append("unsafe_dir:" + name)
+                continue
+            for sub in sorted(os.listdir(path)):
+                sub_path = os.path.join(path, sub)
+                sub_st = os.lstat(sub_path)
+                safe_name = name + "/" + sub
+                if (not NAME_RE.fullmatch(sub) or not sub.endswith((".json", ".txt", ".model"))
+                        or stat.S_ISLNK(sub_st.st_mode)
+                        or os.path.realpath(sub_path) != sub_path):
+                    problems.append("unreviewed_file:" + safe_name)
+                    continue
+                if not stat.S_ISREG(sub_st.st_mode) or sub_st.st_nlink != 1:
+                    problems.append("unsafe_file:" + safe_name)
+                    continue
+                if sub_st.st_size > MAX_SMALL_BYTES:
+                    problems.append("snapshot_file_exceeds_bound:" + safe_name)
+                    continue
+                collected[safe_name] = sub_path
+        elif (name == "model.safetensors" or name == "rl_agent_config.json") \
+                and stat.S_ISREG(st.st_mode) and st.st_nlink == 1:
+            if st.st_size > (MAX_TOTAL_BYTES if name == "model.safetensors" else MAX_SMALL_BYTES):
+                problems.append("snapshot_file_exceeds_bound:" + name)
+                continue
+            collected[name] = path
+        else:
+            problems.append("unreviewed_file:" + name)
+    return collected, problems
+
+
+def copy_regular_file(source, target, bound):
+    st = os.lstat(source)
+    if (stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode) or st.st_nlink != 1
+            or st.st_uid != os.getuid() or st.st_mode & 0o077
+            or os.path.realpath(source) != source or not 0 < st.st_size <= bound):
+        raise ValueError("source violates provisioning bounds")
+    if os.path.lexists(target):
+        target_info = os.lstat(target)
+        if (not stat.S_ISREG(target_info.st_mode) or target_info.st_nlink != 1
+                or target_info.st_uid != os.getuid() or target_info.st_mode & 0o077
+                or os.path.realpath(target) != target):
+            raise ValueError("existing target is unsafe")
+        source_digest = sha_file(source, bound)
+        if sha_file(target, bound) != source_digest:
+            raise ValueError("existing target differs from verified source")
+        return source_digest
+    fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    digest = hashlib.sha256()
+    identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+    target_fd = None
+    try:
+        with os.fdopen(fd, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            target_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+            with os.fdopen(target_fd, "wb") as out:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+                    out.write(chunk)
+                out.flush()
+                os.fsync(out.fileno())
+            if identity(os.fstat(stream.fileno())) != identity(before) or identity(os.lstat(source)) != identity(before):
+                raise ValueError("source changed during provisioning copy")
+    except BaseException:
+        if os.path.lexists(target):
+            os.chmod(target, 0o600)
+        raise
+    copied = sha_file(target, bound)
+    if copied != (digest.hexdigest(), st.st_size):
+        raise ValueError("copied artifact digest differs from its verified source")
+    return copied
+
+
+def unique_nonempty(items):
+    return [b for b in items if b]
+'''
+
+REMOTE_PROVISION_INSPECT = REMOTE_PROVISION_COMMON + r'''
+
+mode, bootstrap, scratch, cache, run_id = sys.argv[1:6]
+if mode != "inspect":
+    invalid_arguments("unknown mode")
+for value, pattern in ((scratch, SCRATCH_RE), (cache, SCRATCH_RE), (bootstrap, EXE_RE)):
+    if not isinstance(value, str) or not pattern.fullmatch(value):
+        invalid_arguments("argument shape")
+if (".." in bootstrap.split("/") or ".." in scratch.split("/") or ".." in cache.split("/")
+        or "//" in scratch or "//" in cache or not cache.startswith(scratch + "/")
+        or cache == scratch):
+    invalid_arguments("argument shape")
+if not RUN_RE.fullmatch(run_id):
+    invalid_arguments("run id")
+previous = scratch + "/runs/" + run_id
+blockers = []
+scratch_state = guard_dir(scratch)
+if scratch_state == "missing":
+    blockers.append("scratch_root_missing")
+elif scratch_state == "unsafe":
+    blockers.append("scratch_root_unsafe")
+if scratch_state == "ok":
+    previous_model = previous + "/model"
+    previous_wheels = previous + "/wheelhouse"
+    collected, problems = {}, []
+    problems_add = problems.append
+    if guard_dir(previous) == "missing":
+        blockers.append("previous_run_missing")
+    elif guard_dir(previous) == "unsafe":
+        blockers.append("previous_run_unsafe")
+    model_state = guard_dir(previous_model)
+    wheel_state = guard_dir(previous_wheels)
+    if model_state == "ok":
+        try:
+            collected, problems = collect_snapshot(previous_model)
+        except OSError:
+            blockers.append("previous_run_model_unreadable")
+    elif model_state == "missing":
+        blockers.append("previous_run_model_dir_missing")
+    else:
+        blockers.append("previous_run_model_dir_unsafe")
+    blockers.extend(unique_nonempty(problems))
+    checkpoint_sha = None
+    if "model.safetensors" in collected:
+        try:
+            checkpoint_sha, size = checkpoint_identity(collected["model.safetensors"])
+        except (OSError, ValueError):
+            blockers.append("checkpoint_unreadable_or_unsafe")
+            checkpoint_sha = None
+        else:
+            if size != WEIGHTS_BYTES:
+                blockers.append("checkpoint_size_mismatch")
+            if checkpoint_sha != CHECKPOINT_SHA256:
+                blockers.append("checkpoint_sha256_mismatch")
+    for name in REQUIRED_ARTIFACTS:
+        if name not in collected:
+            blockers.append("missing:" + name)
+    wheel_count = wheel_bytes = 0
+    laya_wheel_present = False
+    if wheel_state == "ok":
+        try:
+            for name in sorted(os.listdir(previous_wheels)):
+                if not name.endswith(".whl"):
+                    if name == "SHA256SUMS":
+                        continue
+                    blockers.append("unreviewed_wheelhouse_entry:" + name)
+                    continue
+                path = os.path.join(previous_wheels, name)
+                st = os.lstat(path)
+                if (stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode)
+                        or st.st_nlink != 1 or os.path.realpath(path) != path):
+                    blockers.append("unsafe_wheel_file:" + name)
+                    continue
+                if wheel_count >= MAX_WHEELS:
+                    blockers.append("wheelhouse_wheel_count_exceeds_bound")
+                    break
+                if st.st_size > MAX_WHEEL_BYTES or wheel_bytes + st.st_size > MAX_TOTAL_BYTES:
+                    blockers.append("wheelhouse_size_exceeds_bound")
+                    break
+                wheel_count += 1
+                wheel_bytes += st.st_size
+                if name == LAYA_WHEEL:
+                    laya_wheel_present = (
+                        st.st_size == LAYA_WHEEL_BYTES
+                        and sha_file(path, MAX_WHEEL_BYTES)[0] == LAYA_WHEEL_SHA256
+                    )
+        except OSError:
+            blockers.append("previous_run_wheelhouse_unreadable")
+    elif wheel_state == "missing":
+        blockers.append("previous_run_wheelhouse_missing")
+    else:
+        blockers.append("previous_run_wheelhouse_unsafe")
+    if wheel_state == "ok" and wheel_count and not laya_wheel_present:
+        blockers.append("laya_wheel_missing_from_previous_wheelhouse")
+else:
+    blockers.extend(["previous_run_missing", "previous_run_model_dir_missing",
+                     "previous_run_wheelhouse_missing"])
+    collected, checkpoint_sha, wheel_count, wheel_bytes, laya_wheel_present = [], None, 0, 0, False
+snapshot_names, snapshot_checkpoint_sha = [], None
+snapshot_root = os.path.join(cache, "models--convaiinnovations--laya", "snapshots", REVISION)
+if os.path.lexists(cache):
+    cache_state = guard_dir(cache)
+    if cache_state != "ok":
+        blockers.append("model_cache_unsafe")
+    elif guard_dir(snapshot_root) == "ok":
+        try:
+            snapshot_collected, snapshot_problems = collect_snapshot(snapshot_root)
+        except OSError:
+            snapshot_collected, snapshot_problems = {}, ["model_cache_unreadable"]
+        blockers.extend(unique_nonempty(snapshot_problems))
+        snapshot_names = sorted(snapshot_collected)
+        if "model.safetensors" in snapshot_collected:
+            try:
+                snapshot_checkpoint_sha, snapshot_size = checkpoint_identity(
+                    snapshot_collected["model.safetensors"])
+            except (OSError, ValueError):
+                blockers.append("model_cache_checkpoint_unsafe")
+            else:
+                if (snapshot_size != WEIGHTS_BYTES
+                        or snapshot_checkpoint_sha != CHECKPOINT_SHA256):
+                    blockers.append("model_cache_checkpoint_mismatch")
+    elif guard_dir(snapshot_root) == "unsafe":
+        blockers.append("model_cache_snapshot_unsafe")
+python_version = None
+if os.path.isfile(bootstrap) and os.access(bootstrap, os.X_OK):
+    try:
+        probe = subprocess.run(
+            [bootstrap, "-I", "-B", "-c",
+             "import sys; print('.'.join(map(str, sys.version_info[:3])))"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=20, env=OFFLINE_ENV, check=False)
+        if probe.returncode == 0:
+            text = probe.stdout.decode("utf-8", "strict").strip()
+            if re.fullmatch(r"3\.12\.[0-9]+", text):
+                python_version = text
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        python_version = None
+if python_version is None:
+    blockers.append("bootstrap_python_3_12_unavailable")
+emit({"success": True, "phase": "inspect", "blocked": bool(blockers),
+      "blockers": blockers, "read_only": True, "gpu_allocated": False,
+      "internet_used": False, "previous_run_id": run_id,
+      "previous_run_ok": checkpoint_sha == CHECKPOINT_SHA256 and not any(
+          item.startswith(("checkpoint_", "missing:")) for item in blockers),
+      "model_checkpoint_sha256": checkpoint_sha,
+      "snapshot_artifacts": sorted(collected) if isinstance(collected, dict) else collected,
+      "wheel_count": wheel_count, "wheelhouse_bytes": wheel_bytes,
+      "laya_wheel_present": laya_wheel_present,
+      "model_cache_snapshot_present": bool(snapshot_names),
+      "model_cache_checkpoint_sha256": snapshot_checkpoint_sha,
+      "bootstrap_python_version": python_version,
+      "wheelhouse_target_exists": os.path.lexists(scratch + "/wheelhouse"),
+      "model_cache_target_exists": bool(snapshot_names),
+      "catalog_candidate_exists": os.path.lexists(scratch + "/runtime-catalog.candidate.json"),
+      "catalog_promoted": os.path.lexists(scratch + "/runtime-catalog.json"),
+      "trust_boundary": "read-only inspect; candidate catalogs are never attestations"}, 0)
+'''
+
+REMOTE_PROVISION_PREPARE = REMOTE_PROVISION_COMMON + r'''
+
+def run_python(argv, timeout):
+    try:
+        return subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, timeout=timeout,
+                             env=OFFLINE_ENV, check=False)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        return {"exit_code": None, "stderr_tail": str(exc)[-1500:]}
+
+
+def run_verified_preflight(bootstrap, code_root, cache, wheelhouse, candidate, preflight_args=None):
+    loader = r"""import hashlib, os, sys, types
+root, cache, wheelhouse, candidate, *cli_args = sys.argv[1:]
+expected = {
+    "handoff": ("handoff.py", "0c20ccd8f94c72c62b1528dbfbed703d115c49696f751f38a4e4d6746d34cfb7"),
+    "runtime_preflight": ("runtime_preflight.py", "da6950a27095ad79af0ead3166290eaab9b8a96d358a51616e33ea41263fffbe"),
+}
+for name, (filename, digest) in expected.items():
+    path = os.path.join(root, filename)
+    with open(path, "rb") as stream:
+        source = stream.read(2 * 1024 * 1024 + 1)
+    if len(source) > 2 * 1024 * 1024 or hashlib.sha256(source).hexdigest() != digest:
+        raise SystemExit(74)
+    module = types.ModuleType(name)
+    module.__file__ = path
+    module.__package__ = ""
+    sys.modules[name] = module
+    if name == "handoff":
+        exec(compile(source, path, "exec"), module.__dict__)
+preflight_path = os.path.join(root, "runtime_preflight.py")
+with open(preflight_path, "rb") as stream:
+    source = stream.read(2 * 1024 * 1024 + 1)
+module = sys.modules["runtime_preflight"]
+module.__dict__.update({"__name__": "__main__", "__file__": preflight_path})
+sys.argv = [preflight_path] + (cli_args if cli_args else [
+    "--hf-cache", cache, "--wheelhouse", wheelhouse,
+    "--candidate-out", candidate])
+exec(compile(source, preflight_path, "exec"), module.__dict__)
+"""
+    return run_python([bootstrap, "-I", "-B", "-c", loader,
+                       code_root, cache, wheelhouse, candidate, *(preflight_args or [])], 600)
+
+
+def main(argv):
+    mode, bootstrap, scratch, cache, run_id, bundle, catalog_digest = argv[1:8]
+    if mode != "prepare":
+        invalid_arguments("unknown mode")
+    if not isinstance(catalog_digest, str) or not (
+            catalog_digest == "none" or HEX_RE.fullmatch(catalog_digest)):
+        invalid_arguments("catalog digest")
+    for value, pattern in ((scratch, SCRATCH_RE), (cache, SCRATCH_RE), (bootstrap, EXE_RE)):
+        if not isinstance(value, str) or not pattern.fullmatch(value):
+            invalid_arguments("argument shape")
+    if (".." in bootstrap.split("/") or ".." in scratch.split("/") or ".." in cache.split("/")
+            or "//" in scratch or "//" in cache or not cache.startswith(scratch + "/")
+            or cache == scratch):
+        invalid_arguments("argument shape")
+    prefixes = (scratch + "/provision-sources/", scratch + "/stages/")
+    if not isinstance(bundle, str) or len(bundle) > 200 \
+            or not any(bundle.startswith(prefix) and RUN_RE.fullmatch(bundle[len(prefix):])
+                       for prefix in prefixes):
+        invalid_arguments("bundle location")
+    code_root = bundle + "/code"
+    wheelhouse = scratch + "/wheelhouse"
+    env_root = scratch + "/inference-env"
+    provision_cache = scratch + "/provision-cache"
+    candidate = scratch + "/runtime-catalog.candidate.json"
+    catalog = scratch + "/runtime-catalog.json"
+    snapshot_root = os.path.join(cache, "models--convaiinnovations--laya",
+                                 "snapshots", REVISION)
+    previous = scratch + "/runs/" + run_id
+    previous_model = previous + "/model"
+    previous_wheels = previous + "/wheelhouse"
+    blockers = []
+    bundle_state = guard_dir(bundle)
+    if bundle_state != "ok":
+        blockers.append("staged_bundle_missing_or_unsafe")
+    else:
+        for name in ("prepare_runtime.sh", "runtime_preflight.py", "handoff.py",
+                     "requirements-inference.lock"):
+            path = os.path.join(code_root, name)
+            info = os.lstat(path) if os.path.lexists(path) else None
+            if info is None or stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) \
+                    or os.path.realpath(path) != path or info.st_mode & 0o077 \
+                    or info.st_size > 1024 * 1024:
+                blockers.append("staged_bundle_script_missing_or_unsafe:" + name)
+            elif sha_file(path, 1024 * 1024)[0] != PINNED_BUNDLE_SCRIPTS[name]:
+                blockers.append("staged_bundle_script_digest_mismatch:" + name)
+    if guard_dir(scratch) != "ok":
+        blockers.append("scratch_root_missing_or_unsafe")
+    if guard_dir(previous) != "ok":
+        blockers.append("previous_run_missing_or_unsafe")
+    if guard_dir(previous_model) != "ok":
+        blockers.append("previous_run_model_dir_missing_or_unsafe")
+    if guard_dir(previous_wheels) != "ok":
+        blockers.append("previous_run_wheelhouse_missing_or_unsafe")
+    else:
+        laya_source = os.path.join(previous_wheels, LAYA_WHEEL)
+        try:
+            laya_digest, laya_size = sha_file(laya_source, MAX_WHEEL_BYTES)
+            if laya_size != LAYA_WHEEL_BYTES or laya_digest != LAYA_WHEEL_SHA256:
+                blockers.append("laya_wheel_missing_from_previous_wheelhouse")
+        except (OSError, ValueError):
+            blockers.append("laya_wheel_missing_from_previous_wheelhouse")
+    if os.path.lexists(env_root):
+        blockers.append("target_exists:inference-env")
+    for target, label in ((wheelhouse, "wheelhouse"),
+                          (provision_cache, "provision-cache"),
+                          (snapshot_root, "model_cache_snapshot")):
+        if os.path.lexists(target) and guard_dir(target) != "ok":
+            blockers.append("existing_target_unsafe:" + label)
+    if guard_dir(cache) not in ("ok", "missing"):
+        blockers.append("model_cache_unsafe")
+    if catalog_digest != "none":
+        if not os.path.lexists(catalog):
+            blockers.append("configured_catalog_bytes_missing:"
+                            "operator must place the reviewed runtime-catalog.json")
+        else:
+            try:
+                placed_sha, placed_size = sha_file(catalog, 1024 * 1024)
+            except (OSError, ValueError):
+                blockers.append("configured_runtime_catalog_unsafe")
+            else:
+                if placed_sha != catalog_digest:
+                    blockers.append("configured_catalog_sha_differs_from_configured_digest")
+    try:
+        source, source_problems = collect_snapshot(previous_model)
+    except OSError:
+        source, source_problems = {}, ["previous_run_model_unreadable"]
+    blockers.extend(unique_nonempty(source_problems))
+    checkpoint_sha = None
+    if "model.safetensors" in source:
+        try:
+            checkpoint_sha, size = checkpoint_identity(source["model.safetensors"])
+        except (OSError, ValueError):
+            blockers.append("checkpoint_unreadable_or_unsafe")
+        else:
+            if size != WEIGHTS_BYTES:
+                blockers.append("checkpoint_size_mismatch")
+            if checkpoint_sha != CHECKPOINT_SHA256:
+                blockers.append("checkpoint_sha256_mismatch")
+    else:
+        blockers.append("missing:model.safetensors")
+    for name in REQUIRED_ARTIFACTS:
+        if name not in source:
+            blockers.append("missing:" + name)
+    if not os.path.isfile(bootstrap) or not os.access(bootstrap, os.X_OK):
+        blockers.append("bootstrap_python_3_12_unavailable")
+    else:
+        verdict = run_python([bootstrap, "-I", "-B", "-c",
+                              "import sys; print(sys.version_info[:2] == (3, 12))"], 20)
+        if (isinstance(verdict, dict)
+                or verdict.stdout.decode("utf-8", "strict").strip() != "True"):
+            blockers.append("bootstrap_python_3_12_unavailable")
+    if blockers:
+        emit({"success": True, "phase": "prepare", "blocked": True,
+              "reason": "provisioning_refused_before_any_side_effect",
+              "blockers": blockers, "environment_provisioned": False,
+              "runtime_catalog_promoted": False, "gpu_allocated": False,
+              "internet_used": False,
+              "trust_boundary": "no artifacts were copied or created"}, 3)
+    os.makedirs(wheelhouse, 0o700, exist_ok=True)
+    os.makedirs(provision_cache, 0o700, exist_ok=True)
+    os.makedirs(provision_cache + "/tmp", 0o700, exist_ok=True)
+    if guard_dir(cache) == "missing":
+        os.makedirs(cache, 0o700)
+    os.makedirs(os.path.dirname(os.path.dirname(snapshot_root)), 0o700, exist_ok=True)
+    os.makedirs(os.path.dirname(snapshot_root), 0o700, exist_ok=True)
+    os.makedirs(snapshot_root, 0o700, exist_ok=True)
+    wheels = []
+    wheel_bytes = 0
+    for name in sorted(os.listdir(previous_wheels)):
+        if not name.endswith(".whl"):
+            continue
+        if not NAME_RE.fullmatch(name):
+            raise ValueError("unreviewed wheel name")
+        if len(wheels) >= MAX_WHEELS or wheel_bytes + os.lstat(
+                os.path.join(previous_wheels, name)).st_size > MAX_TOTAL_BYTES:
+            raise ValueError("wheelhouse exceeds provisioning bounds")
+        copied = copy_regular_file(os.path.join(previous_wheels, name),
+                                   os.path.join(wheelhouse, name), MAX_WHEEL_BYTES)
+        wheels.append({"name": name, "sha256": copied[0], "size": copied[1]})
+        wheel_bytes += copied[1]
+    laya_wheel_present = any(item["name"] == LAYA_WHEEL for item in wheels)
+    if not laya_wheel_present:
+        emit({"success": False, "phase": "prepare", "blocked": True,
+              "reason": "laya_wheel_missing_from_previous_wheelhouse",
+              "blockers": ["laya_wheel_missing_from_previous_wheelhouse:"
+                           "operator must supply the reviewed wheel "
+                           "under an approved transfer; never downloaded here"],
+              "environment_provisioned": False, "runtime_catalog_promoted": False,
+              "wheel_count": len(wheels)}, 3)
+    for name, source_path in sorted(source.items()):
+        rel_parts = name.split("/")
+        target_root = snapshot_root
+        for part in rel_parts[:-1]:
+            target_root = os.path.join(target_root, part)
+            if not os.path.isdir(target_root):
+                os.mkdir(target_root, 0o700)
+        copy_regular_file(source_path, os.path.join(target_root, rel_parts[-1]),
+                          MAX_TOTAL_BYTES if name == "model.safetensors" else MAX_SMALL_BYTES)
+    for root in (wheelhouse, snapshot_root):
+        for current, dirs, names in os.walk(root, topdown=False):
+            os.chmod(current, 0o500)
+    if os.path.lexists(candidate):
+        candidate_info = os.lstat(candidate)
+        if (not stat.S_ISREG(candidate_info.st_mode) or candidate_info.st_nlink != 1
+                or candidate_info.st_uid != os.getuid() or candidate_info.st_mode & 0o077
+                or os.path.realpath(candidate) != candidate):
+            emit({"success": False, "phase": "prepare", "error": "candidate_catalog_unsafe",
+                  "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
+        result = None
+    else:
+        result = run_verified_preflight(bootstrap, code_root, cache, wheelhouse, candidate)
+    if isinstance(result, dict):
+        emit({"success": False, "phase": "prepare", "error": "candidate_preflight_failed",
+              "detail": result.get("stderr_tail", ""), "environment_provisioned": False,
+              "runtime_catalog_promoted": False}, 65)
+    if result is not None and result.returncode != 0:
+        emit({"success": False, "phase": "prepare", "error": "candidate_preflight_failed",
+              "exit_code": result.returncode,
+              "stderr_tail": result.stderr.decode("utf-8", "replace")[-1500:],
+              "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
+    try:
+        with open(candidate, "rb") as stream:
+            raw = stream.read(1024 * 1024 + 1)
+        if len(raw) > 1024 * 1024:
+            raise ValueError("candidate catalog exceeds its bound")
+        content = json.loads(raw.decode("utf-8", "strict"))
+    except (OSError, ValueError):
+        emit({"success": False, "phase": "prepare", "error": "candidate_catalog_unparsable",
+              "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
+    candidate_sha = hashlib.sha256(raw).hexdigest()
+    snapshot_files = content.get("snapshot_files") if isinstance(content, dict) else {}
+    if (not isinstance(content, dict) or not isinstance(snapshot_files, dict)
+            or not set(REQUIRED_ARTIFACTS) <= set(snapshot_files)
+            or snapshot_files.get("model.safetensors")
+            != {"sha256": CHECKPOINT_SHA256, "size": WEIGHTS_BYTES}):
+        emit({"success": False, "phase": "prepare", "blocked": True,
+              "reason": "candidate_catalog_failed_checkpoint_policy",
+              "blockers": ["candidate catalog snapshot metadata does not match "
+                           "the pinned checkpoint; supplied model was never accepted"],
+              "candidate_runtime_catalog_sha256": candidate_sha,
+              "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
+    if catalog_digest == "none" or catalog_digest != candidate_sha:
+        emit({"success": True, "phase": "prepare", "blocked": True,
+              "reason": "runtime_catalog_candidate_awaits_independent_human_review",
+              "candidate_runtime_catalog_sha256": candidate_sha,
+              "environment_provisioned": False, "runtime_catalog_promoted": False,
+              "wheel_count": len(wheels), "snapshot_files": sorted(snapshot_files),
+              "blockers": ["the candidate catalog sha must be independently reviewed "
+                           "by the human operator and carried back as the configured "
+                           "approved runtime catalog digest before preparation"],
+              "gpu_allocated": False, "internet_used": False}, 3)
+    # The reviewed catalog must be placed independently by the human operator.
+    # Provisioning never creates or promotes the trusted catalog itself.
+    if sha_file(catalog, 1024 * 1024)[0] != candidate_sha:
+        emit({"success": False, "phase": "prepare", "blocked": True,
+              "reason": "runtime_catalog_bytes_differ_from_reviewed_candidate",
+              "runtime_catalog_promoted": False, "environment_provisioned": False}, 65)
+    script_sha = sha_file(code_root + "/prepare_runtime.sh", 1024 * 1024)[0]
+    preflight_sha = sha_file(code_root + "/runtime_preflight.py", 1024 * 1024)[0]
+    # Recheck immutable release digests immediately before executing the reviewed Bash driver.
+    if (script_sha != PINNED_BUNDLE_SCRIPTS["prepare_runtime.sh"]
+            or preflight_sha != PINNED_BUNDLE_SCRIPTS["runtime_preflight.py"]):
+        emit({"success": False, "phase": "prepare", "error": "reviewed_script_changed_before_execution",
+              "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
+    env = dict(OFFLINE_ENV)
+    env["TMPDIR"] = provision_cache + "/tmp"
+    env["XDG_CACHE_HOME"] = provision_cache
+    try:
+        prepared = subprocess.run(
+            ["/bin/bash", code_root + "/prepare_runtime.sh", scratch, bootstrap,
+             wheelhouse, cache, catalog, catalog_digest],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=840, env=env, check=False)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        emit({"success": False, "phase": "prepare", "error": "prepare_runtime_failed",
+              "detail": str(exc)[-1500:], "prepare_runtime_sha256": script_sha,
+              "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
+    if prepared.returncode != 0:
+        emit({"success": False, "phase": "prepare", "error": "prepare_runtime_failed",
+              "exit_code": prepared.returncode,
+              "stderr_tail": prepared.stderr.decode("utf-8", "replace")[-2000:],
+              "prepare_runtime_sha256": script_sha,
+              "note": "failed setup remains for inspection; nothing is deleted",
+              "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
+    env_python = env_root + "/bin/python"
+    if not os.path.isfile(env_python):
+        emit({"success": False, "phase": "prepare", "error": "provisioned_python_missing",
+              "prepare_runtime_sha256": script_sha,
+              "environment_provisioned": False, "runtime_catalog_promoted": False}, 65)
+    emit({"success": True, "phase": "prepare", "environment_provisioned": True,
+          "env_python": env_python, "runtime_catalog_sha256": catalog_digest,
+          "candidate_runtime_catalog_sha256": candidate_sha,
+          "runtime_catalog_promoted": False,
+          "prepare_runtime_sha256": script_sha, "runtime_preflight_sha256": preflight_sha,
+          "wheel_count": len(wheels), "wheelhouse_bytes": wheel_bytes,
+          "snapshot_files": sorted(snapshot_files),
+          "gpu_allocated": False, "internet_used": False,
+          "blocked": False, "blockers": [],
+          "trust_boundary": "candidate digest equality is byte transport of a "
+                            "human-reviewed candidate; AgentPorter mints no approval"}, 0)
+
+
+main(sys.argv)
+'''
+
+PROVISION_INSPECT_SCRIPT_SHA256 = "0fcb654d0d1457357cda44c4f511b7f26199609d3a17cbdce552319a6c0ffa68"
+PROVISION_PREPARE_SCRIPT_SHA256 = "6bd753204f82115368d56067dd72703dae76e2c1b52f31f7eab551f88acc9793"
+
+
+def _provision_argv(mode: str, bootstrap: str, scratch: str, cache: str,
+                    run_id: str, bundle: str = "", digest: str = "none") -> list[str]:
+    """Remote argv for the two digest-pinned provisioning driver scripts."""
+    script = REMOTE_PROVISION_INSPECT if mode == "inspect" else REMOTE_PROVISION_PREPARE
+    expected = (PROVISION_INSPECT_SCRIPT_SHA256 if mode == "inspect"
+                else PROVISION_PREPARE_SCRIPT_SHA256)
+    if hashlib.sha256(script.encode("utf-8")).hexdigest() != expected:
+        raise PermissionError("fixed inference provision script digest mismatch")
+    argv = ["/usr/bin/python3", "-I", "-B", "-c", script, mode,
+            _validate_python(bootstrap, "bootstrap Python"), scratch, cache, run_id]
+    if mode == "prepare":
+        argv += [bundle, digest]
+    return argv
+
+
+def _provision_settings(registry, settings, workspace_id):
+    """Like _inference_settings but without requiring an approved catalog digest.
+
+    Only for the bare provision action: when the live deployment carries no
+    inference scratch/python/cache configuration at all, derive the fixed,
+    per-user defaults. Staged inference keeps its strict configured settings.
+    """
+    user, ws = _identity(registry, workspace_id, settings)
+    if not ws.allow_scinet_training:
+        raise PermissionError("SciNet inference requires workspace training permission")
+    scratch = str(getattr(settings, "inference_scratch_root", "") or "")
+    python = str(getattr(settings, "inference_python", "") or "")
+    cache = str(getattr(settings, "inference_hf_cache", "") or "")
+    remote_user = str(getattr(settings, "user", "") or "")
+    if not scratch and not python and not cache:
+        # Provision-only derived defaults under a validated fixed user scratch.
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", remote_user):
+            raise PermissionError("SciNet inference provision requires a fixed configured user")
+        scratch = f"/scratch/{remote_user}/cranary-laya"
+        python = f"{scratch}/inference-env/bin/python"
+        cache = f"{scratch}/model-cache"
+    elif not scratch or not python or not cache:
+        raise PermissionError(
+            "SciNet inference provision scratch, python, and cache must be "
+            "configured together or left entirely to fixed defaults")
+    safe_remote_path = re.compile(r"/scratch/[A-Za-z0-9_./-]+\Z")
+    if (not safe_remote_path.fullmatch(scratch) or ".." in scratch.split("/")
+            or "//" in scratch):
+        raise PermissionError("SciNet inference scratch must be a fixed /scratch path")
+    if (not re.fullmatch(r"/[A-Za-z0-9_./-]+", python) or ".." in python.split("/")):
+        raise PermissionError("SciNet inference Python must be an absolute path")
+    if (not safe_remote_path.fullmatch(cache) or ".." in cache.split("/")
+            or "//" in cache):
+        raise PermissionError("SciNet inference HF cache must be a fixed /scratch path")
+    scratch = scratch.rstrip("/")
+    cache = cache.rstrip("/")
+    for value in (python, cache):
+        path = PurePosixPath(value)
+        if (not re.fullmatch(r"/scratch/[A-Za-z0-9_./-]+", value)
+                or any(p in (".", "..") for p in value.split("/"))
+                or "//" in value or str(path) != value
+                or not path.is_relative_to(PurePosixPath(scratch)) or str(path) == scratch):
+            raise PermissionError("inference runtime and offline cache must be fixed paths under scratch")
+    for value in (python, cache):
+        if any(PurePosixPath(value).is_relative_to(PurePosixPath(f"{scratch}/{reserved}"))
+               for reserved in ("stages", "runs", "logs", "submissions")):
+            raise PermissionError("runtime inputs must be separate from stages and job outputs")
+    if PurePosixPath(python).is_relative_to(PurePosixPath(cache)):
+        raise PermissionError("inference interpreter must be separate from model cache")
+    return user, ws, scratch, python, cache
+
+
+def create_scinet_inference_provision_tool(registry, settings=None, state_dir=None):
+    """Inspect or prepare the fixed Laya runtime from reviewed provisioning sources.
+
+    Prepare first transfers the digest-pinned reviewed bundle into a fixed,
+    immutable landing (``<scratch>/provision-sources/<server-generated id>``)
+    and then runs the digest-pinned prepare driver against that landing. No
+    user code, no Slurm submit, no GPU request, no network egress, and no
+    approval signing happens here; a candidate catalog is never an attestation
+    and promotion still requires the human-reviewed configured digest.
+    """
+    ledger = _InferenceLedger(state_dir)
+
+    def scinet_inference_provision(workspace_id: str, phase: str = "inspect",
+                                   previous_run_id: str | None = None,
+                                   stage_id: str | None = None) -> dict[str, Any]:
+        if phase not in ("inspect", "prepare"):
+            raise ValueError("SciNet inference provision phase must be inspect or prepare")
+        if (not isinstance(previous_run_id, str)
+                or not PROVISION_RUN_RE.fullmatch(previous_run_id)):
+            raise ValueError(
+                "SciNet inference provisioning requires the fixed previous run ID")
+        if stage_id is not None:
+            raise ValueError(
+                "inference provision destinations are server-generated; no stage_id is accepted")
+        user, ws, scratch, _python, cache = _provision_settings(registry, settings, workspace_id)
+        bootstrap = _validate_python(getattr(settings, "training_bootstrap_python", ""),
+                                     "bootstrap Python")
+        configured = str(getattr(settings, "inference_runtime_catalog_sha256", "") or "")
+        if configured and not SHA_RE.fullmatch(configured):
+            raise PermissionError("configured inference runtime catalog SHA-256 is invalid")
+        sources = None
+        transfer_bundle = ""
+        if phase == "prepare":
+            inspect_argv = _provision_argv(
+                "inspect", bootstrap, scratch, cache, previous_run_id)
+            inspected = _call(
+                settings, user, inspect_argv, timeout=120,
+                max_output=MAX_REMOTE_OUTPUT, operation="inference_provision")
+            inspect_stdout = inspected.get("stdout", b"")
+            if not isinstance(inspect_stdout, bytes):
+                inspect_stdout = str(inspect_stdout).encode("utf-8")
+            if inspected.get("timed_out") or inspected.get("truncated") or inspected.get("exit_code") != 0:
+                raise PermissionError("read-only preflight failed before source transfer")
+            try:
+                inspect_payload = _parse_json(inspect_stdout)
+            except (UnicodeError, ValueError, json.JSONDecodeError) as exc:
+                raise PermissionError("read-only preflight receipt is invalid") from exc
+            if (not isinstance(inspect_payload, dict)
+                    or inspect_payload.get("phase") != "inspect"
+                    or not _provision_inspect_receipt_is_valid(inspect_payload, previous_run_id)):
+                raise PermissionError("read-only preflight receipt is invalid")
+            if inspect_payload.get("blockers"):
+                return {
+                    "target": "scinet_inference", "command": "scinet_inference_provision",
+                    "experiment": INFERENCE_EXPERIMENT, "phase": "prepare",
+                    "success": True, "blocked": True,
+                    "blockers": inspect_payload["blockers"],
+                    "environment_provisioned": False, "runtime_catalog_promoted": False,
+                    "gpu_allocated": False, "internet_used": False,
+                    "transfer_side_effects": [], "stage_id": None,
+                    "approval_barrier": "read-only preflight blocked source transfer",
+                }
+            sources = _transfer_provision_sources(settings, user, ws, bootstrap, scratch)
+            transfer_bundle = sources["remote_bundle"]
+        remote = _provision_argv(phase, bootstrap, scratch, cache, previous_run_id,
+                                 bundle=transfer_bundle,
+                                 digest=configured if configured else "none")
+        result = _call(settings, user, remote,
+                       timeout=900 if phase == "prepare" else 120,
+                       max_output=MAX_REMOTE_OUTPUT,
+                       operation="inference_provision_prepare" if phase == "prepare"
+                       else "inference_provision")
+        stdout = result.get("stdout", b"")
+        if not isinstance(stdout, bytes):
+            stdout = str(stdout).encode("utf-8")
+        if result.get("timed_out") or result.get("truncated"):
+            raise PermissionError("inference provision transport failed or exceeded output bounds")
+        if result.get("exit_code") == 64:
+            raise ValueError("SciNet inference provision arguments are invalid")
+        try:
+            payload = _parse_json(stdout)
+        except (UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            raise PermissionError("SciNet inference provision receipt is invalid") from exc
+        if not isinstance(payload, dict) or payload.get("phase") != phase:
+            raise PermissionError("SciNet inference provision receipt is invalid")
+        if phase == "prepare" and payload.get("success") is False \
+                and isinstance(payload.get("error"), str):
+            raise PermissionError(
+                "SciNet inference prepare failed: " + payload["error"])
+        if phase == "inspect" and payload.get("previous_run_id") != previous_run_id:
+            raise PermissionError("SciNet inference provision receipt is invalid")
+        if phase == "inspect":
+            if not _provision_inspect_receipt_is_valid(payload, previous_run_id):
+                raise PermissionError("SciNet inference provision receipt is invalid")
+        elif not _provision_prepare_receipt_is_valid(payload):
+            raise PermissionError("SciNet inference provision receipt is invalid")
+        if payload.get("gpu_allocated") or payload.get("internet_used"):
+            raise PermissionError("inference provisioning must never allocate GPUs or use the network")
+        if payload.get("runtime_catalog_promoted") not in (None, False):
+            raise PermissionError("inference provisioning must never promote a runtime catalog")
+        with ledger.locked() as data:
+            provisions = data.setdefault("provisions", {})
+            provisions[previous_run_id] = {
+                "workspace_id": workspace_id, "phase": phase,
+                "stage_id": None,
+                "transfer_id": sources["transfer_id"] if sources else None,
+                "candidate_sha256": payload.get("candidate_runtime_catalog_sha256"),
+                "blocked": bool(payload.get("blocked")),
+                "environment_provisioned": bool(payload.get("environment_provisioned")),
+                "created_at": int(time.time()),
+            }
+        return {"target": "scinet_inference", "command": "scinet_inference_provision",
+                "experiment": INFERENCE_EXPERIMENT, **payload,
+                "stage_id": None,
+                "provision_source_transfer_id": sources["transfer_id"] if sources else None,
+                "runtime_catalog_promoted": False,
+                "approval_barrier": payload.get("reason") or
+                "independent human review required before stage",
+                "configured_runtime_catalog_sha256": configured or None,
+            "transfer_side_effects": ([
+                "60 reviewed package-v2 source files copied to the isolated provision-sources landing",
+                *(["verified prior-run wheels and model snapshot may remain in the provision scratch area; "
+                   "the remote prepare receipt reports later progress"]
+                  if payload.get("reason") != "provisioning_refused_before_any_side_effect" else []),
+                *(["candidate catalog was produced or reused: "
+                   + payload["candidate_runtime_catalog_sha256"]]
+                  if isinstance(payload.get("candidate_runtime_catalog_sha256"), str) else []),
+            ] if sources else [])}
+
+    return scinet_inference_provision
+
+
+def _provision_prepare_receipt_is_valid(payload):
+    candidate = payload.get("candidate_runtime_catalog_sha256")
+    if candidate is not None and (not isinstance(candidate, str) or not SHA_RE.fullmatch(candidate)):
+        return False
+    if payload.get("runtime_catalog_sha256") is not None and (
+            not isinstance(payload.get("runtime_catalog_sha256"), str)
+            or not SHA_RE.fullmatch(payload["runtime_catalog_sha256"])):
+        return False
+    blockers = payload.get("blockers")
+    if not isinstance(blockers, list) or len(blockers) > 64 \
+            or any(not isinstance(item, str) or len(item) > 400 for item in blockers):
+        return False
+    if payload.get("blocked") not in (True, False):
+        return False
+    if payload.get("environment_provisioned") not in (True, False):
+        return False
+    wheel_count = payload.get("wheel_count")
+    if wheel_count is not None and (
+            type(wheel_count) is not int or not 0 <= wheel_count <= 4096):
+        return False
+    snapshot_files = payload.get("snapshot_files")
+    if snapshot_files is not None and (
+            not isinstance(snapshot_files, list) or len(snapshot_files) > 64
+            or any(not isinstance(item, str) or len(item) > 128 for item in snapshot_files)):
+        return False
+    env_python = payload.get("env_python")
+    if env_python is not None and (
+            not isinstance(env_python, str)
+            or not re.fullmatch(r"/[A-Za-z0-9_./-]+", env_python)):
+        return False
+    return True
+
+
+def _transfer_provision_sources(settings, user, ws, bootstrap, scratch):
+    """Transfer the digest-pinned reviewed package to a fresh immutable landing.
+
+    Only the reviewed package manifest and its allowlisted 60-file inventory are
+    sent, over the existing fixed remote receiver; the destination is always
+    ``<scratch>/provision-sources/<32-hex server-generated id>``, never stages,
+    runs, logs, or any caller-named path. The whole package inventory and its
+    pinned manifest digest are verified locally before any upload.
+    """
+    workspace_path = ws.path
+    bundle = inference_bundle_path(workspace_path)
+    manifest, files = _bundle_files(bundle, MANIFEST_SHA256, workspace_path)
+    if len(files) != 60:
+        raise PermissionError("inference provision package inventory is incomplete")
+    if len(manifest["cases"]) != 42:
+        raise PermissionError("inference provision package case inventory is incomplete")
+    transfer_id = uuid.uuid4().hex
+    sources_root = scratch + "/provision-sources"
+    remote = [bootstrap, "-c", REMOTE_INFERENCE_RECEIVER, sources_root, transfer_id]
+    entries = [{"name": n, "size": p.stat(follow_symlinks=False).st_size, "sha256": h}
+               for n, p, h in files]
+    payload = json.dumps({"files": entries, "manifest_sha256": MANIFEST_SHA256},
+                         sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    for _name, path, _hash in files:
+        payload += path.read_bytes()
+    if len(payload) > MAX_TOTAL_BYTES:
+        raise PermissionError("inference provision package exceeds the 32 MiB transfer bound")
+    result = _call(settings, user, remote, input_bytes=payload, timeout=900,
+                   max_output=MAX_REMOTE_OUTPUT,
+                   operation="inference_provision_sources")
+    stdout = result.get("stdout", b"")
+    if not isinstance(stdout, bytes):
+        stdout = str(stdout).encode("utf-8")
+    if result.get("timed_out") or result.get("truncated"):
+        raise PermissionError("inference provision source transfer failed or exceeded bounds")
+    try:
+        receipt = _parse_json(stdout)
+    except (UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        raise PermissionError("inference provision source transfer receipt is invalid") from exc
+    expected_bundle = sources_root + "/" + transfer_id
+    if (not isinstance(receipt, dict) or receipt.get("success") is not True
+            or receipt.get("stage_id") != transfer_id
+            or receipt.get("bundle") != expected_bundle
+            or receipt.get("manifest_sha256") != MANIFEST_SHA256):
+        detail = (str(receipt.get("error"))[:120]
+                  if isinstance(receipt, dict) and receipt.get("error") else "rejected")
+        raise PermissionError(
+            f"inference provision source transfer was rejected: {detail}")
+    return {"transfer_id": transfer_id, "remote_bundle": expected_bundle,
+            "manifest_sha256": MANIFEST_SHA256}
+
+
+def _provision_inspect_receipt_is_valid(payload, run_id):
+    digest_fields = {"model_checkpoint_sha256", "model_cache_checkpoint_sha256"}
+    for key in digest_fields:
+        value = payload.get(key)
+        if value is not None and (not isinstance(value, str) or not SHA_RE.fullmatch(value)):
+            return False
+    if payload.get("previous_run_id") != run_id:
+        return False
+    if payload.get("success") is not True:
+        return False
+    integer_fields = ("wheel_count", "wheelhouse_bytes")
+    for key in integer_fields:
+        if type(payload.get(key)) is not int or payload[key] < 0:
+            return False
+    artifacts = payload.get("snapshot_artifacts")
+    if not isinstance(artifacts, list) or any(not isinstance(item, str) for item in artifacts):
+        return False
+    blocker_list = payload.get("blockers")
+    if not isinstance(blocker_list, list) or len(blocker_list) > 64 \
+            or any(not isinstance(item, str) or len(item) > 160 for item in blocker_list):
+        return False
+    version = payload.get("bootstrap_python_version")
+    if version is not None and (not isinstance(version, str) or not re.fullmatch(r"3\.12\.[0-9]+", version)):
+        return False
+    if payload.get("previous_run_ok") not in (True, False):
+        return False
+    for key in ("wheelhouse_target_exists", "model_cache_target_exists",
+                "catalog_candidate_exists", "catalog_promoted", "laya_wheel_present",
+                "model_cache_snapshot_present"):
+        if payload.get(key) not in (True, False):
+            return False
+    return True
+
+
+def _bundle_file_sha(manifest_files, name):
+    if manifest_files is None:
+        raise PermissionError("inference provision requires the bundle manifest fingerprint")
+    value = manifest_files.get(name)
+    if not isinstance(value, str) or not SHA_RE.fullmatch(value):
+        raise PermissionError("inference provision bundle fingerprint is invalid")
+    return value
 
 
 class _InferenceLedger:
