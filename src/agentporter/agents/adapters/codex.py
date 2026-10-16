@@ -69,31 +69,26 @@ class CodexAdapter(AgentAdapter):
         packet: str,
         model: str = "",
         reasoning_effort: str = "",
+        policy: ExecutionPolicy | None = None,
+        *,
         writable: bool = True,
     ) -> list[str]:
         exe = self.find_executable(["codex", "~/.npm-global/bin/codex", "~/.local/bin/codex"])
         if not exe:
             raise RuntimeError("Codex CLI executable not found on host")
 
-        if isinstance(writable, ExecutionPolicy):
-            policy = writable
-        else:
-            policy = ExecutionPolicy.for_workspace(writable=bool(writable))
-        sandbox = "workspace-write" if policy.workspace_write else "read-only"
-        network = (
-            ["-c", "sandbox_workspace_write.network_access=true"]
-            if policy.workspace_write and policy.git_push
-            else []
-        )
+        policy = policy or ExecutionPolicy.for_workspace(writable=writable)
         cmd = [
             exe,
             "exec",
             "--sandbox",
-            sandbox,
+            "workspace-write" if policy.workspace_write else "read-only",
+            "--skip-git-repo-check",
             "-c",
             "approval_policy=never",
-            *network,
         ]
+        if policy.workspace_write and policy.git_push:
+            cmd.extend(["-c", "sandbox_workspace_write.network_access=true"])
         if model:
             cmd.extend(["-m", model])
         if reasoning_effort:

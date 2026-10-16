@@ -6,8 +6,10 @@ import shutil
 import signal
 import subprocess
 import logging
+import tempfile
 from pathlib import Path
 from agentporter.sandbox.base import SandboxBackend
+from agentporter.tooling import add_tooling_mounts
 
 logger = logging.getLogger("agentporter.sandbox.bwrap")
 
@@ -39,31 +41,37 @@ class BubblewrapSandbox(SandboxBackend):
     def _ensure_synthetic_identity(self) -> None:
         uid = os.getuid()
         gid = os.getgid()
-        if not self.passwd_file.exists():
-            self.passwd_file.write_text(
+        records = {
+            self.passwd_file: (
                 f"root:x:0:0:root:/tmp:/bin/bash\n"
                 f"sandbox:x:{uid}:{gid}:Sandbox User:/tmp:/bin/bash\n"
-                "nobody:x:65534:65534:nobody:/tmp:/bin/false\n",
-                encoding="utf-8",
-            )
-        if not self.group_file.exists():
-            self.group_file.write_text(
-                f"root:x:0:\nsandbox:x:{gid}:\nnobody:x:65534:\n",
-                encoding="utf-8",
-            )
-        for p in (self.passwd_file, self.group_file):
+                "nobody:x:65534:65534:nobody:/tmp:/bin/false\n"
+            ),
+            self.group_file: f"root:x:0:\nsandbox:x:{gid}:\nnobody:x:65534:\n",
+        }
+        for path, content in records.items():
+            fd, name = tempfile.mkstemp(prefix=".identity-", dir=self.etc_dir)
             try:
-                os.chmod(p, 0o600)
-            except OSError:
-                pass
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    stream.write(content)
+                os.replace(name, path)
+            finally:
+                Path(name).unlink(missing_ok=True)
 
     def is_available(self) -> bool:
         return shutil.which("bwrap") is not None
 
-    def build_bwrap_args(self, workspace_path: str, writable: bool = True, sub_cwd: str = "") -> list[str]:
+    def build_bwrap_args(
+        self,
+        workspace_path: str,
+        writable: bool = True,
+        sub_cwd: str = "",
+        network_access: bool = False,
+    ) -> list[str]:
         real_workspace = os.path.realpath(workspace_path)
         if not os.path.isdir(real_workspace):
             raise ValueError(f"Workspace path does not exist: {real_workspace}")
+        self._ensure_synthetic_identity()
 
         target_cwd = "/workspace"
         if sub_cwd:
@@ -79,6 +87,9 @@ class BubblewrapSandbox(SandboxBackend):
 
         args = [
             "bwrap",
+            # Kill the sandbox namespace with its launcher so background helpers
+            # (dbus, git credential caches) cannot hold output pipes open.
+            "--die-with-parent",
             "--ro-bind", "/usr", "/usr",
             "--ro-bind", "/lib", "/lib",
             "--ro-bind", "/lib64", "/lib64",
@@ -91,25 +102,64 @@ class BubblewrapSandbox(SandboxBackend):
             "--tmpfs", "/tmp",
         ]
 
-        for opt_dir in ["/etc/R", "/etc/ssl/certs", "/etc/resolv.conf"]:
+        for opt_dir in ["/etc/R", "/etc/ssl/certs", "/etc/resolv.conf", "/etc/hosts"]:
             if os.path.exists(opt_dir):
                 args.extend(["--ro-bind", opt_dir, opt_dir])
+
+        host_home = os.path.expanduser("~")
+        gitconfig_path = os.path.join(host_home, ".gitconfig")
+        if os.path.isfile(gitconfig_path):
+            args.extend(["--ro-bind", gitconfig_path, "/tmp/.gitconfig"])
+
+        # Expose the explicitly supported development tools through read-only
+        # mounts while keeping the host PATH and home directory isolated.
+        add_tooling_mounts(args)
 
         args.extend([
             "--bind" if writable else "--ro-bind",
             real_workspace,
             "/workspace",
             "--unshare-all",
-            "--unshare-net",
+        ])
+        if network_access:
+            args.append("--share-net")
+            ssh_dir = os.path.join(host_home, ".ssh")
+            if os.path.isdir(ssh_dir):
+                args.extend(["--dir", "/tmp/.ssh"])
+                for fname in sorted(os.listdir(ssh_dir)):
+                    fpath = os.path.join(ssh_dir, fname)
+                    if os.path.isfile(fpath) and not fname.endswith("~") and not fname.endswith(".bak"):
+                        args.extend(["--ro-bind", fpath, f"/tmp/.ssh/{fname}"])
+
+            gh_config_dir = os.path.join(host_home, ".config", "gh")
+            if os.path.isdir(gh_config_dir):
+                args.extend(["--dir", "/tmp/.config", "--ro-bind", gh_config_dir, "/tmp/.config/gh"])
+
+            local_bin = os.path.join(host_home, ".local", "bin")
+            if os.path.isdir(local_bin):
+                args.extend(["--ro-bind", local_bin, local_bin])
+
+            ssh_auth_sock = os.environ.get("SSH_AUTH_SOCK")
+            if ssh_auth_sock and os.path.exists(ssh_auth_sock):
+                args.extend(["--bind", ssh_auth_sock, ssh_auth_sock])
+        else:
+            args.append("--unshare-net")
+
+        path_env = "/home/yeli/.local/bin:/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin" if (network_access and os.path.isdir(os.path.join(host_home, ".local", "bin"))) else "/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin"
+
+        args.extend([
             "--clearenv",
-            "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin",
+            "--setenv", "PATH", path_env,
             "--setenv", "HOME", "/tmp",
             "--setenv", "USER", "sandbox",
             "--setenv", "LOGNAME", "sandbox",
             "--setenv", "LC_ALL", "C.UTF-8",
             "--setenv", "LANG", "C.UTF-8",
-            "--chdir", target_cwd,
         ])
+        if network_access and os.environ.get("SSH_AUTH_SOCK") and os.path.exists(os.environ["SSH_AUTH_SOCK"]):
+            args.extend(["--setenv", "SSH_AUTH_SOCK", os.environ["SSH_AUTH_SOCK"]])
+
+        args.extend(["--chdir", target_cwd])
         return args
 
     def clamp_timeout(self, timeout_seconds: int | None) -> int:
@@ -126,6 +176,7 @@ class BubblewrapSandbox(SandboxBackend):
         timeout_seconds: int | None = None,
         writable: bool = True,
         max_output_bytes: int | None = None,
+        network_access: bool = False,
     ) -> dict:
         if not argv or not isinstance(argv, list) or not all(isinstance(x, str) and x for x in argv):
             raise ValueError("argv must be a non-empty list of non-empty strings")
@@ -136,7 +187,7 @@ class BubblewrapSandbox(SandboxBackend):
             self.max_output_bytes,
         )
         full_cmd = self.build_bwrap_args(
-            workspace_path, writable=writable, sub_cwd=cwd
+            workspace_path, writable=writable, sub_cwd=cwd, network_access=network_access
         ) + ["--"] + argv
 
         t0 = time.time()

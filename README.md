@@ -85,7 +85,9 @@ agentporter serve --host 127.0.0.1 --port 8765
 - [Security model](docs/security-model.md)
 - [Package vs. local separation](docs/package-vs-local.md)
 - [Local setup](docs/local-setup.md)
+- [Deployment and verified activation](docs/deployment.md)
 - [MCP clients](docs/mcp-clients.md)
+- [Worker delegation guide](docs/delegation-guide.md)
 - [Microsoft Copilot Studio](docs/copilot-studio.md)
 - [Roadmap / TODO](TODO.md)
 

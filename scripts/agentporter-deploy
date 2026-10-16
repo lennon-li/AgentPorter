@@ -1,0 +1,265 @@
+#!/usr/bin/env bash
+# agentporter-deploy: HUMAN-RUN, per-release deployment of AgentPorter on Asgard.
+#
+# Security model (see docs/deployment.md):
+#   * Nothing here is agent-triggerable. There is no .path/.timer/socket unit
+#     and no API endpoint; a human runs this from a terminal.
+#   * This script must be INSTALLED by the human outside every writable
+#     workspace (e.g. ~/.local/libexec/agentporter/, mode 0555). It refuses to
+#     deploy/rollback when run from a writable location or from ~/repos.
+#   * A release is built from an exact 40-hex commit SHA (never a branch name)
+#     fetched into a private bare mirror; the agent-writable working tree, its
+#     .venv/.pth files and its tests/conftest.py are never executed.
+#   * Each release gets its own non-editable venv, is made read-only, and is
+#     fingerprinted by a trusted standalone hasher before AND after the test
+#     gate (detects tampering during tests).
+#   * Activation restarts ONLY agentporter.service (never the SciNet broker),
+#     verifies fingerprint + package path + systemd MainPID ownership of the
+#     port, and rolls back to the previous release on failure.
+#
+# Usage:
+#   agentporter-deploy status                       # read-only report
+#   agentporter-deploy deploy <40-hex-sha> [--skip-tests] [--wait SECS]
+#   agentporter-deploy rollback [--wait SECS]
+#   agentporter-deploy fingerprint <dir>            # read-only, trusted hasher
+# Exit codes: 0 ok, 1 verification failed (rolled back if possible),
+#             2 refused by preflight/build/test gate, 3 another run in progress.
+set -euo pipefail
+
+# --- sanitized environment ---------------------------------------------------
+export PATH=/usr/local/bin:/usr/bin:/bin
+unset PYTHONPATH PYTHONHOME PYTHONSTARTUP PYTHONUSERBASE PYTHONINSPECT VIRTUAL_ENV \
+      PYTHONSAFEPATH GIT_DIR GIT_WORK_TREE GIT_CONFIG GIT_EXEC_PATH LD_PRELOAD LD_LIBRARY_PATH
+export PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
+umask 022
+
+DEPLOY_ROOT="${AGENTPORTER_DEPLOY_ROOT:-$HOME/.local/share/agentporter}"
+SOURCE="${AGENTPORTER_SOURCE:-$HOME/repos/AgentPorter}"
+SYSTEMCTL="${AGENTPORTER_SYSTEMCTL:-/usr/bin/systemctl}"
+TRUSTED_PY="${AGENTPORTER_TRUSTED_PYTHON:-/usr/bin/python3}"
+UNIT="agentporter.service"               # fixed on purpose: never the broker
+# Must match the --host/--port in examples/agentporter.service (not config.yaml).
+LIVE_URL="${AGENTPORTER_URL:-http://127.0.0.1:8765}"
+UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+WAIT=60 SKIP_TESTS=0
+
+log() { printf '[agentporter-deploy] %s\n' "$*"; }
+die() { log "REFUSED: $*"; exit 2; }
+
+read -r -d '' FP_SNIPPET <<'PY' || true
+import hashlib, os, sys
+root = os.path.realpath(sys.argv[1])
+if not os.path.isdir(root):
+    sys.exit("not a directory: " + root)
+entries = []
+for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+    names = list(filenames) + [d for d in dirnames if os.path.islink(os.path.join(dirpath, d))]
+    dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+    for name in names:
+        full = os.path.join(dirpath, name)
+        rel = os.path.relpath(full, root).replace(os.sep, "/")
+        if name.endswith(".pyc"):
+            continue
+        if os.path.islink(full):
+            entries.append((rel, b"symlink:" + os.readlink(full).encode()))
+        elif os.path.isfile(full):
+            with open(full, "rb") as fh:
+                entries.append((rel, fh.read()))
+digest = hashlib.sha256()
+for rel, payload in sorted(entries):
+    digest.update(rel.encode()); digest.update(b"\0"); digest.update(payload); digest.update(b"\0")
+print(digest.hexdigest())
+PY
+
+fingerprint() { "$TRUSTED_PY" -I -c "$FP_SNIPPET" "$1"; }
+
+manifest_get() {  # manifest_get <release_dir> <key>
+  "$TRUSTED_PY" -I -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1/RELEASE.json" "$2"
+}
+
+require_trusted_location() {
+  local self dir
+  self="$(realpath "${BASH_SOURCE[0]}")"; dir="$(dirname "$self")"
+  [[ ! -w "$self" && ! -w "$dir" ]] \
+    || die "$self (or its directory) is writable; install a read-only copy outside the workspace (docs/deployment.md)"
+  case "$self/" in "$HOME/repos/"*|"$(realpath -m "$SOURCE")/"*)
+    die "$self is inside a writable workspace; run the installed copy instead" ;;
+  esac
+}
+
+take_lock() {
+  local rt="${XDG_RUNTIME_DIR:-}"
+  [[ -n "$rt" && -d "$rt" && ! -L "$rt" ]] || die "XDG_RUNTIME_DIR unset/invalid; no /tmp fallback by design"
+  read -r owner mode < <(stat -c '%u %a' "$rt")
+  [[ "$owner" == "$(id -u)" && "$mode" == 700 ]] || die "$rt must be owned by you with mode 0700"
+  exec 9>"$rt/agentporter-deploy.lock"
+  flock -n 9 || { log "another deploy/rollback is running"; exit 3; }
+}
+
+require_no_triggers() {
+  local found
+  found="$(compgen -G "$UNIT_DIR/agentporter*.path" || true)"
+  found+="$("$SYSTEMCTL" --user list-unit-files 'agentporter*.path' --no-legend 2>/dev/null || true)"
+  [[ -z "${found//[[:space:]]/}" ]] \
+    || die "path-triggered AgentPorter unit present; disable and remove it first: $found"
+}
+
+require_unit_runs_release() {
+  local exec
+  exec="$("$SYSTEMCTL" --user show "$UNIT" -p ExecStart --value 2>/dev/null || true)"
+  [[ "$exec" == *"$DEPLOY_ROOT/current/venv/bin/python"* && "$exec" != *"/repos/"* ]] \
+    || die "$UNIT does not run $DEPLOY_ROOT/current/venv/bin/python (config drift); install examples/agentporter.service (docs/deployment.md). ExecStart: ${exec:-<none>}"
+}
+
+release_pkg() {  # print the single site-packages/agentporter dir of a release
+  local pkgs=("$1"/venv/lib/python3*/site-packages/agentporter)
+  [[ ${#pkgs[@]} -eq 1 && -d "${pkgs[0]}" && ! -L "${pkgs[0]}" ]] || return 1
+  printf '%s\n' "${pkgs[0]}"
+}
+
+require_contained_pth() {  # no editable/out-of-release .pth redirection
+  local rel="$1" site line target
+  site="$(dirname "$(release_pkg "$rel")")"
+  for pth in "$site"/*.pth; do
+    [[ -e "$pth" ]] || continue
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -z "$line" || "$line" == \#* || "$line" == "import _virtualenv" ]] && continue
+      [[ "$line" == import* ]] && die "executable .pth line in $pth: $line"
+      if [[ "$line" == /* ]]; then target="$(realpath -m "$line")"; else target="$(realpath -m "$site/$line")"; fi
+      [[ "$target/" == "$(realpath "$rel")/"* ]] || die "$pth points outside the release: $line"
+    done < "$pth"
+  done
+}
+
+switch_current() {  # atomic symlink swap: switch_current <name> <target>
+  ln -sfn "$2" "$DEPLOY_ROOT/.$1.new"
+  mv -T "$DEPLOY_ROOT/.$1.new" "$DEPLOY_ROOT/$1"
+}
+
+verify_release() {  # verify_release <release_dir>; polls up to $WAIT seconds
+  local rel="$1" fp pkg pid deadline
+  fp="$(manifest_get "$rel" fingerprint)"; pkg="$(manifest_get "$rel" package_path)"
+  [[ "$(fingerprint "$pkg")" == "$fp" ]] || { log "release files no longer match RELEASE.json"; return 1; }
+  deadline=$((SECONDS + WAIT))
+  while :; do
+    pid="$("$SYSTEMCTL" --user show "$UNIT" -p MainPID --value 2>/dev/null || echo 0)"
+    if [[ "$pid" =~ ^[1-9][0-9]*$ ]] && "$rel/venv/bin/python" -I -m agentporter.cli deploy-check --url "$LIVE_URL" \
+        --expect-fingerprint "$fp" --expect-path "$pkg" --expect-pid "$pid"; then
+      return 0
+    fi
+    (( SECONDS < deadline )) || return 1
+    sleep 2
+  done
+}
+
+restart_unit() { log "restarting $UNIT (broker untouched)"; "$SYSTEMCTL" --user restart "$UNIT"; }
+
+build_release() {  # build_release <sha>  -> sets REL
+  local sha="$1" mirror="$DEPLOY_ROOT/mirror.git" uv fp_before fp_after pkg
+  REL="$DEPLOY_ROOT/releases/$sha"
+  if [[ -f "$REL/RELEASE.json" ]]; then
+    log "release $sha already built; re-verifying its fingerprint"
+    [[ "$(fingerprint "$(manifest_get "$REL" package_path)")" == "$(manifest_get "$REL" fingerprint)" ]] \
+      || die "existing release $REL was modified; remove it manually and redeploy"
+    return 0
+  fi
+  uv="${AGENTPORTER_UV:-}"
+  for c in "$uv" "$HOME/bin/uv" "$HOME/.local/bin/uv" /usr/local/bin/uv /usr/bin/uv; do
+    [[ -n "$c" && -x "$c" ]] && { uv="$c"; break; }
+  done
+  [[ -x "$uv" ]] || die "uv not found (set AGENTPORTER_UV)"
+
+  mkdir -p "$DEPLOY_ROOT/releases"
+  [[ -d "$mirror" ]] || git init -q --bare "$mirror"
+  log "fetching $SOURCE into private mirror"
+  git --git-dir="$mirror" -c protocol.file.allow=always -c core.hooksPath=/dev/null \
+    fetch -q --no-tags "$SOURCE" '+refs/heads/*:refs/remotes/source/*' || die "git fetch from $SOURCE failed"
+  git --git-dir="$mirror" cat-file -e "$sha^{commit}" 2>/dev/null || die "commit $sha not found in $SOURCE"
+
+  [[ -e "$REL" ]] && { chmod -R u+w "$REL"; rm -rf -- "$REL"; }   # incomplete earlier build
+  mkdir -p "$REL/src"
+  git --git-dir="$mirror" archive --format=tar "$sha" | tar -x -C "$REL/src" || die "git archive failed"
+  log "building isolated, non-editable venv"
+  (cd "$REL/src" && UV_PROJECT_ENVIRONMENT="$REL/venv" "$uv" sync -q --frozen --no-editable --extra dev) \
+    || die "uv sync --frozen --no-editable failed for $sha; release left inactive"
+  pkg="$(release_pkg "$REL")" || die "release venv has no single site-packages/agentporter"
+  require_contained_pth "$REL"
+  fp_before="$(fingerprint "$pkg")"
+
+  if [[ $SKIP_TESTS -eq 0 ]]; then
+    log "running unit tests of commit $sha inside the release"
+    (cd "$REL/src" && "$REL/venv/bin/python" -I -m pytest -q -p no:cacheprovider tests/unit) \
+      || die "unit tests failed for $sha; not activating"
+  fi
+
+  "$TRUSTED_PY" -I -c 'import json,sys,time; json.dump({"commit":sys.argv[1],"fingerprint":sys.argv[2],"package_path":sys.argv[3],"source":sys.argv[4],"built_at":time.strftime("%Y-%m-%dT%H:%M:%S%z")}, open(sys.argv[5],"w"), indent=2)' \
+    "$sha" "$fp_before" "$pkg" "$SOURCE" "$REL/RELEASE.json"
+  chmod -R a-w "$REL"
+  fp_after="$(fingerprint "$pkg")"
+  [[ "$fp_after" == "$fp_before" ]] || die "package changed during the test gate (fingerprint drift); release left inactive"
+  log "release $sha sealed read-only, fingerprint $fp_after"
+}
+
+activate() {  # activate <release_dir>
+  local rel="$1" prev=""
+  prev="$(readlink "$DEPLOY_ROOT/current" 2>/dev/null || true)"
+  [[ -n "$prev" ]] && switch_current previous "$prev"
+  switch_current current "releases/$(basename "$rel")"
+  restart_unit
+  if verify_release "$rel"; then log "ACTIVE and verified: $(basename "$rel")"; return 0; fi
+  log "VERIFICATION FAILED for $(basename "$rel")"
+  if [[ -n "$prev" && -f "$DEPLOY_ROOT/$prev/RELEASE.json" ]]; then
+    log "rolling back to $prev"
+    switch_current current "$prev"
+    restart_unit
+    verify_release "$DEPLOY_ROOT/$prev" && log "ROLLED BACK to $prev (verified)" \
+      || log "ROLLBACK NOT VERIFIED: inspect journalctl --user-unit agentporter -n 100"
+  else
+    log "no previous release to roll back to; inspect journalctl --user-unit agentporter -n 100"
+  fi
+  return 1
+}
+
+cmd_status() {
+  local cur
+  log "deploy root: $DEPLOY_ROOT"
+  for name in current previous; do
+    log "$name -> $(readlink "$DEPLOY_ROOT/$name" 2>/dev/null || echo '<none>')"
+  done
+  compgen -G "$UNIT_DIR/agentporter*.path" >/dev/null && log "WARNING: path-triggered agentporter unit file present"
+  cur="$DEPLOY_ROOT/current"
+  [[ -f "$cur/RELEASE.json" ]] || { log "no active release"; exit 1; }
+  WAIT=0; verify_release "$(realpath "$cur")"
+}
+
+parse_opts() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --skip-tests) SKIP_TESTS=1 ;;
+      --wait) [[ "${2:-}" =~ ^[0-9]+$ ]] || die "--wait needs whole seconds"; WAIT="$2"; shift ;;
+      *) die "unknown option: $1" ;;
+    esac
+    shift
+  done
+}
+
+case "${1:-}" in
+  status) cmd_status ;;
+  fingerprint) [[ $# -eq 2 ]] || die "usage: fingerprint <dir>"; fingerprint "$2" ;;
+  deploy)
+    sha="${2:-}"; shift 2 || true
+    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "deploy needs a full 40-hex commit SHA (branch names are mutable)"
+    parse_opts "$@"
+    require_trusted_location; take_lock; require_no_triggers; require_unit_runs_release
+    build_release "$sha"
+    activate "$REL" ;;
+  rollback)
+    shift; parse_opts "$@"
+    require_trusted_location; take_lock; require_no_triggers; require_unit_runs_release
+    prev="$(readlink "$DEPLOY_ROOT/previous" 2>/dev/null || true)"
+    [[ -n "$prev" && -f "$DEPLOY_ROOT/$prev/RELEASE.json" ]] || die "no previous release"
+    activate "$DEPLOY_ROOT/$prev" ;;
+  -h|--help|"") sed -n '2,30p' "$0" ;;
+  *) die "unknown command: $1" ;;
+esac

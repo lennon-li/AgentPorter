@@ -35,8 +35,8 @@ RG_SENSITIVE_EXCLUDES = [
 
 
 def create_file_tools(registry: WorkspaceRegistry):
-    def list_files(workspace_id: str, path: str = "", depth: Optional[int] = None) -> list[str]:
-        """List non-hidden files in the workspace."""
+    def list_files(workspace_id: str, path: str = "", depth: Optional[int] = 1) -> list[str]:
+        """List non-hidden files at the requested depth (default: one level)."""
         ws = registry.get(workspace_id)
         root = validate_workspace_path(ws.path, path, allow_root=True)
 

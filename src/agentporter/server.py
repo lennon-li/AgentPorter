@@ -7,7 +7,7 @@ import json
 import logging
 import functools
 from contextlib import asynccontextmanager
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 from logging.handlers import RotatingFileHandler
 from starlette.types import ASGIApp
 import uvicorn
@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from agentporter import __version__
+from agentporter.deployinfo import deploy_info
 from agentporter.config import Config
 from agentporter.auth import RateLimiter
 from agentporter.middleware import SecurityMiddleware
@@ -31,6 +32,24 @@ from agentporter.tools.git import create_git_tools
 from agentporter.tools.artifacts import create_artifact_tools
 from agentporter.tools.local_http import create_local_http_tool
 from agentporter.tools.agents import create_agent_tools
+from agentporter.tools.venkata import create_venkata_tool, Diagnostic
+from agentporter.tools.venkata_transfer import create_venkata_transfer_tool, TransferSource, TransferDestination
+from agentporter.tools.scinet import (
+    create_scinet_login_tool,
+    create_scinet_tool,
+    ScinetDiagnostic,
+    ScinetLoginAction,
+)
+from agentporter.tools.scinet_training import (
+    create_scinet_training_tool,
+    ScinetExperiment,
+    ScinetLogKind,
+)
+from agentporter.tools.scinet_inference import (
+    create_scinet_inference_preflight_tool,
+    create_scinet_inference_provision_tool,
+    create_scinet_inference_tools,
+)
 
 logger = logging.getLogger("agentporter.server")
 
@@ -67,6 +86,7 @@ def log_tool_event(tool_name: str, kwargs: dict, result: Any, duration: float, e
         "path": kwargs.get("path"),
         "job_id": kwargs.get("job_id"),
         "agent": kwargs.get("agent"),
+        "network_access": kwargs.get("network_access"),
         "duration_sec": round(duration, 4),
         "status": "error" if error else "ok",
         "error": str(error) if error else None,
@@ -121,10 +141,193 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         _apply_patch, _mkdir, _move_path, _trash_path
     ) = create_file_tools(registry)
     _exec_run, _exec_start = create_execution_tools(registry, sandbox, job_manager)
-    _git_status, _git_diff, _git_log, _git_show = create_git_tools(registry, sandbox)
+    git_tools = create_git_tools(registry, sandbox)
+    _git_status = git_tools.git_status
+    _git_diff = git_tools.git_diff
+    _git_log = git_tools.git_log
+    _git_show = git_tools.git_show
+    _git_fetch = git_tools.git_fetch
+    _git_pull = git_tools.git_pull
+    _git_push = git_tools.git_push
+    _git_commit = git_tools.git_commit
+    _git_add = git_tools.git_add
+    _git_branch = git_tools.git_branch
+    _git_checkout = git_tools.git_checkout
     _list_artifacts, _read_artifact = create_artifact_tools(registry)
     _local_http_request = create_local_http_tool(registry)
     _list_agents, _dispatch_agent = create_agent_tools(agent_broker)
+    _venkata_diagnostic = create_venkata_tool(registry)
+    _venkata_transfer = create_venkata_transfer_tool(registry)
+    _scinet_diagnostic = create_scinet_tool(registry, getattr(config, "scinet", None))
+    _scinet_login = create_scinet_login_tool(registry, getattr(config, "scinet", None))
+    _scinet_training = create_scinet_training_tool(
+        registry, getattr(config, "scinet", None), config.state_dir
+    )
+    _scinet_inference_preflight = create_scinet_inference_preflight_tool(
+        registry, getattr(config, "scinet", None)
+    )
+    _scinet_inference = create_scinet_inference_tools(
+        registry, getattr(config, "scinet", None), config.state_dir
+    )
+    _scinet_inference_provision = create_scinet_inference_provision_tool(
+        registry, getattr(config, "scinet", None), config.state_dir
+    )
+
+    @mcp.tool()
+    @monitored_tool("venkata_transfer")
+    def venkata_transfer(workspace_id: str, source: TransferSource, files: list[str],
+                         destination: TransferDestination = "laya-training") -> dict:
+        """Transfer allowlisted training files from Asgard or workspace staging to Venkata."""
+        return _venkata_transfer(workspace_id=workspace_id, source=source, files=files, destination=destination)
+
+    @mcp.tool()
+    @monitored_tool("venkata_diagnostic")
+    def venkata_diagnostic(workspace_id: str, command: Diagnostic, args: list[str] | None = None) -> dict:
+        """Run allowlisted read-only Venkata diagnostics using BCC's host SSH identity."""
+        return _venkata_diagnostic(workspace_id=workspace_id, command=command, args=args)
+
+    @mcp.tool()
+    @monitored_tool("scinet_diagnostic")
+    def scinet_diagnostic(workspace_id: str, command: ScinetDiagnostic) -> dict:
+        """Run one fixed, read-only SciNet diagnostic through the host-side broker."""
+        return _scinet_diagnostic(workspace_id=workspace_id, command=command)
+
+    @mcp.tool()
+    @monitored_tool("scinet_login")
+    def scinet_login(workspace_id: str, action: ScinetLoginAction = "start") -> dict:
+        """Request one fixed SciNet Duo push or check login status; approval stays human."""
+        return _scinet_login(workspace_id=workspace_id, action=action)
+
+    @mcp.tool()
+    @monitored_tool("server_deploy_info")
+    def server_deploy_info() -> dict:
+        """Report the running AgentPorter code fingerprint and whether src/ changed since startup."""
+        return deploy_info()
+
+    @mcp.tool()
+    @monitored_tool("scinet_stage")
+    def scinet_stage(workspace_id: str) -> dict:
+        """Stage the approved Laya handoff into a dedicated SciNet directory."""
+        return _scinet_training["scinet_stage"](workspace_id=workspace_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_submit")
+    def scinet_submit(
+        workspace_id: str, stage_id: str, experiment: ScinetExperiment = "laya_smoke"
+    ) -> dict:
+        """Submit a bounded, approval-gated Laya job (smoke; full A/B only if privately enabled)."""
+        return _scinet_training["scinet_submit"](
+            workspace_id=workspace_id, stage_id=stage_id, experiment=experiment
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_job_status")
+    def scinet_job_status(workspace_id: str, job_id: str) -> dict:
+        """Read status only for a job submitted through this workspace."""
+        return _scinet_training["scinet_job_status"](
+            workspace_id=workspace_id, job_id=job_id
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_job_logs")
+    def scinet_job_logs(
+        workspace_id: str, job_id: str, kind: ScinetLogKind = "all"
+    ) -> dict:
+        """Read bounded logs and result metadata for an approved SciNet job."""
+        return _scinet_training["scinet_job_logs"](
+            workspace_id=workspace_id, job_id=job_id, kind=kind
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_setup")
+    def scinet_setup(workspace_id: str, stage_id: str) -> dict:
+        """Start/resume the fixed SHA-verified login-node setup for a staged run."""
+        return _scinet_training["scinet_setup"](workspace_id=workspace_id, stage_id=stage_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_setup_status")
+    def scinet_setup_status(workspace_id: str, stage_id: str) -> dict:
+        """Read fixed setup status and a bounded log tail for a staged run."""
+        return _scinet_training["scinet_setup_status"](workspace_id=workspace_id, stage_id=stage_id)
+
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_preflight")
+    def scinet_inference_preflight(workspace_id: str) -> dict:
+        """Verify the fixed local Laya inference bundle; never contacts SciNet or submits."""
+        return _scinet_inference_preflight(workspace_id=workspace_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_stage")
+    def scinet_inference_stage(workspace_id: str) -> dict:
+        """Stage only the digest-pinned standalone inference bundle to fixed SciNet scratch."""
+        return _scinet_inference["scinet_inference_stage"](workspace_id=workspace_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_provision")
+    def scinet_inference_provision(
+        workspace_id: str, previous_run_id: str,
+        phase: Literal["inspect", "prepare"] = "inspect",
+    ) -> dict:
+        """Inspect (read-only) or prepare the fixed Laya inference runtime; destinations are server-generated."""
+        return _scinet_inference_provision(
+            workspace_id=workspace_id, phase=phase, previous_run_id=previous_run_id)
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_approve")
+    def scinet_inference_approve(
+        workspace_id: str, stage_id: str, reviewer: str, signature: str
+    ) -> dict:
+        """Verify an offline human Ed25519 signature for this exact stage challenge."""
+        return _scinet_inference["scinet_inference_approve"](
+            workspace_id=workspace_id, stage_id=stage_id,
+            reviewer=reviewer, signature=signature,
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_submit")
+    def scinet_inference_submit(workspace_id: str, stage_id: str) -> dict:
+        """Submit one approved fixed-template 1xH100, 30-minute inference allocation."""
+        return _scinet_inference["scinet_inference_submit"](
+            workspace_id=workspace_id, stage_id=stage_id
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_inference_results")
+    def scinet_inference_results(workspace_id: str, job_id: str) -> dict:
+        """Preflight ledger-bound result retrieval; fail closed until trusted receipt transport exists."""
+        return _scinet_inference["scinet_inference_results"](
+            workspace_id=workspace_id, job_id=job_id
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_preflight")
+    def scinet_preflight(
+        workspace_id: str, stage_id: str, experiment: ScinetExperiment = "laya_smoke"
+    ) -> dict:
+        """Read-only gate and human-approval visibility; never approves or submits."""
+        return _scinet_training["scinet_preflight"](
+            workspace_id=workspace_id, stage_id=stage_id, experiment=experiment
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_record_approvals")
+    def scinet_record_approvals(
+        workspace_id: str, stage_id: str, reviewer: str, confirmation: str,
+        approved_fields: list[str], device: str = "cuda", experiment: str = "laya_smoke",
+    ) -> dict:
+        """Record explicit human approvals (laya_smoke, laya_expA or stage-bound laya_expB) for one staged SciNet run."""
+        return _scinet_training["scinet_record_approvals"](
+            workspace_id=workspace_id, stage_id=stage_id, reviewer=reviewer,
+            confirmation=confirmation, approved_fields=approved_fields,
+            device=device, experiment=experiment,
+        )
+
+    @mcp.tool()
+    @monitored_tool("scinet_environment_check")
+    def scinet_environment_check(workspace_id: str) -> dict:
+        """Run the fixed, read-only SciNet training environment check."""
+        return _scinet_training["scinet_environment_check"](workspace_id=workspace_id)
 
     # Tool definitions registered on MCPServer
     @mcp.tool()
@@ -147,7 +350,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool()
     @monitored_tool("list_files")
-    def list_files(workspace_id: str, path: str = "", depth: Optional[int] = None) -> list[str]:
+    def list_files(workspace_id: str, path: str = "", depth: Optional[int] = 1) -> list[str]:
         """List files in the workspace, skipping internal cache and git directories."""
         return _list_files(workspace_id, path=path, depth=depth)
 
@@ -195,15 +398,15 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool()
     @monitored_tool("exec_run")
-    def exec_run(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 30) -> dict:
-        """Execute command synchronously inside the bubblewrap sandbox with network disabled."""
-        return _exec_run(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds)
+    def exec_run(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 30, network_access: bool = False) -> dict:
+        """Execute command synchronously inside bubblewrap; opt in to host network when needed."""
+        return _exec_run(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access)
 
     @mcp.tool()
     @monitored_tool("exec_start")
-    def exec_start(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 300) -> dict:
-        """Start command asynchronously inside the sandbox, returning a job ID."""
-        return _exec_start(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds)
+    def exec_start(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 300, network_access: bool = False) -> dict:
+        """Start command asynchronously inside bubblewrap; opt in to host network when needed."""
+        return _exec_start(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access)
 
     @mcp.tool()
     @monitored_tool("job_status")
@@ -258,6 +461,48 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def git_show(workspace_id: str, ref: str = "HEAD") -> str:
         """Show git object or commit in the workspace (read-only)."""
         return _git_show(workspace_id, ref=ref)
+
+    @mcp.tool()
+    @monitored_tool("git_fetch")
+    def git_fetch(workspace_id: str, remote: str = "origin") -> str:
+        """Fetch branches and tags from remote repository."""
+        return _git_fetch(workspace_id, remote=remote)
+
+    @mcp.tool()
+    @monitored_tool("git_pull")
+    def git_pull(workspace_id: str, remote: str = "origin", branch: str = "") -> str:
+        """Pull changes from remote repository into current branch."""
+        return _git_pull(workspace_id, remote=remote, branch=branch)
+
+    @mcp.tool()
+    @monitored_tool("git_push")
+    def git_push(workspace_id: str, remote: str = "origin", branch: str = "", set_upstream: bool = False) -> str:
+        """Push local commits to remote repository."""
+        return _git_push(workspace_id, remote=remote, branch=branch, set_upstream=set_upstream)
+
+    @mcp.tool()
+    @monitored_tool("git_commit")
+    def git_commit(workspace_id: str, message: str, all_files: bool = False) -> str:
+        """Commit changes with the specified commit message."""
+        return _git_commit(workspace_id, message=message, all_files=all_files)
+
+    @mcp.tool()
+    @monitored_tool("git_add")
+    def git_add(workspace_id: str, paths: list[str]) -> str:
+        """Stage file paths for git commit."""
+        return _git_add(workspace_id, paths=paths)
+
+    @mcp.tool()
+    @monitored_tool("git_branch")
+    def git_branch(workspace_id: str) -> str:
+        """List local and remote branches in workspace."""
+        return _git_branch(workspace_id)
+
+    @mcp.tool()
+    @monitored_tool("git_checkout")
+    def git_checkout(workspace_id: str, branch: str, create: bool = False) -> str:
+        """Switch branches or create a new branch in workspace."""
+        return _git_checkout(workspace_id, branch=branch, create=create)
 
     @mcp.tool()
     @monitored_tool("list_artifacts")
@@ -327,10 +572,36 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             "git_diff": git_diff,
             "git_log": git_log,
             "git_show": git_show,
+            "git_fetch": git_fetch,
+            "git_pull": git_pull,
+            "git_push": git_push,
+            "git_commit": git_commit,
+            "git_add": git_add,
+            "git_branch": git_branch,
+            "git_checkout": git_checkout,
             "list_artifacts": list_artifacts,
             "read_artifact": read_artifact,
             "list_agents": list_agents,
             "dispatch_agent": dispatch_agent,
+            "venkata_diagnostic": venkata_diagnostic,
+            "venkata_transfer": venkata_transfer,
+        "scinet_diagnostic": scinet_diagnostic,
+        "scinet_login": scinet_login,
+        "scinet_stage": scinet_stage,
+        "scinet_submit": scinet_submit,
+        "scinet_job_status": scinet_job_status,
+        "scinet_job_logs": scinet_job_logs,
+        "scinet_environment_check": scinet_environment_check,
+        "scinet_setup": scinet_setup,
+        "scinet_setup_status": scinet_setup_status,
+        "scinet_inference_preflight": scinet_inference_preflight,
+        "scinet_inference_stage": scinet_inference_stage,
+        "scinet_inference_provision": scinet_inference_provision,
+        "scinet_inference_approve": scinet_inference_approve,
+        "scinet_inference_submit": scinet_inference_submit,
+        "scinet_inference_results": scinet_inference_results,
+        "scinet_preflight": scinet_preflight,
+        "scinet_record_approvals": scinet_record_approvals,
         }
     }
     return mcp, context
@@ -351,15 +622,11 @@ def create_asgi_app(config: Config) -> ASGIApp:
         async with streamable_app.router.lifespan_context(streamable_app):
             yield
     
-    server_list = [
-        {"url": "https://5mvx3k0t-8765.use.devtunnels.ms", "description": "Asgard Dev Tunnel Gateway"}
-    ]
-
     app = FastAPI(
-        title="AgentPorter API",
+        title=f"{config.server.action_prefix.upper()} AgentPorter API" if config.server.action_prefix else "AgentPorter API",
         version="0.1.0",
         description="AgentPorter Local Tools and Subagent Gateway for ChatGPT and MCP clients",
-        servers=server_list,
+        servers=([{"url": config.server.public_url}] if config.server.public_url else None),
         generate_unique_id_function=custom_generate_unique_id,
         lifespan=lifespan,
     )
@@ -369,6 +636,12 @@ def create_asgi_app(config: Config) -> ASGIApp:
     @app.get("/health")
     async def health():
         return JSONResponse({"status": "healthy"})
+
+    # Authenticated (not in the public allowlist) so source fingerprints and
+    # host paths are never exposed through the tunnel without the API key.
+    @app.get("/api/v1/server/deploy-info", operation_id="server_deploy_info")
+    async def server_deploy_info():
+        return JSONResponse(deploy_info())
     
     app.include_router(api_router, prefix="/api/v1")
     # streamable_http_app already serves its endpoint at /mcp. Mounting it at
@@ -393,6 +666,29 @@ def create_asgi_app(config: Config) -> ASGIApp:
                 for item in obj:
                     fix_objects(item)
         fix_objects(schema)
+        # ChatGPT Actions rejects schemas with more than 30 operations; stay
+        # below the limit with margin. Retain HTTP handlers and MCP tools; omit
+        # only lower-priority operations from the imported REST schema, on
+        # Asgard and BCC alike (read_file/exec_run cover artifacts).
+        action_schema_exclusions = {
+            "health",
+            "server_deploy_info",
+            "git_branch",
+            "git_show",
+        "git_status",
+        "git_diff",
+        "git_log",
+        "git_fetch",
+        "git_pull",
+            "list_artifacts",
+            "read_artifact",
+        }
+        for path, path_item in list(schema.get("paths", {}).items()):
+            for method, operation in list(path_item.items()):
+                if isinstance(operation, dict) and operation.get("operationId") in action_schema_exclusions:
+                    del path_item[method]
+            if not path_item:
+                del schema["paths"][path]
         if "components" not in schema:
             schema["components"] = {}
         schema["components"]["securitySchemes"] = {
@@ -403,6 +699,18 @@ def create_asgi_app(config: Config) -> ASGIApp:
             }
         }
         schema["security"] = [{"BearerAuth": []}]
+        # Every GPT Action offers persistent "Always allow" approval (Lennon's
+        # choice, 2026-10-09). Server-side workspace permissions, the offline
+        # sandbox default, and commit/push confirmation flags still apply.
+        for path_item in schema.get("paths", {}).values():
+            for operation in path_item.values():
+                if isinstance(operation, dict) and "operationId" in operation:
+                    operation["x-openai-isConsequential"] = False
+        if config.server.action_prefix:
+            for path in schema.get("paths", {}).values():
+                for operation in path.values():
+                    if isinstance(operation, dict) and "operationId" in operation:
+                        operation["operationId"] = f"{config.server.action_prefix}_{operation['operationId']}"
         app.openapi_schema = schema
         return app.openapi_schema
     app.openapi = custom_openapi

@@ -1,11 +1,7 @@
 """Anthropic Claude Code CLI agent adapter."""
 
 import re
-import json
-import sys
-import shlex
 import subprocess
-from pathlib import Path
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.policy import ExecutionPolicy
 
@@ -16,9 +12,11 @@ class ClaudeAdapter(AgentAdapter):
     provider = "Anthropic"
     description = "Anthropic Claude Code CLI worker"
 
-    supports_read_only = True
-    supports_model_override = True
-    supports_reasoning_override = True
+    # No read-only/model/reasoning controls are claimed until the adapter
+    # can enforce them with documented CLI flags.
+    supports_read_only = False
+    supports_model_override = False
+    supports_reasoning_override = False
 
     def capabilities(self) -> list[str]:
         return ["code_generation", "code_review", "architecture", "debugging"]
@@ -51,51 +49,24 @@ class ClaudeAdapter(AgentAdapter):
         model: str = "",
         reasoning_effort: str = "",
         writable: bool = True,
+        policy: ExecutionPolicy | None = None,
     ) -> list[str]:
         exe = self.find_executable(["claude", "~/.npm-global/bin/claude", "~/.local/bin/claude"])
         if not exe:
             raise RuntimeError("Claude Code CLI executable not found on host")
-
-        if isinstance(writable, ExecutionPolicy):
-            policy = writable
-        else:
-            policy = ExecutionPolicy.for_workspace(writable=bool(writable))
-        permission_mode = "acceptEdits" if policy.workspace_write else "plan"
-
-        denied = json.dumps(policy.denied_commands())
-        guard = Path(__file__).resolve().parents[1] / "command_guard.py"
-        settings = {
-            "hooks": {
-                "PreToolUse": [{
-                    "matcher": "Bash",
-                    "hooks": [{
-                        "type": "command",
-                        "command": f"{shlex.quote(sys.executable)} {shlex.quote(str(guard))} {shlex.quote(denied)}",
-                    }],
-                }]
-            }
-        }
-
-        allowed_tools = ["Bash"]
-        if not policy.git_push:
-            allowed_tools.append("Bash(git push *)")
-        if not policy.git_commit:
-            allowed_tools.append("Bash(git commit *)")
-
-        args = [
-            exe,
-            "--permission-mode",
-            permission_mode,
-            "--permission-prompts",
-            "none",
-            "--allowedTools",
-            *allowed_tools,
-            "--settings",
-            json.dumps(settings),
+        policy = policy or ExecutionPolicy.for_workspace(writable=writable)
+        if not policy.workspace_write:
+            raise RuntimeError("Claude adapter does not yet enforce read-only execution")
+        if model or reasoning_effort:
+            raise RuntimeError("Claude adapter does not yet enforce model/reasoning overrides")
+        # Per-invocation permissions only; never enable bypassPermissions.
+        # Exclude project permission overrides; managed organization policy wins.
+        denied = [f"Bash({command}*)" for command in policy.denied_commands()]
+        return [
+            exe, "--setting-sources", "user",
+            "--settings", '{"permissions":{"ask":[]}}',
+            "--permission-mode", "dontAsk",
+            "--allowedTools", "Read", "Grep", "Glob", "Edit", "Write",
+            "NotebookEdit", "Bash", "--disallowedTools", *denied,
+            "-p", packet,
         ]
-        if model:
-            args.extend(["--model", model])
-        if reasoning_effort in {"low", "medium", "high", "xhigh", "max"}:
-            args.extend(["--effort", reasoning_effort])
-        args.extend(["-p", packet])
-        return args

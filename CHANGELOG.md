@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0.dev0] - 2026-09-18
 
 ### Added
+- Code-version fingerprint (`server_deploy_info` MCP tool, authenticated `GET /api/v1/server/deploy-info`), read-only `agentporter deploy-check` (`--expect-fingerprint/--expect-path/--expect-pid`), and human-run `scripts/agentporter-deploy` for immutable per-commit releases with verification and rollback (docs/deployment.md). No agent-triggerable activation (`.path` units) is shipped, per the 2026-10-14 security audit.
+- Worker delegation guide covering asynchronous job/result handling, terminal result collection, and failure recovery.
 - Bootstrap generic AgentPorter architecture extracted from a proven private gateway deployment.
 - Standard Streamable HTTP Model Context Protocol (MCP) server implementation.
 - API Key authentication middleware supporting constant-time verification and custom header support.
@@ -23,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Minimal CLI entrypoint: `agentporter serve`, `agentporter doctor`, `agentporter workspaces`, `agentporter agents`.
 - Comprehensive documentation: Architecture, Security Model, Package vs. Local separation, Local Setup, MCP Clients, and Copilot Studio integration.
 
+
+### Changed
+- Retired GPT-5.6 variants from OpenAI worker routing; inherited stale GPT-5.6 configuration routes to `gpt-6-luna`, while explicit GPT-5.6 requests are rejected.
 
 ### Security hardening
 - Closed the sensitive-file disclosure path through text search.

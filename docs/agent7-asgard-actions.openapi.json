@@ -1,0 +1,3493 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AgentPorter API",
+    "description": "AgentPorter Local Tools and Subagent Gateway for ChatGPT and MCP clients",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/workspaces/": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "summary": "List Workspaces",
+        "description": "List all configured workspaces with ID and status.",
+        "operationId": "list_workspaces",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceInfoResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Workspaces"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "summary": "Workspace Info",
+        "description": "Return comprehensive development context for a workspace.",
+        "operationId": "workspace_info",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDetailsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/files/list": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "List Files",
+        "operationId": "list_files",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListFilesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response List Files"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/files/search": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Search Text",
+        "operationId": "search_text",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchTextRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchResult"
+                  },
+                  "title": "Response Search Text"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/files/read": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Read File",
+        "operationId": "read_file",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadFileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/files/write": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Write File",
+        "operationId": "write_file",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteFileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/files/patch": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Apply Patch",
+        "operationId": "apply_patch",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchFileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/files/mkdir": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Mkdir",
+        "operationId": "mkdir",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MkdirRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/files/move": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Move Path",
+        "operationId": "move_path",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovePathRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/files/trash": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Trash Path",
+        "operationId": "trash_path",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrashPathRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/exec/run": {
+      "post": {
+        "tags": [
+          "Exec"
+        ],
+        "summary": "Exec Run",
+        "operationId": "exec_run",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/exec/start": {
+      "post": {
+        "tags": [
+          "Exec"
+        ],
+        "summary": "Exec Start",
+        "operationId": "exec_start",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/jobs/{job_id}/status": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Job Status",
+        "operationId": "job_status",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/jobs/{job_id}/output": {
+      "post": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Job Output",
+        "operationId": "job_output",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobOutputRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOutputResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/jobs/{job_id}/result": {
+      "post": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Job Result",
+        "operationId": "job_result",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobOutputRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Job Cancel",
+        "operationId": "job_cancel",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/git/push": {
+      "post": {
+        "tags": [
+          "Git"
+        ],
+        "summary": "Git Push",
+        "operationId": "git_push",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitPushRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "title": "Response Git Push"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/git/commit": {
+      "post": {
+        "tags": [
+          "Git"
+        ],
+        "summary": "Git Commit",
+        "operationId": "git_commit",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitCommitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "title": "Response Git Commit"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/git/add": {
+      "post": {
+        "tags": [
+          "Git"
+        ],
+        "summary": "Git Add",
+        "operationId": "git_add",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitAddRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "title": "Response Git Add"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/git/checkout": {
+      "post": {
+        "tags": [
+          "Git"
+        ],
+        "summary": "Git Checkout",
+        "operationId": "git_checkout",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitCheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "title": "Response Git Checkout"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/agents/list": {
+      "get": {
+        "tags": [
+          "Agents"
+        ],
+        "summary": "List Agents",
+        "operationId": "list_agents",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentInfo"
+                  },
+                  "title": "Response List Agents"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/agents/dispatch": {
+      "post": {
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Dispatch Agent",
+        "operationId": "dispatch_agent",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchAgentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/venkata/diagnostic": {
+      "post": {
+        "tags": [
+          "Venkata"
+        ],
+        "summary": "Venkata Diagnostic",
+        "description": "Run an explicitly permitted read-only diagnostic on Venkata through BCC SSH.",
+        "operationId": "venkata_diagnostic",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VenkataDiagnosticRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Venkata Diagnostic",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/venkata/transfer": {
+      "post": {
+        "tags": [
+          "Venkata"
+        ],
+        "summary": "Venkata Transfer",
+        "description": "Transfer approved files into a new checksummed batch on Venkata; never overwrite.",
+        "operationId": "venkata_transfer",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VenkataTransferRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Venkata Transfer",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/scinet/diagnostic": {
+      "post": {
+        "tags": [
+          "SciNet"
+        ],
+        "summary": "Scinet Diagnostic",
+        "description": "Run one allowlisted SciNet diagnostic through Asgard's SSH master.",
+        "operationId": "scinet_diagnostic",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScinetDiagnosticRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Scinet Diagnostic",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/scinet/stage": {
+      "post": {
+        "tags": [
+          "SciNet"
+        ],
+        "summary": "Scinet Stage",
+        "description": "Stage the fixed Laya handoff into the approved SciNet directory.",
+        "operationId": "scinet_stage",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Scinet Stage",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/scinet/submit": {
+      "post": {
+        "tags": [
+          "SciNet"
+        ],
+        "summary": "Scinet Submit",
+        "description": "Submit one approval-gated, one-GPU Laya job from a fixed template (full runs need private opt-in).",
+        "operationId": "scinet_submit",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScinetSubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Scinet Submit",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/scinet/job-status": {
+      "post": {
+        "tags": [
+          "SciNet"
+        ],
+        "summary": "Scinet Job Status",
+        "description": "Read status only for a job submitted through this workspace.",
+        "operationId": "scinet_job_status",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScinetJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Scinet Job Status",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/scinet/job-logs": {
+      "post": {
+        "tags": [
+          "SciNet"
+        ],
+        "summary": "Scinet Job Logs",
+        "description": "Retrieve bounded outputs and result metadata for an approved job.",
+        "operationId": "scinet_job_logs",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScinetJobLogsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Scinet Job Logs",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/scinet/setup": {
+      "post": {
+        "tags": [
+          "SciNet"
+        ],
+        "summary": "Scinet Setup",
+        "description": "Manage SciNet setup, preflight, approvals, or login. login_start requests one Duo push; tap approve on your phone. login_status checks connection. AgentPorter never approves Duo.",
+        "operationId": "scinet_setup",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScinetSetupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Scinet Setup",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AgentInfo": {
+        "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent",
+            "description": "Agent identifier (e.g., codex, jax, liz, claude, opencode, copilot, agy)."
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Agent name."
+          },
+          "worker_cli": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Cli",
+            "description": "Worker CLI binary name."
+          },
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias",
+            "description": "Agent persona or alias."
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "Model provider."
+          },
+          "configured_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configured Model",
+            "description": "Configured model name."
+          },
+          "default_routing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Routing"
+          },
+          "actual_model_used": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Model Used"
+          },
+          "reasoning_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Level"
+          },
+          "cli_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cli Version"
+          },
+          "available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available",
+            "description": "Whether agent is available on host."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Agent description."
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities",
+            "description": "Agent capabilities."
+          },
+          "isolation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isolation Note"
+          },
+          "effective_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Model"
+          },
+          "default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Model"
+          }
+        },
+        "type": "object",
+        "title": "AgentInfo"
+      },
+      "ArtifactContentResponse": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Relative artifact path."
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Artifact type: text or image."
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type",
+            "description": "MIME type."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes",
+            "description": "Size in bytes."
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content",
+            "description": "Text content if text."
+          },
+          "base64_data": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base64 Data",
+            "description": "Base64 encoded data if image."
+          },
+          "truncated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Truncated",
+            "description": "Whether content was truncated."
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "type",
+          "size_bytes"
+        ],
+        "title": "ArtifactContentResponse"
+      },
+      "ArtifactInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Filename."
+          },
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Relative path."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes",
+            "description": "Size in bytes."
+          },
+          "mtime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mtime",
+            "description": "Modification time."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "size_bytes"
+        ],
+        "title": "ArtifactInfo"
+      },
+      "DispatchAgentRequest": {
+        "properties": {
+          "agent": {
+            "type": "string",
+            "title": "Agent",
+            "description": "Name of the agent to dispatch."
+          },
+          "task": {
+            "type": "string",
+            "title": "Task",
+            "description": "The specific task instruction for the agent."
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose",
+            "description": "Context or purpose for the dispatch.",
+            "default": ""
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "Specific LLM model to use (if applicable)."
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort",
+            "description": "Reasoning effort level (e.g., 'high', 'low')."
+          },
+          "allow_commit": {
+            "type": "boolean",
+            "title": "Allow Commit",
+            "description": "Human confirmation that the agent may run git commit.",
+            "default": false
+          },
+          "allow_push": {
+            "type": "boolean",
+            "title": "Allow Push",
+            "description": "Human confirmation that the agent may git push to existing remotes.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent",
+          "task"
+        ],
+        "title": "DispatchAgentRequest"
+      },
+      "DispatchResponse": {
+        "properties": {
+          "dispatch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dispatch Id",
+            "description": "Unique ID for the agent dispatch."
+          },
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "description": "Underlying background job ID."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Status of dispatch.",
+            "default": "running"
+          },
+          "worker_cli": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Cli",
+            "description": "Worker CLI binary name."
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "Model provider."
+          },
+          "selected_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Agent",
+            "description": "Selected agent key."
+          },
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias",
+            "description": "Agent persona or alias."
+          },
+          "requested_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Model",
+            "description": "Requested model."
+          },
+          "actual_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Model",
+            "description": "Actual model used."
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "Model name."
+          },
+          "reasoning_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Level",
+            "description": "Reasoning effort level."
+          },
+          "thinking_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thinking Level",
+            "description": "Thinking level."
+          },
+          "cli_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cli Version",
+            "description": "CLI version."
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id",
+            "description": "Target workspace ID."
+          },
+          "git_clean_at_dispatch": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Clean At Dispatch",
+            "description": "Whether git tree was clean."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "DispatchResponse"
+      },
+      "ExecResponse": {
+        "properties": {
+          "stdout": {
+            "type": "string",
+            "title": "Stdout",
+            "description": "Standard output."
+          },
+          "stderr": {
+            "type": "string",
+            "title": "Stderr",
+            "description": "Standard error."
+          },
+          "exit_code": {
+            "type": "integer",
+            "title": "Exit Code",
+            "description": "Exit code."
+          },
+          "timeout": {
+            "type": "boolean",
+            "title": "Timeout",
+            "description": "True if timed out.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "stdout",
+          "stderr",
+          "exit_code"
+        ],
+        "title": "ExecResponse"
+      },
+      "ExecRunRequest": {
+        "properties": {
+          "argv": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Argv",
+            "description": "Command and arguments to execute."
+          },
+          "cwd": {
+            "type": "string",
+            "title": "Cwd",
+            "description": "Working directory for the command relative to workspace.",
+            "default": ""
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "title": "Timeout Seconds",
+            "description": "Timeout in seconds for execution.",
+            "default": 30
+          },
+          "network_access": {
+            "type": "boolean",
+            "title": "Network Access",
+            "description": "Internet access inside the sandbox (GitHub, package installs). Defaults to true; send false to run offline.",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "argv"
+        ],
+        "title": "ExecRunRequest"
+      },
+      "ExecStartRequest": {
+        "properties": {
+          "argv": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Argv",
+            "description": "Command and arguments to execute."
+          },
+          "cwd": {
+            "type": "string",
+            "title": "Cwd",
+            "description": "Working directory for the command relative to workspace.",
+            "default": ""
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "title": "Timeout Seconds",
+            "description": "Timeout in seconds for the background job.",
+            "default": 300
+          },
+          "network_access": {
+            "type": "boolean",
+            "title": "Network Access",
+            "description": "Internet access inside the sandbox (GitHub, package installs). Defaults to true; send false to run offline.",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "argv"
+        ],
+        "title": "ExecStartRequest"
+      },
+      "FileResponse": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Path of the file."
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content",
+            "description": "Content of the file."
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256",
+            "description": "SHA256 checksum."
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes",
+            "description": "File size."
+          },
+          "truncated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "FileResponse"
+      },
+      "GenericActionResponse": {
+        "properties": {
+          "success": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success",
+            "description": "Whether the action was successful."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "Status of the action."
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Optional message."
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path",
+            "description": "Affected path."
+          },
+          "trash_location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trash Location"
+          }
+        },
+        "type": "object",
+        "title": "GenericActionResponse"
+      },
+      "GitAddRequest": {
+        "properties": {
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Paths",
+            "description": "File paths to stage for commit."
+          }
+        },
+        "type": "object",
+        "required": [
+          "paths"
+        ],
+        "title": "GitAddRequest"
+      },
+      "GitCheckoutRequest": {
+        "properties": {
+          "branch": {
+            "type": "string",
+            "title": "Branch",
+            "description": "Branch name to switch to or create."
+          },
+          "create": {
+            "type": "boolean",
+            "title": "Create",
+            "description": "Create new branch (-b).",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "branch"
+        ],
+        "title": "GitCheckoutRequest"
+      },
+      "GitCommitRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Commit message."
+          },
+          "all_files": {
+            "type": "boolean",
+            "title": "All Files",
+            "description": "Automatically stage modified/deleted files (-a).",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "GitCommitRequest"
+      },
+      "GitDiffRequest": {
+        "properties": {
+          "staged": {
+            "type": "boolean",
+            "title": "Staged",
+            "description": "Whether to show staged changes (True) or unstaged (False).",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "GitDiffRequest"
+      },
+      "GitFetchRequest": {
+        "properties": {
+          "remote": {
+            "type": "string",
+            "title": "Remote",
+            "description": "Remote repository name.",
+            "default": "origin"
+          }
+        },
+        "type": "object",
+        "title": "GitFetchRequest"
+      },
+      "GitLogRequest": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Number of commits to show.",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "title": "GitLogRequest"
+      },
+      "GitPullRequest": {
+        "properties": {
+          "remote": {
+            "type": "string",
+            "title": "Remote",
+            "description": "Remote repository name.",
+            "default": "origin"
+          },
+          "branch": {
+            "type": "string",
+            "title": "Branch",
+            "description": "Remote branch name to pull.",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "GitPullRequest"
+      },
+      "GitPushRequest": {
+        "properties": {
+          "remote": {
+            "type": "string",
+            "title": "Remote",
+            "description": "Remote repository name.",
+            "default": "origin"
+          },
+          "branch": {
+            "type": "string",
+            "title": "Branch",
+            "description": "Branch name to push.",
+            "default": ""
+          },
+          "set_upstream": {
+            "type": "boolean",
+            "title": "Set Upstream",
+            "description": "Whether to set upstream branch (-u).",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "GitPushRequest"
+      },
+      "GitShowRequest": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "title": "Ref",
+            "description": "Git object or commit ref to show.",
+            "default": "HEAD"
+          }
+        },
+        "type": "object",
+        "title": "GitShowRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "JobOutputRequest": {
+        "properties": {
+          "cursor": {
+            "type": "integer",
+            "title": "Cursor",
+            "description": "Byte offset to start reading from.",
+            "default": 0
+          },
+          "max_bytes": {
+            "type": "integer",
+            "title": "Max Bytes",
+            "description": "Maximum bytes to return.",
+            "default": 65536
+          }
+        },
+        "type": "object",
+        "title": "JobOutputRequest"
+      },
+      "JobOutputResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "description": "Job ID."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Current status."
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output",
+            "description": "Incremental or full output.",
+            "default": ""
+          },
+          "stdout": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stdout",
+            "description": "Incremental stdout.",
+            "default": ""
+          },
+          "stderr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stderr",
+            "description": "Incremental stderr.",
+            "default": ""
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor",
+            "description": "Start offset.",
+            "default": 0
+          },
+          "next_cursor": {
+            "type": "integer",
+            "title": "Next Cursor",
+            "description": "Cursor for next read.",
+            "default": 0
+          },
+          "eof": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eof",
+            "description": "True if EOF reached.",
+            "default": false
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code",
+            "description": "Exit code if finished."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "JobOutputResponse"
+      },
+      "JobResultResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "description": "Job ID."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Final status."
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "stdout": {
+            "type": "string",
+            "title": "Stdout",
+            "description": "Full stdout."
+          },
+          "stderr": {
+            "type": "string",
+            "title": "Stderr",
+            "description": "Full stderr."
+          },
+          "requested_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Model",
+            "description": "Model requested/effectively routed for the job."
+          },
+          "actual_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Model",
+            "description": "Runtime model resolved from worker provenance when available."
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "Provider recorded for the job."
+          },
+          "worker_cli": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Cli",
+            "description": "Worker CLI used for the job."
+          },
+          "reasoning_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Level",
+            "description": "Requested reasoning effort."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor",
+            "description": "Start stdout byte offset for this result chunk.",
+            "default": 0
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "description": "Cursor for the next stdout chunk.",
+            "default": 0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "stdout",
+          "stderr"
+        ],
+        "title": "JobResultResponse"
+      },
+      "JobStartResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "description": "Background job ID."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Initial status."
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "JobStartResponse"
+      },
+      "JobStatusResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "description": "Job ID."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Current status (running, completed, failed, timed_out, cancelled)."
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code",
+            "description": "Exit code if finished."
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "JobStatusResponse"
+      },
+      "ListArtifactsRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Relative path within workspace to look for artifacts.",
+            "default": "artifacts"
+          }
+        },
+        "type": "object",
+        "title": "ListArtifactsRequest"
+      },
+      "ListFilesRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Relative path within the workspace to list files from.",
+            "default": ""
+          },
+          "depth": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth",
+            "description": "Maximum directory depth to traverse (default: one level).",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "title": "ListFilesRequest"
+      },
+      "MkdirRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Relative path of the directory to create."
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "MkdirRequest"
+      },
+      "MovePathRequest": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Source relative path."
+          },
+          "destination": {
+            "type": "string",
+            "title": "Destination",
+            "description": "Destination relative path."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "destination"
+        ],
+        "title": "MovePathRequest"
+      },
+      "PatchFileRequest": {
+        "properties": {
+          "patch": {
+            "type": "string",
+            "title": "Patch",
+            "description": "Unified diff patch to apply to the workspace."
+          }
+        },
+        "type": "object",
+        "required": [
+          "patch"
+        ],
+        "title": "PatchFileRequest"
+      },
+      "ReadFileRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Relative path of the file to read."
+          },
+          "start_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Line",
+            "description": "Start line (1-indexed)."
+          },
+          "end_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Line",
+            "description": "End line (inclusive)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "ReadFileRequest"
+      },
+      "ScinetDiagnosticRequest": {
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "gpu_partitions",
+              "gpu_nodes",
+              "gpu_allocations",
+              "connection_status"
+            ],
+            "title": "Command"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "title": "ScinetDiagnosticRequest"
+      },
+      "ScinetJobLogsRequest": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Job Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "all",
+              "stdout",
+              "stderr",
+              "metrics",
+              "manifests",
+              "checkpoints"
+            ],
+            "title": "Kind",
+            "default": "all"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "ScinetJobLogsRequest"
+      },
+      "ScinetJobRequest": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Job Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "ScinetJobRequest"
+      },
+      "ScinetSetupRequest": {
+        "additionalProperties": false,
+        "description": "One consolidated Action so the API stays within the 30-operation Actions limit.",
+        "properties": {
+          "action": {
+            "enum": [
+              "start",
+              "status",
+              "preflight",
+              "environment_check",
+              "record_approvals",
+              "login_start",
+              "login_status"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 32,
+                "pattern": "^[a-f0-9]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stage Id"
+          },
+          "experiment": {
+            "default": "laya_smoke",
+            "enum": [
+              "laya_smoke",
+              "laya_expA",
+              "laya_expB"
+            ],
+            "title": "Experiment",
+            "type": "string"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reviewer"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Confirmation"
+          },
+          "approved_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Approved Fields"
+          },
+          "device": {
+            "anyOf": [
+              {
+                "const": "cuda",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Device"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "ScinetSetupRequest",
+        "type": "object"
+      },
+      "ScinetSubmitRequest": {
+        "properties": {
+          "stage_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 32,
+            "title": "Stage Id"
+          },
+          "experiment": {
+            "type": "string",
+            "enum": [
+              "laya_smoke",
+              "laya_expA",
+              "laya_expB"
+            ],
+            "title": "Experiment",
+            "default": "laya_smoke"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stage_id"
+        ],
+        "title": "ScinetSubmitRequest"
+      },
+      "SearchResult": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "title": "File",
+            "description": "Path to the matching file."
+          },
+          "line": {
+            "type": "integer",
+            "title": "Line",
+            "description": "Line number."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Matching text."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "line",
+          "text"
+        ],
+        "title": "SearchResult"
+      },
+      "SearchTextRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "The regex or exact string to search for."
+          },
+          "glob": {
+            "type": "string",
+            "title": "Glob",
+            "description": "Glob pattern to filter files.",
+            "default": "*"
+          },
+          "max_results": {
+            "type": "integer",
+            "title": "Max Results",
+            "description": "Maximum number of matches to return.",
+            "default": 50
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "SearchTextRequest"
+      },
+      "TrashPathRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Relative path to move to the .trash folder."
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "TrashPathRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context",
+            "properties": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VenkataDiagnosticRequest": {
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "hostname",
+              "nvidia-smi",
+              "nproc",
+              "free",
+              "df",
+              "cuda_version",
+              "torch_status"
+            ],
+            "title": "Command"
+          },
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Args"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "title": "VenkataDiagnosticRequest"
+      },
+      "VenkataTransferRequest": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "asgard_laya",
+              "workspace"
+            ],
+            "title": "Source"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Files"
+          },
+          "destination": {
+            "type": "string",
+            "const": "laya-training",
+            "title": "Destination",
+            "default": "laya-training"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "files"
+        ],
+        "title": "VenkataTransferRequest"
+      },
+      "WorkspaceDetailsResponse": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id",
+            "description": "Workspace ID"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Workspace absolute path"
+          },
+          "exists": {
+            "type": "boolean",
+            "title": "Exists",
+            "description": "Whether the workspace exists"
+          },
+          "writable": {
+            "type": "boolean",
+            "title": "Writable",
+            "description": "Whether the workspace is writable"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "permissions": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Permissions",
+            "properties": {}
+          },
+          "git": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Git",
+            "properties": {}
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Languages"
+          },
+          "marker_files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Marker Files"
+          },
+          "r_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R Version"
+          },
+          "python_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Python Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "path",
+          "exists",
+          "writable"
+        ],
+        "title": "WorkspaceDetailsResponse"
+      },
+      "WorkspaceInfoResponse": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id",
+            "description": "The unique identifier of the workspace."
+          },
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Workspace absolute path"
+          },
+          "exists": {
+            "type": "boolean",
+            "title": "Exists",
+            "description": "Whether the workspace directory exists"
+          },
+          "writable": {
+            "type": "boolean",
+            "title": "Writable",
+            "description": "Whether the workspace is writable"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Workspace description",
+            "default": ""
+          },
+          "permissions": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Permissions",
+            "properties": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "path",
+          "exists",
+          "writable"
+        ],
+        "title": "WorkspaceInfoResponse"
+      },
+      "WriteFileRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Relative path of the file to write."
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Full text content to write to the file."
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Sha256",
+            "description": "Optional SHA256 checksum for stale-file protection."
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "content"
+        ],
+        "title": "WriteFileRequest"
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API key bearer token"
+      }
+    }
+  },
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "servers": [
+    {
+      "url": "https://5mvx3k0t-8765.use.devtunnels.ms"
+    }
+  ]
+}

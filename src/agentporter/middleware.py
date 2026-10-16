@@ -47,8 +47,17 @@ class SecurityMiddleware:
             await self.app(scope, receive, send)
             return
 
-        path = scope.get("path", "")
-        if path == "/health":
+        # Health and the generated schema are intentionally public. Clients
+        # must be able to probe/import the gateway before sending the API key;
+        # the OpenAPI document declares BearerAuth for every protected route.
+        if scope.get("path") in {
+            "/health",
+            "/openapi.json",
+            "/docs",
+            "/docs/",
+            "/docs/oauth2-redirect",
+            "/redoc",
+        }:
             await self.app(scope, receive, send)
             return
 
@@ -85,9 +94,9 @@ class SecurityMiddleware:
             raw_header = headers.get(self.legacy_header_bytes)
         if raw_header is None:
             raw_header = headers.get(b"authorization")
-        provided_key = raw_header.decode("utf-8", errors="replace").strip() if raw_header is not None else ""
-        if provided_key.lower().startswith("bearer "):
-            provided_key = provided_key[7:].strip()
+        provided_key = (
+            raw_header.decode("utf-8", errors="replace") if raw_header is not None else ""
+        )
         if not verify_api_key(provided_key, self.api_key):
             self._log_rejection_diagnostic(headers, "invalid_or_missing_key")
             await JSONResponse(
@@ -96,10 +105,16 @@ class SecurityMiddleware:
             )(scope, receive, send)
             return
 
-        # Buffer request bodies only for methods that can carry MCP payloads. This
-        # enforces the ceiling even when Content-Length is absent/chunked and
-        # ensures rejection happens before the downstream app starts a response.
         if scope.get("method", "GET").upper() in {"POST", "PUT", "PATCH"}:
+            # MCP Streamable HTTP may keep a POST request body open while the
+            # server handles the session. Do not wait for end-of-body on MCP;
+            # that would deadlock the transport and block the event loop.
+            if scope.get("path") in {"/mcp", "/mcp/"}:
+                await self.app(scope, receive, send)
+                return
+
+            # Keep buffering for REST requests so the size ceiling is enforced
+            # before a downstream handler starts its response.
             buffered: list[Message] = []
             total = 0
             while True:

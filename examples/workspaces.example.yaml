@@ -10,6 +10,10 @@ workspaces:
     allow_git: true
     allow_artifacts: true
     allow_agent_dispatch: false
+    # Requires the host-side SciNet broker; never enables general SSH.
+    allow_scinet_diagnostic: false
+    # Higher-risk training staging/submission is separately fail-closed.
+    allow_scinet_training: false
     # Host-side loopback HTTP is disabled unless exact ports are listed.
     local_http_ports: []
 

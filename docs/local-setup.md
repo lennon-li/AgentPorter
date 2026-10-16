@@ -11,6 +11,13 @@ AgentPorter currently targets Linux and WSL2.
 - Git
 - R only if you want to execute R workloads
 
+The sandbox exposes the supported development toolchain through explicit,
+read-only mounts. Debian naming differences are normalized as `fd -> fdfind`
+and `bat -> batcat`. Quarto and workstation-local tools such as `rtk`, `uv`,
+`yq`, `delta`, and `duckdb` are mounted only when installed on the host; the
+host home directory and host `PATH` are never passed through. Use
+`agentporter doctor` to inspect the tool inventory and versions.
+
 ## Install
 
 ```bash

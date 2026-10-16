@@ -32,3 +32,9 @@ def test_local_http_connection_refused():
     res = local_http("test", port=59999)
     assert "error" in res
     assert "Failed to connect to allowed loopback port 59999" in res["error"]
+
+
+def test_local_http_unregistered_port_is_denied():
+    reg = WorkspaceRegistry({"test": {"path": "/tmp", "writable": True}})
+    with pytest.raises(PermissionError, match="not allowed"):
+        create_local_http_tool(reg)("test", port=59999)

@@ -10,11 +10,15 @@ jobs_router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 @router.post("/run", response_model=ExecResponse)
 def exec_run(workspace_id: str, req: ExecRunRequest, request: Request):
-    return request.app.state.tools["exec_run"](workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds)
+    return request.app.state.tools["exec_run"](
+        workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds, network_access=req.network_access
+    )
 
 @router.post("/start", response_model=JobStartResponse)
 def exec_start(workspace_id: str, req: ExecStartRequest, request: Request):
-    return request.app.state.tools["exec_start"](workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds)
+    return request.app.state.tools["exec_start"](
+        workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds, network_access=req.network_access
+    )
 
 @jobs_router.get("/{job_id}/status", response_model=JobStatusResponse)
 def job_status(job_id: str, request: Request):
@@ -26,7 +30,7 @@ def job_output(job_id: str, req: JobOutputRequest, request: Request):
     if "output" not in res or not res["output"]:
         res["output"] = res.get("stdout", "") or res.get("stderr", "")
     if "eof" not in res:
-        res["eof"] = res.get("status") in ("completed", "failed", "cancelled")
+        res["eof"] = res.get("status") in ("completed", "failed", "timed_out", "cancelled")
     return res
 
 @jobs_router.post("/{job_id}/result", response_model=JobResultResponse)

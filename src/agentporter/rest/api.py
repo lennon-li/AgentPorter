@@ -8,6 +8,8 @@ from agentporter.rest.routers.exec import jobs_router
 from agentporter.rest.routers.git import router as git_router
 from agentporter.rest.routers.artifacts import router as artifacts_router
 from agentporter.rest.routers.agents import router as agents_router
+from agentporter.rest.routers.venkata import router as venkata_router
+from agentporter.rest.routers.scinet import router as scinet_router
 
 def custom_generate_unique_id(route: APIRoute) -> str:
     # Use the function name directly to have concise operation_ids like `list_workspaces`, `exec_run`
@@ -21,3 +23,5 @@ api_router.include_router(jobs_router)
 api_router.include_router(git_router)
 api_router.include_router(artifacts_router)
 api_router.include_router(agents_router)
+api_router.include_router(venkata_router)
+api_router.include_router(scinet_router)

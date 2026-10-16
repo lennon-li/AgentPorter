@@ -26,7 +26,32 @@ class WorkspaceRegistry:
                     allow_artifacts=data.get("allow_artifacts", True),
                     allow_agent_dispatch=data.get("allow_agent_dispatch", False),
                     local_http_ports=data.get("local_http_ports", []),
+                    auto_discover=data.get("auto_discover", False),
+                    allow_venkata_ssh=data.get("allow_venkata_ssh", False),
+                    allow_venkata_transfer=data.get("allow_venkata_transfer", False),
+            allow_scinet_diagnostic=data.get("allow_scinet_diagnostic", False),
+                    allow_scinet_training=data.get("allow_scinet_training", False),
                 )
+            for ws_id, ws in list(self._workspaces.items()):
+                if ws.auto_discover and os.path.isdir(ws.path):
+                    try:
+                        for entry in os.scandir(ws.path):
+                            if entry.name.startswith(".") or entry.name in self._workspaces:
+                                continue
+                            if entry.is_dir(follow_symlinks=False):
+                                self.register(
+                                    ws_id=entry.name,
+                                    path=entry.path,
+                                    writable=ws.writable,
+                                    description=f"Auto-discovered project in {ws.id}",
+                                    allow_execute=ws.allow_execute,
+                                    allow_git=ws.allow_git,
+                                    allow_artifacts=ws.allow_artifacts,
+                                    allow_agent_dispatch=ws.allow_agent_dispatch,
+                                    auto_discover=False,
+                                )
+                    except OSError as exc:
+                        logger.warning("Could not scan auto-discovery root %s: %s", ws.path, exc)
 
     def register(
         self,
@@ -39,6 +64,11 @@ class WorkspaceRegistry:
         allow_artifacts: bool = True,
         allow_agent_dispatch: bool = False,
         local_http_ports: Optional[list[int]] = None,
+        auto_discover: bool = False,
+        allow_venkata_ssh: bool = False,
+        allow_venkata_transfer: bool = False,
+        allow_scinet_diagnostic: bool = False,
+        allow_scinet_training: bool = False,
     ) -> None:
         real_path = os.path.realpath(os.path.expanduser(path))
         ports = sorted({int(p) for p in (local_http_ports or []) if 1 <= int(p) <= 65535})
@@ -51,7 +81,12 @@ class WorkspaceRegistry:
             allow_git=allow_git,
             allow_artifacts=allow_artifacts,
             allow_agent_dispatch=allow_agent_dispatch,
+            auto_discover=auto_discover,
             local_http_ports=ports,
+            allow_venkata_ssh=allow_venkata_ssh,
+            allow_venkata_transfer=allow_venkata_transfer,
+            allow_scinet_diagnostic=allow_scinet_diagnostic,
+            allow_scinet_training=allow_scinet_training,
         )
 
     def get(self, ws_id: str) -> WorkspaceDefinition:
@@ -75,6 +110,10 @@ class WorkspaceRegistry:
                     "artifacts": ws.allow_artifacts,
                     "agent_dispatch": ws.allow_agent_dispatch,
                     "local_http_ports": ws.local_http_ports,
+                    "venkata_ssh": ws.allow_venkata_ssh,
+                    "venkata_transfer": ws.allow_venkata_transfer,
+                "scinet_diagnostic": ws.allow_scinet_diagnostic,
+                    "scinet_training": ws.allow_scinet_training,
                 },
             })
         return results
@@ -145,6 +184,8 @@ class WorkspaceRegistry:
         return {
             "workspace_id": ws.id,
             "path": ws.path,
+            "exists": os.path.isdir(ws_path),
+            "description": ws.description,
             "writable": ws.writable,
             "permissions": {
                 "execute": ws.allow_execute,

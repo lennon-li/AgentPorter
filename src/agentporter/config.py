@@ -1,6 +1,7 @@
 """Configuration resolution and path management for AgentPorter."""
 
 import os
+import re
 import yaml
 import secrets
 import logging
@@ -21,6 +22,10 @@ class ServerSettings:
     host: str = "127.0.0.1"
     port: int = 8765
     name: str = "AgentPorter"
+    # Optional deployment URL used for generated OpenAPI `servers` metadata.
+    # The reusable package stays tunnel-agnostic when this is unset.
+    public_url: str = field(default_factory=lambda: os.environ.get("AGENTPORTER_PUBLIC_URL", "").strip())
+    action_prefix: str = field(default_factory=lambda: os.environ.get("AGENTPORTER_ACTION_PREFIX", "").strip())
 
 
 @dataclass
@@ -50,6 +55,41 @@ class SandboxSettings:
     max_job_log_bytes: int = 10 * 1024 * 1024  # per stream, async jobs
 
 
+@dataclass
+class ScinetSettings:
+    """Private deployment-supplied endpoint and training policy settings."""
+
+    host: str = ""
+    user: str = ""
+    # AgentPorter talks to the broker, never to the user's SSH control socket.
+    # The broker owns the authenticated SSH session and its private transport.
+    broker_socket: str = ""
+    broker_control_socket: str = ""
+    control_socket: str = ""
+    machine: str = ""
+    # Authorized human reviewer for scinet_record_approvals; defaults to `user`.
+    approval_reviewer: str = ""
+    training_remote_root: str = ""
+    training_account: str = ""
+    training_partition: str = ""
+    training_python: str = ""
+    # Repeated here for operator visibility; implementation accepts only code pin.
+    inference_manifest_sha256: str = ""
+    # Inference-only deployment paths are separate from the A/B training setup.
+    inference_scratch_root: str = ""
+    inference_python: str = ""
+    inference_hf_cache: str = ""
+    # Catalog path is fixed beneath scratch; digest must be independently reviewed.
+    inference_runtime_catalog_sha256: str = ""
+    inference_approval_reviewer: str = ""
+    training_bootstrap_python: str = "/usr/bin/python3"
+    training_cpus_per_task: int = 4
+    training_max_stage_bytes: int = 512 * 1024 * 1024
+    # Full Experiment A/B submission is off unless a human enables it privately.
+    training_allow_full_runs: bool = False
+    training_full_walltime: str = "02:00:00"
+
+
 class Config:
     """Central configuration manager for AgentPorter."""
 
@@ -66,13 +106,55 @@ class Config:
         self.server = ServerSettings()
         self.security = SecuritySettings()
         self.sandbox = SandboxSettings()
+        self.scinet = ScinetSettings()
         self.workspaces: dict[str, dict[str, Any]] = {}
         self.api_key: str = ""
 
         self._ensure_dirs()
         self._load_config_file()
         self._load_workspaces_file()
+        self._load_scinet_environment()
         self._load_or_generate_api_key()
+
+    def _load_scinet_environment(self) -> None:
+        for field in (
+            "host",
+            "user",
+            "broker_socket",
+            "broker_control_socket",
+            "control_socket",
+            "machine",
+            "approval_reviewer",
+            "inference_scratch_root",
+            "inference_python",
+            "inference_hf_cache",
+            "inference_runtime_catalog_sha256",
+            "inference_approval_reviewer",
+        ):
+            value = os.environ.get("AGENTPORTER_SCINET_" + field.upper())
+            if value is not None:
+                setattr(self.scinet, field, value.strip())
+        for field in (
+            "training_remote_root",
+            "training_account",
+            "training_partition",
+            "training_python",
+            "training_bootstrap_python",
+        ):
+            value = os.environ.get("AGENTPORTER_SCINET_" + field.upper())
+            if value is not None:
+                setattr(self.scinet, field, value.strip())
+        value = os.environ.get("AGENTPORTER_SCINET_INFERENCE_MANIFEST_SHA256")
+        if value is not None:
+            self.scinet.inference_manifest_sha256 = value.strip()
+        value = os.environ.get("AGENTPORTER_SCINET_TRAINING_CPUS_PER_TASK")
+        if value is not None:
+            self.scinet.training_cpus_per_task = int(value)
+        workspace = os.environ.get("AGENTPORTER_SCINET_WORKSPACE", "").strip()
+        if workspace:
+            if workspace not in self.workspaces:
+                raise ValueError("SciNet workspace override must name a registered workspace")
+            self.workspaces[workspace]["allow_scinet_diagnostic"] = True
 
     @staticmethod
     def _ensure_private_dir(path: Path) -> None:
@@ -108,6 +190,10 @@ class Config:
                 self.server.port = int(srv["port"])
             if "name" in srv:
                 self.server.name = str(srv["name"])
+            if "public_url" in srv:
+                self.server.public_url = str(srv["public_url"] or "").strip()
+            if "action_prefix" in srv:
+                self.server.action_prefix = str(srv["action_prefix"] or "").strip()
 
             sec = data.get("security", {})
             auth_mode = sec.get("auth", "api_key")
@@ -148,6 +234,77 @@ class Config:
             if "max_job_log_bytes" in sbx:
                 self.sandbox.max_job_log_bytes = int(sbx["max_job_log_bytes"])
 
+            sci = data.get("scinet", {})
+            self.scinet.host = str(sci.get("host", self.scinet.host) or "").strip()
+            self.scinet.user = str(sci.get("user", self.scinet.user) or "").strip()
+            self.scinet.broker_socket = str(
+                sci.get("broker_socket", self.scinet.broker_socket) or ""
+            ).strip()
+            self.scinet.broker_control_socket = str(
+                sci.get("broker_control_socket", self.scinet.broker_control_socket) or ""
+            ).strip()
+            self.scinet.control_socket = str(
+                sci.get("control_socket", self.scinet.control_socket) or ""
+            ).strip()
+            self.scinet.machine = str(sci.get("machine", self.scinet.machine) or "").strip()
+            self.scinet.training_remote_root = str(
+                sci.get("training_remote_root", self.scinet.training_remote_root) or ""
+            ).strip()
+            self.scinet.training_account = str(
+                sci.get("training_account", self.scinet.training_account) or ""
+            ).strip()
+            self.scinet.training_partition = str(
+                sci.get("training_partition", self.scinet.training_partition) or ""
+            ).strip()
+            self.scinet.training_python = str(
+                sci.get("training_python", self.scinet.training_python) or ""
+            ).strip()
+            self.scinet.inference_manifest_sha256 = str(
+                sci.get("inference_manifest_sha256", self.scinet.inference_manifest_sha256)
+                or ""
+            ).strip()
+            self.scinet.inference_scratch_root = str(
+                sci.get("inference_scratch_root", self.scinet.inference_scratch_root) or ""
+            ).strip()
+            self.scinet.inference_python = str(
+                sci.get("inference_python", self.scinet.inference_python) or ""
+            ).strip()
+            self.scinet.inference_hf_cache = str(
+                sci.get("inference_hf_cache", self.scinet.inference_hf_cache) or ""
+            ).strip()
+            self.scinet.inference_runtime_catalog_sha256 = str(
+                sci.get("inference_runtime_catalog_sha256",
+                        self.scinet.inference_runtime_catalog_sha256) or ""
+            ).strip()
+            if self.scinet.inference_runtime_catalog_sha256 and not re.fullmatch(
+                r"[0-9a-f]{64}", self.scinet.inference_runtime_catalog_sha256
+            ):
+                raise ValueError("scinet.inference_runtime_catalog_sha256 must be lowercase SHA-256")
+            self.scinet.inference_approval_reviewer = str(
+                sci.get("inference_approval_reviewer", self.scinet.inference_approval_reviewer)
+                or ""
+            ).strip()
+            if self.scinet.inference_manifest_sha256 and not re.fullmatch(
+                r"[0-9a-f]{64}", self.scinet.inference_manifest_sha256
+            ):
+                raise ValueError("scinet.inference_manifest_sha256 must be lowercase SHA-256")
+            self.scinet.training_bootstrap_python = str(
+                sci.get("training_bootstrap_python", self.scinet.training_bootstrap_python) or ""
+            ).strip()
+            if "training_cpus_per_task" in sci:
+                self.scinet.training_cpus_per_task = int(sci["training_cpus_per_task"])
+            if "training_max_stage_bytes" in sci:
+                self.scinet.training_max_stage_bytes = int(sci["training_max_stage_bytes"])
+            if "training_allow_full_runs" in sci:
+                if not isinstance(sci["training_allow_full_runs"], bool):
+                    raise ValueError("scinet.training_allow_full_runs must be a boolean")
+                self.scinet.training_allow_full_runs = sci["training_allow_full_runs"]
+            if "training_full_walltime" in sci:
+                walltime = str(sci["training_full_walltime"])
+                if not re.fullmatch(r"(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]", walltime):
+                    raise ValueError("scinet.training_full_walltime must be HH:MM:SS below 24h")
+                self.scinet.training_full_walltime = walltime
+
             if self.sandbox.default_timeout_seconds <= 0:
                 raise ValueError("sandbox.default_timeout_seconds must be > 0")
             if self.sandbox.max_timeout_seconds < self.sandbox.default_timeout_seconds:
@@ -156,6 +313,10 @@ class Config:
                 raise ValueError("sandbox output limits must be > 0")
             if self.security.max_payload_bytes <= 0:
                 raise ValueError("security.max_payload_bytes must be > 0")
+            if self.scinet.training_cpus_per_task <= 0:
+                raise ValueError("scinet.training_cpus_per_task must be > 0")
+            if self.scinet.training_max_stage_bytes <= 0:
+                raise ValueError("scinet.training_max_stage_bytes must be > 0")
 
         except Exception as e:
             # Invalid security configuration must fail closed rather than be silently ignored.
@@ -203,9 +364,7 @@ class Config:
                         self.api_key = line.split("=", 1)[1].strip()
                         if self.api_key:
                             return
-            raise ValueError(
-                f"{secrets_file} exists but contains neither AGENTPORTER_API_KEY nor API_KEY"
-            )
+            raise ValueError(f"{secrets_file} exists but contains no API key")
 
         new_key = secrets.token_urlsafe(32)
         fd = os.open(secrets_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -240,7 +399,7 @@ class Config:
             "allow_git": bool(allow_git),
             "allow_artifacts": bool(allow_artifacts),
             "allow_agent_dispatch": bool(allow_agent_dispatch),
-            "local_http_ports": self._normalize_ports(local_http_ports),
+            "local_http_ports": sorted({int(p) for p in (local_http_ports or []) if 1 <= int(p) <= 65535}),
         }
         self._write_workspaces_file()
 
@@ -250,12 +409,3 @@ class Config:
         del self.workspaces[ws_id]
         self._write_workspaces_file()
         return True
-
-    @staticmethod
-    def _normalize_ports(local_http_ports: Optional[list[int]]) -> list[int]:
-        ports: set[int] = set()
-        for port in local_http_ports or []:
-            port_int = int(port)
-            if 1 <= port_int <= 65535:
-                ports.add(port_int)
-        return sorted(ports)

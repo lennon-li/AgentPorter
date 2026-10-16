@@ -10,6 +10,7 @@ class WorkspaceInfoResponse(BaseModel):
     exists: bool = Field(description="Whether the workspace directory exists")
     writable: bool = Field(description="Whether the workspace is writable")
     description: str = Field(default="", description="Workspace description")
+    permissions: Dict[str, Any] = Field(default_factory=dict)
 
 class WorkspaceDetailsResponse(BaseModel):
     workspace_id: str = Field(description="Workspace ID")
@@ -17,11 +18,12 @@ class WorkspaceDetailsResponse(BaseModel):
     exists: bool = Field(description="Whether the workspace exists")
     writable: bool = Field(description="Whether the workspace is writable")
     description: str = Field(default="")
-    git_status: Optional[str] = Field(None, description="Git status output if applicable")
-    language: Optional[str] = Field(None, description="Primary detected language")
-    runtimes: Optional[List[str]] = Field(None, description="Available runtime environments")
-    capabilities: Optional[List[str]] = Field(None)
-    sandbox_status: Optional[str] = Field(None)
+    permissions: Dict[str, Any] = Field(default_factory=dict)
+    git: Dict[str, Any] = Field(default_factory=dict)
+    languages: List[str] = Field(default_factory=list)
+    marker_files: List[str] = Field(default_factory=list)
+    r_version: Optional[str] = None
+    python_version: Optional[str] = None
 
 class FileResponse(BaseModel):
     path: str = Field(description="Path of the file.")
@@ -54,7 +56,7 @@ class JobStartResponse(BaseModel):
 
 class JobStatusResponse(BaseModel):
     job_id: str = Field(description="Job ID.")
-    status: str = Field(description="Current status (running, completed, failed, cancelled).")
+    status: str = Field(description="Current status (running, completed, failed, timed_out, cancelled).")
     exit_code: Optional[int] = Field(None, description="Exit code if finished.")
     duration_seconds: Optional[float] = Field(None)
 
@@ -73,11 +75,20 @@ class JobOutputResponse(BaseModel):
 
 
 class JobResultResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     job_id: str = Field(description="Job ID.")
     status: str = Field(description="Final status.")
     exit_code: Optional[int] = Field(None)
     stdout: str = Field(description="Full stdout.")
     stderr: str = Field(description="Full stderr.")
+    requested_model: Optional[str] = Field(None, description="Model requested/effectively routed for the job.")
+    actual_model: Optional[str] = Field(None, description="Runtime model resolved from worker provenance when available.")
+    provider: Optional[str] = Field(None, description="Provider recorded for the job.")
+    worker_cli: Optional[str] = Field(None, description="Worker CLI used for the job.")
+    reasoning_level: Optional[str] = Field(None, description="Requested reasoning effort.")
+    cursor: Optional[int] = Field(default=0, description="Start stdout byte offset for this result chunk.")
+    next_cursor: Optional[int] = Field(default=0, description="Cursor for the next stdout chunk.")
 
 class ArtifactInfo(BaseModel):
     name: str = Field(description="Filename.")
@@ -136,7 +147,7 @@ class DispatchResponse(BaseModel):
 
 class ListFilesRequest(BaseModel):
     path: str = Field(default="", description="Relative path within the workspace to list files from.")
-    depth: Optional[int] = Field(None, description="Maximum directory depth to traverse.")
+    depth: Optional[int] = Field(1, description="Maximum directory depth to traverse (default: one level).")
 
 class SearchTextRequest(BaseModel):
     query: str = Field(description="The regex or exact string to search for.")
@@ -170,11 +181,15 @@ class ExecRunRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=30, description="Timeout in seconds for execution.")
+    # REST Actions (Agent7) are online by default (Lennon, 2026-10-09); MCP stays offline by default.
+    network_access: bool = Field(default=True, description="Internet access inside the sandbox (GitHub, package installs). Defaults to true; send false to run offline.")
 
 class ExecStartRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=300, description="Timeout in seconds for the background job.")
+    # REST Actions (Agent7) are online by default (Lennon, 2026-10-09); MCP stays offline by default.
+    network_access: bool = Field(default=True, description="Internet access inside the sandbox (GitHub, package installs). Defaults to true; send false to run offline.")
 
 class JobOutputRequest(BaseModel):
     cursor: int = Field(default=0, description="Byte offset to start reading from.")
@@ -189,6 +204,32 @@ class GitLogRequest(BaseModel):
 class GitShowRequest(BaseModel):
     ref: str = Field(default="HEAD", description="Git object or commit ref to show.")
 
+class GitFetchRequest(BaseModel):
+    remote: str = Field(default="origin", description="Remote repository name.")
+
+class GitPullRequest(BaseModel):
+    remote: str = Field(default="origin", description="Remote repository name.")
+    branch: str = Field(default="", description="Remote branch name to pull.")
+
+class GitPushRequest(BaseModel):
+    remote: str = Field(default="origin", description="Remote repository name.")
+    branch: str = Field(default="", description="Branch name to push.")
+    set_upstream: bool = Field(default=False, description="Whether to set upstream branch (-u).")
+
+class GitCommitRequest(BaseModel):
+    message: str = Field(description="Commit message.")
+    all_files: bool = Field(default=False, description="Automatically stage modified/deleted files (-a).")
+
+class GitAddRequest(BaseModel):
+    paths: List[str] = Field(description="File paths to stage for commit.")
+
+class GitBranchRequest(BaseModel):
+    pass
+
+class GitCheckoutRequest(BaseModel):
+    branch: str = Field(description="Branch name to switch to or create.")
+    create: bool = Field(default=False, description="Create new branch (-b).")
+
 class ListArtifactsRequest(BaseModel):
     path: str = Field(default="artifacts", description="Relative path within workspace to look for artifacts.")
 
@@ -200,4 +241,3 @@ class DispatchAgentRequest(BaseModel):
     reasoning_effort: Optional[str] = Field(None, description="Reasoning effort level (e.g., 'high', 'low').")
     allow_commit: bool = Field(False, description="Human confirmation that the agent may run git commit.")
     allow_push: bool = Field(False, description="Human confirmation that the agent may git push to existing remotes.")
-

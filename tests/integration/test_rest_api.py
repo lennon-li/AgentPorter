@@ -6,6 +6,10 @@ import tempfile
 import pathlib
 import os
 import yaml
+import sys
+import time
+from agentporter.agents.adapters.codex import CodexAdapter
+from tests._support import BWRAP_USABLE
 
 @pytest.fixture
 def test_config():
@@ -15,11 +19,13 @@ def test_config():
         st_dir = base / "st"
         cfg_dir.mkdir()
         st_dir.mkdir()
+        workspace = base / "workspace"
+        workspace.mkdir()
         
         # Write workspaces.yaml
         ws_file = cfg_dir / "workspaces.yaml"
         with open(ws_file, "w") as f:
-            yaml.dump({"workspaces": {"test-workspace": {"path": "/tmp", "enabled": True}}}, f)
+            yaml.dump({"workspaces": {"test-workspace": {"path": str(workspace), "enabled": True, "allow_agent_dispatch": True}}}, f)
             
         # Write secrets.env
         secrets_file = cfg_dir / "secrets.env"
@@ -28,10 +34,19 @@ def test_config():
 
         config = Config(config_dir=cfg_dir, state_dir=st_dir)
         config.security.allowed_hosts.append("testserver")
+        config.server.public_url = "https://example.test"
         yield config
 
 @pytest.fixture
-def client(test_config):
+def client(test_config, monkeypatch):
+    # Test REST/broker contracts, not a developer's installed or billed CLI.
+    monkeypatch.setattr(CodexAdapter, "detect", lambda self: {
+        "is_installed": True, "cli_version": "fixture", "provider": "OpenAI",
+        "configured_model": "gpt-6-luna", "reasoning_effort": "high",
+    })
+    monkeypatch.setattr(CodexAdapter, "build_argv", lambda self, **kwargs: [
+        sys.executable, "-c", "print('fixture worker completed')",
+    ])
     app = create_asgi_app(test_config)
     # The SecurityMiddleware is the outermost app, TestClient wraps it.
     with TestClient(app) as client:
@@ -49,6 +64,7 @@ def test_unauthenticated_access(client):
     openapi = response.json()
     assert openapi["info"]["title"] == "AgentPorter API"
     assert openapi["info"]["version"] == "0.1.0"
+    assert openapi["servers"] == [{"url": "https://example.test"}]
     
     # Check operationId format
     paths = openapi.get("paths", {})
@@ -77,6 +93,10 @@ def test_authenticated_access_bearer_token(client, test_config):
     assert isinstance(data, list)
     assert any(ws.get("workspace_id") == "test-workspace" for ws in data)
 
+    response = client.get("/api/v1/workspaces/test-workspace", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["workspace_id"] == "test-workspace"
+
 def test_file_operations_rest(client, test_config):
     headers = {"Authorization": f"Bearer {test_config.api_key}"}
     
@@ -99,6 +119,7 @@ def test_file_operations_rest(client, test_config):
     response = client.post("/api/v1/workspaces/test-workspace/files/trash", json=trash_req, headers=headers)
     assert response.status_code == 200
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap user namespaces unavailable")
 def test_exec_run_rest(client, test_config):
     headers = {"Authorization": f"Bearer {test_config.api_key}"}
     
@@ -115,11 +136,22 @@ def test_exec_run_rest(client, test_config):
 def test_dispatch_agent_rest(client, test_config):
     headers = {"Authorization": f"Bearer {test_config.api_key}"}
 
+    prohibited_req = {
+        "agent": "codex",
+        "task": "echo blocked dispatch test",
+        "purpose": "unit test",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "high"
+    }
+    response = client.post("/api/v1/workspaces/test-workspace/agents/dispatch", json=prohibited_req, headers=headers)
+    assert response.status_code == 400
+    assert "prohibited" in response.json()["detail"].lower()
+
     dispatch_req = {
         "agent": "codex",
         "task": "echo rest dispatch test",
         "purpose": "unit test",
-        "model": "gpt-5.6-luna",
+        "model": "gpt-6-luna",
         "reasoning_effort": "high"
     }
     response = client.post("/api/v1/workspaces/test-workspace/agents/dispatch", json=dispatch_req, headers=headers)
@@ -130,4 +162,14 @@ def test_dispatch_agent_rest(client, test_config):
     assert data["dispatch_id"] == data["job_id"]
     assert data["status"] == "running"
     assert data["worker_cli"] == "codex"
-
+    assert data["requested_model"] == "gpt-6-luna"
+    # Let the monitor finish its SQLite write before the temp state is removed.
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        status = client.get(f"/api/v1/jobs/{data['job_id']}/status", headers=headers)
+        assert status.status_code == 200
+        if status.json()["status"] == "completed":
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail("fixture worker did not complete before teardown")

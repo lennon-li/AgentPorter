@@ -43,8 +43,8 @@ class NamedCodexAdapter(CodexAdapter):
             except Exception:
                 cli_version = "unknown"
 
-        configured_model = self.default_model
-        reasoning_effort = self.reasoning_effort
+        configured_model = "unknown"
+        reasoning_effort = "unknown"
         if os.path.isfile(cfg_path):
             try:
                 with open(cfg_path, "r", encoding="utf-8") as handle:
@@ -73,17 +73,17 @@ class NamedCodexAdapter(CodexAdapter):
             "identity_ready": identity_ready,
         }
 
-    def build_argv(self, workspace_path: str, packet: str, model: str, reasoning_effort: str, policy=None) -> list[str]:
+    def build_argv(self, workspace_path: str, packet: str, model: str = "", reasoning_effort: str = "", policy=None, *, writable: bool = True) -> list[str]:
         exe = self.find_executable(["codex", "~/.npm-global/bin/codex", "~/.local/bin/codex"])
         if not exe:
             raise RuntimeError("Codex CLI executable not found on host")
 
-        policy = policy or ExecutionPolicy()
+        policy = policy or ExecutionPolicy.for_workspace(writable=writable)
         sandbox = "workspace-write" if policy.workspace_write else "read-only"
         # The workspace-write sandbox has no network, so a confirmed push needs it enabled.
         network = ["-c", "sandbox_workspace_write.network_access=true"] if policy.git_push else []
 
-        return [
+        cmd = [
             "env",
             f"CODEX_HOME={self.codex_home}",
             exe,
@@ -95,12 +95,13 @@ class NamedCodexAdapter(CodexAdapter):
             "-c",
             "approval_policy=never",
             *network,
-            "-m",
-            model,
-            "-c",
-            f"model_reasoning_effort={reasoning_effort}",
-            packet,
         ]
+        if model:
+            cmd.extend(["-m", model])
+        if reasoning_effort:
+            cmd.extend(["-c", f"model_reasoning_effort={reasoning_effort}"])
+        cmd.append(packet)
+        return cmd
 
 
 class JaxAdapter(NamedCodexAdapter):
