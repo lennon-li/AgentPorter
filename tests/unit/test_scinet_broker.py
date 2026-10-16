@@ -223,6 +223,31 @@ def test_login_rpc_rejects_caller_supplied_remote_command(tmp_path):
         broker._request(request, b"")
 
 
+def test_first_login_not_cooldown_on_short_host_uptime(tmp_path):
+    broker = ScinetBroker(
+        str(tmp_path / "broker.sock"),
+        str(tmp_path / "control.sock"),
+        "trillium-gpu.alliancecan.ca",
+        "yeli",
+    )
+    request = {
+        "version": 1,
+        "operation": "login",
+        "command": "start",
+        "remote": [],
+        "input_length": 0,
+    }
+    with (
+        patch.object(broker, "_master_is_running", return_value=False),
+        patch("agentporter.tools.scinet_broker.os.path.lexists", return_value=False),
+        patch("agentporter.tools.scinet_broker.pty.fork", return_value=(123, 456)) as fork,
+        patch("agentporter.tools.scinet_broker.threading.Thread.start"),
+        patch("agentporter.tools.scinet_broker.time.monotonic", return_value=15.0),
+    ):
+        assert broker._request(request, b"") == {"state": "starting", "success": False}
+        fork.assert_called_once()
+
+
 def test_login_start_is_single_flight_and_rate_limited(tmp_path):
     broker = ScinetBroker(
         str(tmp_path / "broker.sock"),

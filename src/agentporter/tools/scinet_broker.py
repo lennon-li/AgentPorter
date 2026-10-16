@@ -74,8 +74,110 @@ FORBIDDEN_REMOTE_TOKENS = {
     "socat",
 }
 
-# Independent review pin: never derive this from a caller or the inference module.
+# Independent review pins: never derive these from a caller or the inference module.
 INFERENCE_RESULTS_READER_SHA256 = "c0bb58eefab06f9bb5428b422d920168eb1a4de363c401054dd6d1b0140e7a61"
+# Read-only Laya runtime inspect driver: occupies no GPU and uses no network.
+INFERENCE_PROVISION_INSPECT_SHA256 = (
+    "d3992e6ab3cf35c142e667d2d796b62e4fd7dbe469b2b25ecf5cb14f40946b64"
+)
+# Immutable reviewed-package receiver for the provision-source landing.
+INFERENCE_PROVISION_SOURCES_RECEIVER_SHA256 = (
+    "724b0a0ea4caffb97a84fdc37bfc43b31c65cbc88e65fbe4a578c719fbdc4981"
+)
+# Digest-pinned Laya prepare driver; accepts no stdin, no Slurm, no GPU.
+INFERENCE_PROVISION_PREPARE_SHA256 = (
+    "7aeb0c553906a1e06bd49e8d9c771c1bb764c24ff35676a632b771b18febe559"
+)
+PROVISION_SOURCES_MAX_INPUT_BYTES = 32 * 1024 * 1024
+
+
+def _provision_path_checks(scratch, cache):
+    pattern = r"/scratch/[A-Za-z0-9_./-]+"
+    return (
+        not re.fullmatch(pattern, scratch) or ".." in scratch.split("/")
+        or "//" in scratch
+        or not re.fullmatch(pattern, cache) or ".." in cache.split("/")
+        or "//" in cache
+        or not cache.startswith(scratch + "/") or cache == scratch
+    )
+
+
+def inference_provision_sources_command(remote: list[str]) -> str:
+    """Allow only the digest-pinned reviewed-package receiver for a fixed landing."""
+    if (not isinstance(remote, list) or len(remote) != 5
+            or any(not isinstance(token, str) or "\x00" in token for token in remote)
+            or remote[1] != "-c"):
+        raise PermissionError("invalid inference provision sources argv")
+    python, _c, script, root, stage = remote
+    scratch = root.rsplit("/", 1)[0] if "/" in root else ""
+    if (python != "/usr/bin/python3"
+            or not re.fullmatch(r"/[A-Za-z0-9_./-]+", python) or ".." in python.split("/")
+            or "..." in python or "//" in python
+            or hashlib.sha256(script.encode("utf-8")).hexdigest()
+            != INFERENCE_PROVISION_SOURCES_RECEIVER_SHA256
+            or not re.fullmatch(r"/scratch/[A-Za-z0-9_./-]+", root)
+            or ".." in root.split("/") or "//" in root
+            or not root.endswith("/provision-sources") or root == "/provision-sources"
+            or not scratch.strip("/")
+            or not re.fullmatch(r"[0-9a-f]{32}", stage)):
+        raise PermissionError("invalid inference provision sources arguments")
+    # sshd still invokes the account shell; its startup behavior remains trusted.
+    return shlex.join(["exec", "/usr/bin/env", "-i", "PATH=/usr/bin:/bin",
+                       "/usr/bin/timeout", "920s", *remote])
+
+
+def inference_provision_prepare_command(remote: list[str]) -> str:
+    """Allow only the digest-pinned prepare driver with its fixed arguments."""
+    if (not isinstance(remote, list) or len(remote) != 12
+            or any(not isinstance(token, str) or "\x00" in token for token in remote)
+            or remote[:4] != ["/usr/bin/python3", "-I", "-B", "-c"]):
+        raise PermissionError("invalid inference provision prepare argv")
+    script, mode, bootstrap, scratch, cache, run_id, bundle, digest = remote[4:]
+    if hashlib.sha256(script.encode("utf-8")).hexdigest() != INFERENCE_PROVISION_PREPARE_SHA256:
+        raise PermissionError("inference provision prepare digest mismatch")
+    bundle_prefixes = (scratch + "/provision-sources/", scratch + "/stages/")
+    if (mode != "prepare"
+            or _provision_path_checks(scratch, cache)
+            or bootstrap != "/usr/bin/python3"
+            or not re.fullmatch(r"/[A-Za-z0-9_./-]+", bootstrap)
+            or ".." in bootstrap.split("/") or "//" in bootstrap
+            or not re.fullmatch(r"[0-9a-f]{32}", run_id)
+            or len(bundle) > 200
+            or not any(bundle.startswith(prefix)
+                       and re.fullmatch(r"[0-9a-f]{32}", bundle[len(prefix):])
+                       for prefix in bundle_prefixes)
+            or not (digest == "none" or re.fullmatch(r"[0-9a-f]{64}", digest))):
+        raise PermissionError("invalid inference provision prepare arguments")
+    # sshd still invokes the account shell; its startup behavior remains trusted.
+    return shlex.join(["exec", "/usr/bin/env", "-i", "PATH=/usr/bin:/bin",
+                       "/usr/bin/timeout", "920s", *remote])
+
+
+def inference_provision_command(remote: list[str]) -> str:
+    """Allow only the digest-pinned read-only runtime inspect remote argv."""
+    if (not isinstance(remote, list) or len(remote) != 10
+            or any(not isinstance(token, str) or "\x00" in token for token in remote)
+            or remote[:4] != ["/usr/bin/python3", "-I", "-B", "-c"]):
+        raise PermissionError("invalid inference provision argv")
+    script, mode, bootstrap, scratch, cache, run_id = remote[4:]
+    if (hashlib.sha256(script.encode("utf-8")).hexdigest()
+            != INFERENCE_PROVISION_INSPECT_SHA256):
+        raise PermissionError("inference provision inspect digest mismatch")
+    path_pattern = r"/scratch/[A-Za-z0-9_./-]+"
+    exe_pattern = r"/[A-Za-z0-9_./-]+"
+    if (mode != "inspect"
+            or bootstrap != "/usr/bin/python3"
+            or not re.fullmatch(exe_pattern, bootstrap) or ".." in bootstrap.split("/")
+            or not re.fullmatch(path_pattern, scratch) or ".." in scratch.split("/")
+            or "//" in scratch
+            or not re.fullmatch(path_pattern, cache) or ".." in cache.split("/")
+            or "//" in cache
+            or not cache.startswith(scratch + "/") or cache == scratch
+            or not re.fullmatch(r"[0-9a-f]{32}", run_id)):
+        raise PermissionError("invalid inference provision arguments")
+    # sshd still invokes the account shell; its startup behavior remains trusted.
+    return shlex.join(["exec", "/usr/bin/env", "-i", "PATH=/usr/bin:/bin",
+                       "/usr/bin/timeout", "150s", *remote])
 
 
 def inference_results_command(remote: list[str]) -> str:
@@ -146,6 +248,12 @@ def _ssh_envelope(host: str, user: str, control_socket: str, remote: list[str],
         raise PermissionError("broker remote command is not permitted")
     if operation == "inference_results":
         command = inference_results_command(remote)
+    elif operation == "inference_provision":
+        command = inference_provision_command(remote)
+    elif operation == "inference_provision_sources":
+        command = inference_provision_sources_command(remote)
+    elif operation == "inference_provision_prepare":
+        command = inference_provision_prepare_command(remote)
     else:
         command = shlex.join(["/bin/bash", "-lc", shlex.join(
             ["exec", "/usr/bin/timeout", "120s", *remote])])
@@ -180,7 +288,8 @@ def _ssh_envelope(host: str, user: str, control_socket: str, remote: list[str],
         "ForwardAgent=no",
         "-o",
         "ClearAllForwardings=yes",
-        *(["-n"] if operation == "inference_results" else []),
+        *(["-n"] if operation in {"inference_results", "inference_provision",
+                                  "inference_provision_prepare"} else []),
         "-l",
         user,
         host,
@@ -471,7 +580,7 @@ class ScinetBroker:
                         "success": False,
                         **({"reason": self._login_reason} if self._login_reason else {}),
                     }
-                if now - self._login_started < LOGIN_COOLDOWN_SECONDS:
+                if self._login_started and now - self._login_started < LOGIN_COOLDOWN_SECONDS:
                     return {"state": "cooldown", "success": False, "reason": "retry_cooldown"}
                 self._login_started = now
                 self._login_state = "starting"
@@ -488,7 +597,9 @@ class ScinetBroker:
                 daemon=True,
             ).start()
             return {"state": "starting", "success": False}
-        if operation not in {"diagnostic", "training", "inference_results"} or not isinstance(remote, list):
+        if operation not in {"diagnostic", "training", "inference_results",
+                             "inference_provision", "inference_provision_sources",
+                             "inference_provision_prepare"} or not isinstance(remote, list):
             raise ValueError("unsupported SciNet broker operation")
         length = record.get("input_length", 0)
         if not isinstance(length, int) or length < 0 or length != len(body):
@@ -497,6 +608,22 @@ class ScinetBroker:
             if body or length != 0 or record.get("command") is not None:
                 raise PermissionError("inference results accepts no stdin or command")
             inference_results_command(remote)
+        if operation == "inference_provision":
+            if body or length != 0 or record.get("command") is not None:
+                raise PermissionError("inference provision accepts no stdin or command")
+            inference_provision_command(remote)
+        if operation == "inference_provision_sources":
+            if record.get("command") is not None:
+                raise PermissionError("inference provision sources accepts no command")
+            inference_provision_sources_command(remote)
+            if length > PROVISION_SOURCES_MAX_INPUT_BYTES:
+                raise PermissionError("inference provision sources stdin exceeds 32 MiB")
+            if length < 1:
+                raise PermissionError("inference provision sources requires an stdin header")
+        if operation == "inference_provision_prepare":
+            if body or length != 0 or record.get("command") is not None:
+                raise PermissionError("inference provision prepare accepts no stdin or command")
+            inference_provision_prepare_command(remote)
         if operation == "diagnostic":
             command = record.get("command")
             if command == "connection_status":

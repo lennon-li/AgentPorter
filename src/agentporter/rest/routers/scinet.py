@@ -25,7 +25,8 @@ class ScinetSubmitRequest(BaseModel):
 ScinetSetupAction = Literal[
     "start", "status", "preflight", "environment_check", "record_approvals",
     "login_start", "login_status", "inference_preflight", "inference_stage",
-    "inference_approve", "inference_submit", "inference_results",
+    "inference_provision", "inference_approve", "inference_submit",
+    "inference_results",
 ]
 
 
@@ -36,6 +37,12 @@ class ScinetSetupRequest(BaseModel):
     action: ScinetSetupAction
     stage_id: str | None = Field(default=None, min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
     job_id: str | None = Field(default=None, min_length=1, max_length=20, pattern=r"^[0-9]+$")
+    # Fixed 32-hex previous-run id for the inference provision flow.
+    previous_run_id: str | None = Field(
+        default=None, min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
+    # Provision phase only: inspect is read-only; prepare transfers the reviewed
+    # package and runs the digest-pinned prepare driver. Never a stage_id.
+    phase: Literal["inspect", "prepare"] | None = None
     experiment: ScinetExperiment = "laya_smoke"
     # Reviewer and signature carry the exact stage-scoped inference approval.
     reviewer: str | None = Field(default=None, max_length=64)
@@ -49,10 +56,19 @@ class ScinetSetupRequest(BaseModel):
     @model_validator(mode="after")
     def _approval_fields_only_for_record(self):
         extras = (self.reviewer, self.confirmation, self.approved_fields, self.device)
+        if self.action != "inference_provision" and self.phase is not None:
+            raise ValueError("phase is only valid for inference_provision")
         if self.action != "inference_results" and self.job_id is not None:
             raise ValueError("job_id is only valid for inference_results")
         if self.action.startswith("inference_") and self.experiment != "laya_smoke":
             raise ValueError("inference actions use the separate laya_inference experiment")
+        if self.action == "inference_provision" and (
+            self.previous_run_id is None or self.stage_id is not None
+            or self.phase not in (None, "inspect", "prepare")
+            or self.job_id is not None or any(v is not None for v in extras)
+            or self.signature is not None
+        ):
+            raise ValueError("inference_provision requires only the phase and previous_run_id")
         if self.action == "inference_preflight" and (
             self.stage_id is not None or self.experiment != "laya_smoke"
             or any(v is not None for v in extras)
@@ -191,6 +207,11 @@ def scinet_setup(workspace_id: str, req: ScinetSetupRequest, request: Request) -
             return tools["scinet_inference_preflight"](workspace_id=workspace_id)
         if req.action == "inference_stage":
             return tools["scinet_inference_stage"](workspace_id=workspace_id)
+        if req.action == "inference_provision":
+            return tools["scinet_inference_provision"](
+                workspace_id=workspace_id, phase=req.phase or "inspect",
+                previous_run_id=req.previous_run_id,
+            )
         if req.action == "inference_approve":
             return tools["scinet_inference_approve"](
                 workspace_id=workspace_id, stage_id=req.stage_id,

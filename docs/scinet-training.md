@@ -165,9 +165,54 @@ The `standalone-inference` package is a separate `laya_inference` experiment. It
 
 The fixed v2 bundle is read from the registered Cranary workspace at `data-raw/cran-history/training/trillium/standalone-inference/package-v2`. The manifest SHA256 is `d0032d8a9bb6fc3580b2e1d9118bc5ca6f99defd6bfdfdf641a3e59fc02a91c7`; the template SHA256 is `5d41bf4b5b533e8147ba7c6a38e31fc4ef19bbe1d2d4f8c17f3d15d870e2b79f`. The v1 package and pins are rejected. An optional `scinet.inference_manifest_sha256` may repeat the code pin, never replace it. Verification requires exactly 60 files including the manifest (42 contexts and 17 static files), matching hashes, single-link regular files, no symlinks, a 2 MiB per-file limit and 32 MiB total limit. The allowlist includes `runtime_preflight.py`, `prepare_runtime.sh`, `requirements-inference.lock`, and `evaluate_return.py`; staging these files does not authorize provisioning or evaluation.
 
-MCP exposes `scinet_inference_preflight`, `scinet_inference_stage`, `scinet_inference_approve`, and `scinet_inference_submit`. REST uses `POST /workspaces/{workspace_id}/scinet/setup` with the corresponding `inference_*` actions. Existing `allow_execute` and `allow_scinet_training` permissions are required. Action callers cannot supply a catalog path, digest, interpreter, command, cache, or destination. Local preflight checks only bundle integrity and reports remote readiness unverified and submission disabled in that report.
+MCP exposes `scinet_inference_preflight`, `scinet_inference_provision`, `scinet_inference_stage`, `scinet_inference_approve`, `scinet_inference_submit`, and `scinet_inference_results`. REST uses `POST /workspaces/{workspace_id}/scinet/setup` with the corresponding `inference_*` actions. Existing `allow_execute` and `allow_scinet_training` permissions are required. Action callers cannot supply a catalog path, digest, interpreter, command, cache, or destination. Local preflight checks only bundle integrity and reports remote readiness unverified and submission disabled in that report.
 
-Private configuration must supply `scinet.inference_scratch_root`, `scinet.inference_python`, `scinet.inference_hf_cache`, **`scinet.inference_runtime_catalog_sha256`**, and the reviewed `training_account`/`training_partition`. Each has the corresponding `AGENTPORTER_SCINET_*` environment setting. The interpreter environment and materialized offline checkpoint cache must already exist beneath the scratch root, separately from stages and job outputs. The catalog path is fixed to `<inference_scratch_root>/runtime-catalog.json`. Its SHA256 must come from independent human review; an adjacent checksum or candidate catalog is insufficient. Missing or invalid configuration fails closed. AgentPorter never installs packages, invokes `prepare_runtime.sh`, downloads weights, or generates/approves a runtime catalog.
+Private configuration must supply `scinet.inference_scratch_root`, `scinet.inference_python`, `scinet.inference_hf_cache`, **`scinet.inference_runtime_catalog_sha256`**, and the reviewed `training_account`/`training_partition`. Each has the corresponding `AGENTPORTER_SCINET_*` environment setting. The interpreter environment and materialized offline checkpoint cache must already exist beneath the scratch root, separately from stages and job outputs. The catalog path is fixed to `<inference_scratch_root>/runtime-catalog.json`. Its SHA256 must come from independent human review; an adjacent checksum or candidate catalog is insufficient. Missing or invalid configuration fails closed. The staging, approval, and submission actions never install packages or download weights. The separately gated `scinet_inference_provision` action may use only the frozen, digest-pinned offline installer and produce a **candidate** catalog, but cannot independently review or approve that catalog.
+
+### Standalone inference provisioning (no GPU submission)
+
+Provisioning is an explicit, separately allowlisted operation, **not** an implicit side effect of staging. Use the authenticated `POST /workspaces/cranary/scinet/setup` Action with exactly one of the following JSON request bodies (or the corresponding MCP tool):
+
+```json
+{"action":"inference_provision","phase":"inspect","previous_run_id":"9879564934e94665b71d8947ef74d896"}
+```
+
+Inference provisioning and staging require exactly
+`<inference_scratch_root>/inference-env/bin/python` as the configured interpreter.
+The inference bootstrap must be exactly `/usr/bin/python3`, matching both broker
+validators; inspect checks that it actually reports Python 3.12. An empty
+wheelhouse blocks inspect, as does any wheelhouse missing the exact pinned Laya wheel.
+
+Destination copies walk from a root directory descriptor with `O_DIRECTORY`
+and `O_NOFOLLOW`, validate ownership and inode identity, and open and verify the
+final file relative to the retained parent descriptor. This covers both wheelhouse
+and model-cache copies, including existing targets; an ancestor symlink swap
+cannot redirect the write.
+
+The frozen installer is read and checked against its unchanged independent digest.
+An execution-only wrapper replaces exactly its reviewed `SCRIPT_ROOT` assignment
+with a shell-quoted private staging root; every other shell byte is preserved.
+The wrapper is stored in a Linux memfd with write, growth, shrink and further-seal
+changes prohibited, then passed to Bash as `/proc/self/fd/N` with `pass_fds`.
+Replacing either the source or staged script pathname cannot change the shell
+instructions Bash executes. The generated wrapper logic is covered by the
+independent fixed driver hashes in the broker; no frozen script pin changes.
+
+These protections do **not** establish isolation from a hostile process with the
+same UID. Sibling Python modules, lock files, installed packages, catalogs, caches
+and other runtime state still use the private filesystem trust boundary. Another
+process with that identity can alter those dependencies or move directories.
+A full same-UID execution guarantee requires an independently controlled
+execution boundary and immutable dependencies; this provisioning action does
+not provide it. Candidate catalogs still require independent human review.
+
+Inspect is read-only. When all inference-specific paths are unset, this action alone derives fixed per-user paths such as `/scratch/yeli/cranary-laya`, its `model-cache`, and the intended `inference-env/bin/python`. **Stage still requires the explicitly configured paths and independently reviewed runtime catalog digest.** Inspect reports the pinned checkpoint digest, missing model files, missing exact wheel(s), existing targets, and bootstrap Python status without uploading files or requesting a GPU. An inspect blocker prevents prepare from copying the frozen source bundle.
+
+After any missing *reviewed* artifacts have been supplied through a separate authorized process, prepare can be requested with the same run ID and `"phase":"prepare"`. It first re-runs inspect, transfers the exact 60-file package-v2 (manifest SHA-256 `d0032d8a9bb6fc3580b2e1d9118bc5ca6f99defd6bfdfdf641a3e59fc02a91c7`) to a fresh, server-generated `provision-sources` landing, verifies the pinned scripts, checks the model's checkpoint SHA-256 and the `laya-0.3.28` wheel (SHA-256 `a1493cff474c0a5d84861db55c0c5c9b17f1db8561e458764da9a322dc542a88`), then uses only the frozen offline lock without network access. No caller supplies remote code, commands, source paths, Slurm options, GPU resources, or catalog-approval values.
+
+Prepare first produces `runtime-catalog.candidate.json` and reports its checksum with `blocked: true`. A human must independently review the exact candidate bytes and provenance, configure **`scinet.inference_runtime_catalog_sha256`**, and place those same reviewed bytes under the fixed `<scratch>/runtime-catalog.json` path through a trusted operator-controlled mechanism. **The Action cannot copy, create, approve, or promote the reviewed catalog itself.** Only after these independent human steps may the same prepare action resume, re-verifying existing copies and pinned script digests without overwriting different content. The resulting offline environment is at `<scratch>/inference-env`. It does not submit Slurm jobs, approve GPU usage, or sign an inference stage.
+
+The old run `9879564934e94665b71d8947ef74d896` was observed with a matching 842,609,210-byte `model.safetensors` but **without** `rl_agent_config.json` or the SHA-pinned Laya wheel. These remain concrete provisioning blockers until the exact reviewed files are supplied. Do not fabricate hashes, substitute a later package version, or disable offline/hash checks to proceed. Human GPU approval is an entirely later, stage-specific step.
 
 Stage copies only the verified package into `<scratch>/stages/<generated-stage-id>` and records the manifest, runtime catalog path/digest, interpreter, cache, destination, account, and partition in the private inference ledger. IDs contain 32 hexadecimal characters and start with a letter for bridge v2 compatibility. Existing v1 stage records cannot be reused. Approval requires an Ed25519 signature bound to the stage ID, v2 manifest SHA-256, runtime catalog SHA-256, scratch destination, account, partition, **1 H100 / 00:30:00**, configured reviewer identity, fixed v2 approval domain, fresh single-use nonce, workspace ID and resolved path, SSH host/user, inference Python and HF cache paths, template SHA-256, and integer `issued_at` / `not_after` timestamps. The challenge expires after one hour; approval and submission both check its validity, including after remote preflight immediately before allocation. Expired or old-format challenges require staging again. The stage response provides canonical payload bytes as base64 and the payload digest; it does not provide a reusable confirmation phrase. `scinet_inference_approve` requires the exact configured reviewer and a base64 64-byte signature. AgentPorter verifies the signature when recording approval and again at submit against the immutable challenge and current runtime configuration. Approval cannot be replayed across stages or used after runtime configuration changes.
 

@@ -9,7 +9,12 @@ from typing import Literal
 
 from agentporter.tools.venkata import run_host_bytes
 from agentporter.tools.scinet_broker import (
-    broker_request, broker_socket_available, inference_results_command,
+    broker_request,
+    broker_socket_available,
+    inference_results_command,
+    inference_provision_command,
+    inference_provision_sources_command,
+    inference_provision_prepare_command,
 )
 
 ScinetDiagnostic = Literal[
@@ -144,6 +149,18 @@ def ssh_remote_argv(
         if accepts_stdin:
             raise PermissionError("inference results accepts no stdin")
         argv.append(inference_results_command(remote))
+    elif operation == "inference_provision":
+        if accepts_stdin:
+            raise PermissionError("inference provision accepts no stdin")
+        argv.append(inference_provision_command(remote))
+    elif operation == "inference_provision_sources":
+        if not accepts_stdin:
+            raise PermissionError("inference provision sources requires the stdin package")
+        argv.append(inference_provision_sources_command(remote))
+    elif operation == "inference_provision_prepare":
+        if accepts_stdin:
+            raise PermissionError("inference provision prepare accepts no stdin")
+        argv.append(inference_provision_prepare_command(remote))
     else:
         command = shlex.join(["exec", "/usr/bin/timeout", timeout_text, *remote])
         argv.append(shlex.join(["/bin/bash", "-lc", command]))
@@ -166,6 +183,20 @@ def run_scinet_bytes(
         if input_bytes is not None or command is not None:
             raise PermissionError("inference results accepts no stdin or command")
         inference_results_command(remote)
+    if operation == "inference_provision":
+        if input_bytes is not None or command is not None:
+            raise PermissionError("inference provision accepts no stdin or command")
+        inference_provision_command(remote)
+    if operation == "inference_provision_sources":
+        if input_bytes is None or command is not None:
+            raise PermissionError("inference provision sources requires a package stdin")
+        if len(input_bytes) > 32 * 1024 * 1024:
+            raise PermissionError("inference provision sources stdin exceeds 32 MiB")
+        inference_provision_sources_command(remote)
+    if operation == "inference_provision_prepare":
+        if input_bytes is not None or command is not None:
+            raise PermissionError("inference provision prepare accepts no stdin or command")
+        inference_provision_prepare_command(remote)
     broker_socket = str(getattr(settings, "broker_socket", "") or "").strip()
     if broker_socket:
         return broker_request(

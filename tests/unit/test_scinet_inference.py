@@ -978,12 +978,12 @@ def test_bootstrap_drift_during_preflight_prevents_sbatch(monkeypatch, tmp_path)
         settings.training_bootstrap_python = '/scratch/attacker/python'
         return result
     monkeypatch.setattr(inference, '_call', changed_remote)
-    with pytest.raises(PermissionError, match='runtime context changed'):
+    with pytest.raises(PermissionError, match='bootstrap Python'):
         tools['scinet_inference_submit']('cranary', staged['stage_id'])
     assert len(calls) == 2  # Stage plus preflight; no sbatch call.
 
 
-@pytest.mark.parametrize('bootstrap', ['', 'python3', '/usr/bin/python3;id', None])
+@pytest.mark.parametrize('bootstrap', ['', 'python3', '/usr/bin/python3;id', '/usr/bin/python3.12', '/scratch/python', None])
 def test_stage_rejects_invalid_bootstrap_before_remote_call(monkeypatch, tmp_path, bootstrap):
     tools, settings, calls, _ = setup_flow(monkeypatch, tmp_path)
     settings.training_bootstrap_python = bootstrap
@@ -1072,3 +1072,18 @@ def test_actual_system_python_remote_reader_scheduler_gate(tmp_path, state, exit
     else:
         assert returned == {'error': 'remote_read_failed' if state == 'MISSING_SACCT'
                             else 'scheduler_attestation_failed'}
+
+
+@pytest.mark.parametrize("suffix", ["/custom/bin/python", "/inference-env/bin/python3"])
+def test_stage_settings_refuse_interpreter_path_mismatch(monkeypatch, suffix):
+    scratch = "/scratch/yeli/cranary-laya"
+    settings = SimpleNamespace(
+        training_remote_root="/scratch/yeli/training", training_account="acct",
+        training_partition="gpu", inference_scratch_root=scratch,
+        inference_python=scratch + suffix, inference_hf_cache=scratch + "/model-cache",
+        inference_runtime_catalog_sha256=RUNTIME_DIGEST)
+    monkeypatch.setattr(inference, "_identity", lambda *a: (
+        "user", SimpleNamespace(allow_scinet_training=True)))
+    monkeypatch.setattr(inference, "_call", lambda *a, **kw: pytest.fail("unexpected remote call"))
+    with pytest.raises(PermissionError, match="inference-env/bin/python"):
+        inference._inference_settings(None, settings, "cranary")
