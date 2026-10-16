@@ -177,6 +177,35 @@ Provisioning is an explicit, separately allowlisted operation, **not** an implic
 {"action":"inference_provision","phase":"inspect","previous_run_id":"9879564934e94665b71d8947ef74d896"}
 ```
 
+Inference provisioning and staging require exactly
+`<inference_scratch_root>/inference-env/bin/python` as the configured interpreter.
+The inference bootstrap must be exactly `/usr/bin/python3`, matching both broker
+validators; inspect checks that it actually reports Python 3.12. An empty
+wheelhouse blocks inspect, as does any wheelhouse missing the exact pinned Laya wheel.
+
+Destination copies walk from a root directory descriptor with `O_DIRECTORY`
+and `O_NOFOLLOW`, validate ownership and inode identity, and open and verify the
+final file relative to the retained parent descriptor. This covers both wheelhouse
+and model-cache copies, including existing targets; an ancestor symlink swap
+cannot redirect the write.
+
+The frozen installer is read and checked against its unchanged independent digest.
+An execution-only wrapper replaces exactly its reviewed `SCRIPT_ROOT` assignment
+with a shell-quoted private staging root; every other shell byte is preserved.
+The wrapper is stored in a Linux memfd with write, growth, shrink and further-seal
+changes prohibited, then passed to Bash as `/proc/self/fd/N` with `pass_fds`.
+Replacing either the source or staged script pathname cannot change the shell
+instructions Bash executes. The generated wrapper logic is covered by the
+independent fixed driver hashes in the broker; no frozen script pin changes.
+
+These protections do **not** establish isolation from a hostile process with the
+same UID. Sibling Python modules, lock files, installed packages, catalogs, caches
+and other runtime state still use the private filesystem trust boundary. Another
+process with that identity can alter those dependencies or move directories.
+A full same-UID execution guarantee requires an independently controlled
+execution boundary and immutable dependencies; this provisioning action does
+not provide it. Candidate catalogs still require independent human review.
+
 Inspect is read-only. When all inference-specific paths are unset, this action alone derives fixed per-user paths such as `/scratch/yeli/cranary-laya`, its `model-cache`, and the intended `inference-env/bin/python`. **Stage still requires the explicitly configured paths and independently reviewed runtime catalog digest.** Inspect reports the pinned checkpoint digest, missing model files, missing exact wheel(s), existing targets, and bootstrap Python status without uploading files or requesting a GPU. An inspect blocker prevents prepare from copying the frozen source bundle.
 
 After any missing *reviewed* artifacts have been supplied through a separate authorized process, prepare can be requested with the same run ID and `"phase":"prepare"`. It first re-runs inspect, transfers the exact 60-file package-v2 (manifest SHA-256 `d0032d8a9bb6fc3580b2e1d9118bc5ca6f99defd6bfdfdf641a3e59fc02a91c7`) to a fresh, server-generated `provision-sources` landing, verifies the pinned scripts, checks the model's checkpoint SHA-256 and the `laya-0.3.28` wheel (SHA-256 `a1493cff474c0a5d84861db55c0c5c9b17f1db8561e458764da9a322dc542a88`), then uses only the frozen offline lock without network access. No caller supplies remote code, commands, source paths, Slurm options, GPU resources, or catalog-approval values.

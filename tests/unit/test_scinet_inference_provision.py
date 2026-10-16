@@ -604,3 +604,24 @@ def test_rest_request_accepts_only_inspect_or_prepare_phase():
     with pytest.raises(Exception):
         ScinetSetupRequest(action="inference_provision", previous_run_id=RUN_ID,
                            phase="prepare", stage_id="b" * 32)
+
+
+@pytest.mark.parametrize("python", [SCRATCH + "/custom/bin/python", SCRATCH + "/inference-env/bin/python3"])
+@pytest.mark.parametrize("phase", ["inspect", "prepare"])
+def test_provision_refuses_interpreter_path_mismatch(monkeypatch, tmp_path, python, phase):
+    value = configured_settings()
+    value.inference_python = python
+    monkeypatch.setattr(inference, "_identity", lambda *args: (
+        SimpleNamespace(pw_dir="/home/yeli"), SimpleNamespace(allow_scinet_training=True)))
+    monkeypatch.setattr(inference, "_call", lambda *a, **kw: pytest.fail("remote call before rejection"))
+    tool = inference.create_scinet_inference_provision_tool(None, value, state_dir=tmp_path)
+    with pytest.raises(PermissionError, match="inference-env/bin/python"):
+        tool(ws_id(), phase=phase, previous_run_id=RUN_ID)
+
+
+@pytest.mark.parametrize("bootstrap", ["/usr/bin/python3.12", "/scratch/yeli/python", "python3"])
+@pytest.mark.parametrize("phase", ["inspect", "prepare"])
+def test_provision_refuses_bootstrap_outside_broker_contract(bootstrap, phase):
+    with pytest.raises(PermissionError, match="bootstrap Python"):
+        inference._provision_argv(phase, bootstrap, SCRATCH, CACHE, RUN_ID,
+                                 SCRATCH + "/provision-sources/" + "b" * 32, "none")

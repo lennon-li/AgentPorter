@@ -554,7 +554,8 @@ def test_prepare_refuses_mutated_script_at_immediate_exec_recheck(tmp_path):
     assert value["environment_provisioned"] is False
 
 
-def test_prepare_driver_stages_verified_bytes_before_source_path_mutation(tmp_path):
+@pytest.mark.parametrize("mutated_path", ["source", "staged"])
+def test_prepare_driver_executes_verified_bytes_despite_path_mutation(tmp_path, mutated_path):
     tree = ast.parse(inference.REMOTE_PROVISION_PREPARE)
     main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
     stage_block = next(
@@ -566,7 +567,10 @@ def test_prepare_driver_stages_verified_bytes_before_source_path_mutation(tmp_pa
     code_root = tmp_path / "code"
     code_root.mkdir(mode=0o700)
     provisional = {
-        "prepare_runtime.sh": b'printf verified > "$1"\n',
+        "prepare_runtime.sh": b'SCRIPT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)\n'
+                              b'test -f "$SCRIPT_ROOT/runtime_preflight.py"\n'
+                              b'test -f "$SCRIPT_ROOT/../sources/laya_provenance.py"\n'
+                              b'printf verified > "$1"\n',
         "runtime_preflight.py": b"pass\n",
         "handoff.py": b"pass\n",
         "offline_runner.py": b"pass\n",
@@ -587,12 +591,24 @@ def test_prepare_driver_stages_verified_bytes_before_source_path_mutation(tmp_pa
     source_script = code_root / "prepare_runtime.sh"
 
     def mutate_original_then_run(argv, **kwargs):
-        assert argv[1].endswith("/code/prepare_runtime.sh"), argv
-        assert (Path(argv[1]).parents[1] / "sources/laya_provenance.py").is_file()
-        source_script.write_bytes(b'printf altered > "$1"\n')
+        assert argv[1].startswith("/proc/self/fd/"), argv
+        fd, = kwargs["pass_fds"]
+        assert argv[1] == f"/proc/self/fd/{fd}"
+        # The inherited descriptor is sealed against writes and truncation.
+        with pytest.raises(OSError):
+            os.write(fd, b"altered")
+        with pytest.raises(OSError):
+            os.ftruncate(fd, 0)
+        staged_script, = (provision_cache / "tmp").glob("*/code/prepare_runtime.sh")
+        changed = source_script if mutated_path == "source" else staged_script
+        changed.chmod(0o600)
+        changed.write_bytes(b'printf altered > "$1"\n')
         return real_subprocess.run(argv, **kwargs)
 
+    helpers = {}
+    exec(inference.REMOTE_PROVISION_COMMON, helpers)
     namespace = {
+        "sealed_runtime_script": helpers["sealed_runtime_script"],
         "os": os,
         "hashlib": hashlib,
         "stat": __import__("stat"),
@@ -624,7 +640,10 @@ def test_prepare_driver_stages_verified_bytes_before_source_path_mutation(tmp_pa
                  "<prepare-driver-test>", "exec"), namespace)
     assert namespace["prepared"].returncode == 0
     assert output_path.read_text() == "verified"
-    assert source_script.read_bytes() == b'printf altered > "$1"\n'
+    if mutated_path == "source":
+        assert source_script.read_bytes() == b'printf altered > "$1"\n'
+    else:
+        assert source_script.read_bytes() == provisional["prepare_runtime.sh"]
     assert list((provision_cache / "tmp").iterdir()) == []
 
 
@@ -655,3 +674,127 @@ else:
     assert result.stdout.decode().strip() == "rejected"
     assert list(outside.iterdir()) == []
     assert not target.exists()
+
+
+@pytest.mark.parametrize("kind", ["wheelhouse", "model-cache"])
+@pytest.mark.parametrize("timing", ["ancestor_open", "leaf_open"])
+@pytest.mark.parametrize("existing", [False, True])
+def test_copy_destination_ancestor_swap_never_writes_outside(tmp_path, kind, timing, existing):
+    source = private_file(tmp_path / "source", b"verified source")
+    parent = tmp_path / kind / "nested"
+    parent.mkdir(parents=True, mode=0o700)
+    parent.parent.chmod(0o700)
+    outside = tmp_path / "outside"
+    outside.mkdir(mode=0o700)
+    target = parent / "artifact"
+    if existing:
+        private_file(target, source.read_bytes())
+    code = inference.REMOTE_PROVISION_COMMON + f'''
+source, target = {str(source)!r}, {str(target)!r}
+parent, outside = {str(parent)!r}, {str(outside)!r}
+real_open = os.open
+swapped = False
+def racing_open(path, flags, *args, **kwargs):
+    global swapped
+    trigger = "nested" if {timing!r} == "ancestor_open" else "artifact"
+    if not swapped and path == trigger and kwargs.get("dir_fd") is not None:
+        swapped = True
+        os.rename(parent, parent + "-original")
+        os.symlink(outside, parent)
+    return real_open(path, flags, *args, **kwargs)
+os.open = racing_open
+try:
+    result = copy_regular_file(source, target, 1024)
+except (OSError, ValueError):
+    if {timing!r} != "ancestor_open":
+        raise
+else:
+    assert {timing!r} == "leaf_open"
+    assert result == (hashlib.sha256(b"verified source").hexdigest(), 15)
+assert swapped
+assert os.listdir(outside) == []
+print('{{"outside_untouched":true}}')
+'''
+    result = isolated(tmp_path, code)
+    assert result.returncode == 0, result.stderr.decode()
+    assert receipt(result) == {"outside_untouched": True}
+    assert list(outside.iterdir()) == []
+    if timing == "leaf_open":
+        assert (parent.with_name("nested-original") / "artifact").read_bytes() == source.read_bytes()
+
+
+@pytest.mark.parametrize("kind", ["symlink", "hardlink", "fifo", "public"])
+def test_copy_existing_destination_refuses_unsafe_inode(tmp_path, kind):
+    source = private_file(tmp_path / "source")
+    outside = private_file(tmp_path / "outside", b"outside unchanged")
+    target = tmp_path / "target"
+    if kind == "symlink":
+        target.symlink_to(outside)
+    elif kind == "hardlink":
+        os.link(outside, target)
+    elif kind == "fifo":
+        os.mkfifo(target, 0o600)
+    else:
+        private_file(target, source.read_bytes()).chmod(0o644)
+    result = isolated(tmp_path, inference.REMOTE_PROVISION_COMMON + f'''
+try:
+    copy_regular_file({str(source)!r}, {str(target)!r}, 1024)
+except (OSError, ValueError):
+    print('{{"refused":true}}')
+else:
+    raise AssertionError("unsafe destination accepted")
+''')
+    assert result.returncode == 0, result.stderr.decode()
+    assert receipt(result) == {"refused": True}
+    assert outside.read_bytes() == b"outside unchanged"
+
+
+@pytest.mark.parametrize("wheel_state", ["empty", "other_wheel", "valid_laya"])
+def test_inspect_actual_driver_blocks_missing_laya_wheel(provision_tree, wheel_state):
+    root, _ = provision_tree
+    wheelhouse = root / "runs" / RUN / "wheelhouse"
+    wheel = wheelhouse / "laya-0.3.28-py3-none-any.whl"
+    if wheel_state != "valid_laya":
+        wheel.unlink()
+    if wheel_state == "other_wheel":
+        private_file(wheelhouse / "unrelated-1.0-py3-none-any.whl", b"other wheel")
+    setup = f'''
+SCRATCH_RE = re.compile(re.escape({str(root)!r}) + r"(?:/[A-Za-z0-9_./-]+)?\\Z")
+CHECKPOINT_SHA256 = {sha(b"tiny model")!r}
+WEIGHTS_BYTES = {len(b"tiny model")}
+LAYA_WHEEL_SHA256 = {sha(b"tiny wheel")!r}
+LAYA_WHEEL_BYTES = {len(b"tiny wheel")}
+subprocess.run = lambda argv, **kw: subprocess.CompletedProcess(argv, 0, b"3.12.9\\n", b"")
+sys.argv = ["inspect", "inspect", "/usr/bin/python3", {str(root)!r},
+            {str(root / "model-cache")!r}, {RUN!r}]
+'''
+    result = isolated(root.parent, inference.REMOTE_PROVISION_COMMON + setup
+                      + inference.REMOTE_PROVISION_INSPECT[len(inference.REMOTE_PROVISION_COMMON):])
+    value = receipt(result)
+    assert result.returncode == 0, (value, result.stderr.decode())
+    assert value["laya_wheel_present"] is (wheel_state == "valid_laya")
+    assert value["blocked"] is (wheel_state != "valid_laya"), value
+    assert ("laya_wheel_missing_from_previous_wheelhouse" in value["blockers"]) is (
+        wheel_state != "valid_laya")
+
+
+def test_sealed_wrapper_changes_only_reviewed_root_assignment(reviewed_bundle, tmp_path):
+    namespace = {}
+    exec(inference.REMOTE_PROVISION_COMMON, namespace)
+    original = (FROZEN / "code/prepare_runtime.sh").read_bytes()
+    # A quoted root must remain a literal shell value.
+    script_root = str(tmp_path / "private ' stage" / "code")
+    fd = namespace["sealed_runtime_script"](original, script_root)
+    try:
+        import shlex
+        actual = os.read(fd, len(original) + 4096)
+        root_line = b'SCRIPT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)'
+        assert actual == original.replace(root_line, ("SCRIPT_ROOT=" + shlex.quote(script_root)).encode(), 1)
+        result = subprocess.run(["/bin/bash", "-n", f"/proc/self/fd/{fd}"],
+                                pass_fds=(fd,), capture_output=True, check=False)
+        assert result.returncode == 0, result.stderr
+        assert sha(original) == reviewed_bundle["files"]["code/prepare_runtime.sh"]
+    finally:
+        os.close(fd)
+    with pytest.raises(ValueError, match="SCRIPT_ROOT"):
+        namespace["sealed_runtime_script"](original.replace(root_line, b"# changed"), script_root)

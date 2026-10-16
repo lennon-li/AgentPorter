@@ -78,7 +78,7 @@ FORBIDDEN_REMOTE_TOKENS = {
 INFERENCE_RESULTS_READER_SHA256 = "c0bb58eefab06f9bb5428b422d920168eb1a4de363c401054dd6d1b0140e7a61"
 # Read-only Laya runtime inspect driver: occupies no GPU and uses no network.
 INFERENCE_PROVISION_INSPECT_SHA256 = (
-    "e266eb697d5d6cf12b25eefb12c2b75af5368460843fae409ba29116a942af6a"
+    "d3992e6ab3cf35c142e667d2d796b62e4fd7dbe469b2b25ecf5cb14f40946b64"
 )
 # Immutable reviewed-package receiver for the provision-source landing.
 INFERENCE_PROVISION_SOURCES_RECEIVER_SHA256 = (
@@ -86,7 +86,7 @@ INFERENCE_PROVISION_SOURCES_RECEIVER_SHA256 = (
 )
 # Digest-pinned Laya prepare driver; accepts no stdin, no Slurm, no GPU.
 INFERENCE_PROVISION_PREPARE_SHA256 = (
-    "d44d05984ecba58be20931cd1c05da114a327bd3c33a410dcc52026de9d1d2b3"
+    "7aeb0c553906a1e06bd49e8d9c771c1bb764c24ff35676a632b771b18febe559"
 )
 PROVISION_SOURCES_MAX_INPUT_BYTES = 32 * 1024 * 1024
 

@@ -31,7 +31,6 @@ from agentporter.tools.scinet_training import (
     _result,
     _validate_remote_root,
     _validate_token,
-    _validate_python,
 )
 
 STAGE = "standalone-inference"
@@ -476,6 +475,12 @@ def _approval_payload(stage_id: str, manifest_sha256: str, runtime_catalog_sha25
     }
 
 
+def _inference_bootstrap(value):
+    if value != "/usr/bin/python3":
+        raise PermissionError("inference bootstrap Python must be exactly /usr/bin/python3")
+    return value
+
+
 def _approval_context(settings, workspace_id, workspace_path, python, hf_cache):
     host = str(getattr(settings, "host", "") or "")
     user = str(getattr(settings, "user", "") or "")
@@ -484,7 +489,7 @@ def _approval_context(settings, workspace_id, workspace_path, python, hf_cache):
     bootstrap = getattr(settings, "training_bootstrap_python", "")
     if not isinstance(bootstrap, str):
         raise PermissionError("inference bootstrap Python is not configured safely")
-    bootstrap = _validate_python(bootstrap, "bootstrap Python")
+    bootstrap = _inference_bootstrap(bootstrap)
     return {
         "workspace": {"id": workspace_id, "path": str(Path(workspace_path).resolve())},
         "ssh": {"host": host, "user": user},
@@ -894,46 +899,144 @@ def collect_snapshot(source_root):
     return collected, problems
 
 
+def open_private_parent(path):
+    """Anchor every destination component; never reopen a validated pathname."""
+    if os.path.abspath(path) != path or not path.startswith(("/scratch/", "/tmp/")):
+        raise ValueError("copy destination outside approved roots")
+    parts = path.strip("/").split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        raise ValueError("unsafe copy destination")
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for index, component in enumerate(parts[:-1]):
+            child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            try:
+                info = os.fstat(child)
+                entry = os.stat(component, dir_fd=fd, follow_symlinks=False)
+                shared = index == 0 and component in ("scratch", "tmp") and info.st_mode & stat.S_ISVTX
+                if (not stat.S_ISDIR(info.st_mode)
+                        or (info.st_dev, info.st_ino) != (entry.st_dev, entry.st_ino)
+                        or (info.st_uid not in (0, os.getuid()) and not shared)
+                        or (info.st_mode & 0o022 and not shared)):
+                    raise ValueError("copy destination ancestor is unsafe")
+                if index == len(parts) - 2 and (info.st_uid != os.getuid() or info.st_mode & 0o077):
+                    raise ValueError("copy destination parent is not private and owned")
+            except BaseException:
+                os.close(child)
+                raise
+            os.close(fd)
+            fd = child
+        return fd, parts[-1]
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def copy_regular_file(source, target, bound):
+    identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+    def digest_fd(fd):
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_uid != os.getuid() or before.st_mode & 0o077
+                or not 0 < before.st_size <= bound):
+            raise ValueError("copy file violates provisioning bounds")
+        digest, count = hashlib.sha256(), 0
+        os.lseek(fd, 0, os.SEEK_SET)
+        while True:
+            chunk = os.read(fd, min(1024 * 1024, bound - count + 1))
+            if not chunk:
+                break
+            count += len(chunk)
+            if count > bound:
+                raise ValueError("copy file exceeds bound")
+            digest.update(chunk)
+        if count != before.st_size or identity(os.fstat(fd)) != identity(before):
+            raise ValueError("copy file changed while hashing")
+        return digest.hexdigest(), count
+
     st = os.lstat(source)
     if (stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode) or st.st_nlink != 1
             or st.st_uid != os.getuid() or st.st_mode & 0o077
             or os.path.realpath(source) != source or not 0 < st.st_size <= bound):
         raise ValueError("source violates provisioning bounds")
-    if os.path.lexists(target):
-        target_info = os.lstat(target)
-        if (not stat.S_ISREG(target_info.st_mode) or target_info.st_nlink != 1
-                or target_info.st_uid != os.getuid() or target_info.st_mode & 0o077
-                or os.path.realpath(target) != target):
-            raise ValueError("existing target is unsafe")
-        source_digest = sha_file(source, bound)
-        if sha_file(target, bound) != source_digest:
-            raise ValueError("existing target differs from verified source")
-        return source_digest
-    fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    digest = hashlib.sha256()
-    identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
-    target_fd = None
+    source_fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    parent_fd = target_fd = None
     try:
-        with os.fdopen(fd, "rb") as stream:
-            before = os.fstat(stream.fileno())
-            target_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
-            with os.fdopen(target_fd, "wb") as out:
-                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                    digest.update(chunk)
+        if identity(os.fstat(source_fd)) != identity(st):
+            raise ValueError("source changed before provisioning copy")
+        source_digest = digest_fd(source_fd)
+        parent_fd, leaf = open_private_parent(target)
+        try:
+            target_fd = os.open(leaf, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                0o400, dir_fd=parent_fd)
+            created = True
+        except FileExistsError:
+            target_fd = os.open(leaf, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                                dir_fd=parent_fd)
+            created = False
+        target_info = os.fstat(target_fd)
+        if (not stat.S_ISREG(target_info.st_mode) or target_info.st_nlink != 1
+                or target_info.st_uid != os.getuid() or target_info.st_mode & 0o077):
+            raise ValueError("existing target is unsafe")
+        if created:
+            os.lseek(source_fd, 0, os.SEEK_SET)
+            with os.fdopen(os.dup(target_fd), "wb") as out:
+                remaining = source_digest[1]
+                while remaining:
+                    chunk = os.read(source_fd, min(1024 * 1024, remaining))
+                    if not chunk:
+                        raise ValueError("source shortened during copy")
                     out.write(chunk)
+                    remaining -= len(chunk)
                 out.flush()
                 os.fsync(out.fileno())
-            if identity(os.fstat(stream.fileno())) != identity(before) or identity(os.lstat(source)) != identity(before):
-                raise ValueError("source changed during provisioning copy")
+        if identity(os.fstat(source_fd)) != identity(st) or identity(os.lstat(source)) != identity(st):
+            raise ValueError("source changed during provisioning copy")
+        copied = digest_fd(target_fd)
+        entry = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
+        if identity(entry) != identity(os.fstat(target_fd)):
+            raise ValueError("copy destination entry changed")
+        if copied != source_digest:
+            raise ValueError("existing target differs from verified source")
+        return copied
+    finally:
+        for fd in (target_fd, parent_fd, source_fd):
+            if fd is not None:
+                os.close(fd)
+
+
+def sealed_runtime_script(script_bytes, script_root):
+    """Generate only an execution wrapper; the digest-pinned bundle stays intact."""
+    import fcntl, shlex
+    root_line = b'SCRIPT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)'
+    if script_bytes.splitlines().count(root_line) != 1:
+        raise ValueError("reviewed SCRIPT_ROOT assignment changed")
+    wrapper = script_bytes.replace(root_line, ("SCRIPT_ROOT=" + shlex.quote(script_root)).encode(), 1)
+    if hasattr(os, "memfd_create"):
+        fd = os.memfd_create("agentporter-reviewed-runtime", os.MFD_ALLOW_SEALING | os.MFD_CLOEXEC)
+    else:
+        # Some portable Python builds omit Linux APIs despite running on Linux.
+        # Use the libc entry point and Linux UAPI constants; never use a mutable file.
+        import ctypes
+        if sys.platform != "linux":
+            raise ValueError("sealed runtime execution requires Linux")
+        create = ctypes.CDLL(None, use_errno=True).memfd_create
+        create.argtypes, create.restype = (ctypes.c_char_p, ctypes.c_uint), ctypes.c_int
+        fd = create(b"agentporter-reviewed-runtime", 0x0001 | 0x0002)
+        if fd < 0:
+            error = ctypes.get_errno()
+            raise OSError(error, os.strerror(error))
+    try:
+        with os.fdopen(fd, "wb", closefd=False) as stream:
+            stream.write(wrapper)
+            stream.flush()
+        os.lseek(fd, 0, os.SEEK_SET)
+        # Linux F_ADD_SEALS and F_SEAL_{SEAL,SHRINK,GROW,WRITE}.
+        fcntl.fcntl(fd, getattr(fcntl, "F_ADD_SEALS", 1033), 0x0001 | 0x0002 | 0x0004 | 0x0008)
+        return fd
     except BaseException:
-        if os.path.lexists(target):
-            os.chmod(target, 0o600)
+        os.close(fd)
         raise
-    copied = sha_file(target, bound)
-    if copied != (digest.hexdigest(), st.st_size):
-        raise ValueError("copied artifact digest differs from its verified source")
-    return copied
 
 
 def unique_nonempty(items):
@@ -1032,7 +1135,7 @@ if scratch_state == "ok":
         blockers.append("previous_run_wheelhouse_missing")
     else:
         blockers.append("previous_run_wheelhouse_unsafe")
-    if wheel_state == "ok" and wheel_count and not laya_wheel_present:
+    if wheel_state == "ok" and not laya_wheel_present:
         blockers.append("laya_wheel_missing_from_previous_wheelhouse")
 else:
     blockers.extend(["previous_run_missing", "previous_run_model_dir_missing",
@@ -1435,11 +1538,17 @@ def main(argv):
         env = dict(OFFLINE_ENV)
         env["TMPDIR"] = provision_cache + "/tmp"
         env["XDG_CACHE_HOME"] = provision_cache
-        prepared = subprocess.run(
-            ["/bin/bash", provision_cache + "/tmp/" + script_stage + "/code/prepare_runtime.sh",
-             scratch, bootstrap, wheelhouse, cache, catalog, catalog_digest],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=840, env=env, check=False)
+        runtime_fd = sealed_runtime_script(
+            script_bytes, provision_cache + "/tmp/" + script_stage + "/code")
+        try:
+            prepared = subprocess.run(
+                ["/bin/bash", "/proc/self/fd/" + str(runtime_fd),
+                 scratch, bootstrap, wheelhouse, cache, catalog, catalog_digest],
+                pass_fds=(runtime_fd,), stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=840, env=env, check=False)
+        finally:
+            os.close(runtime_fd)
     except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
         emit({"success": False, "phase": "prepare", "error": "prepare_runtime_failed",
               "detail": str(exc)[-1500:], "prepare_runtime_sha256": script_sha if "script_sha" in locals() else None,
@@ -1503,8 +1612,8 @@ def main(argv):
 main(sys.argv)
 '''
 
-PROVISION_INSPECT_SCRIPT_SHA256 = "e266eb697d5d6cf12b25eefb12c2b75af5368460843fae409ba29116a942af6a"
-PROVISION_PREPARE_SCRIPT_SHA256 = "d44d05984ecba58be20931cd1c05da114a327bd3c33a410dcc52026de9d1d2b3"
+PROVISION_INSPECT_SCRIPT_SHA256 = "d3992e6ab3cf35c142e667d2d796b62e4fd7dbe469b2b25ecf5cb14f40946b64"
+PROVISION_PREPARE_SCRIPT_SHA256 = "7aeb0c553906a1e06bd49e8d9c771c1bb764c24ff35676a632b771b18febe559"
 
 
 def _provision_argv(mode: str, bootstrap: str, scratch: str, cache: str,
@@ -1516,7 +1625,7 @@ def _provision_argv(mode: str, bootstrap: str, scratch: str, cache: str,
     if hashlib.sha256(script.encode("utf-8")).hexdigest() != expected:
         raise PermissionError("fixed inference provision script digest mismatch")
     argv = ["/usr/bin/python3", "-I", "-B", "-c", script, mode,
-            _validate_python(bootstrap, "bootstrap Python"), scratch, cache, run_id]
+            _inference_bootstrap(bootstrap), scratch, cache, run_id]
     if mode == "prepare":
         argv += [bundle, digest]
     return argv
@@ -1557,6 +1666,8 @@ def _provision_settings(registry, settings, workspace_id):
             or "//" in cache):
         raise PermissionError("SciNet inference HF cache must be a fixed /scratch path")
     scratch = scratch.rstrip("/")
+    if python != f"{scratch}/inference-env/bin/python":
+        raise PermissionError("inference Python must be <scratch>/inference-env/bin/python")
     cache = cache.rstrip("/")
     for value in (python, cache):
         path = PurePosixPath(value)
@@ -1599,8 +1710,7 @@ def create_scinet_inference_provision_tool(registry, settings=None, state_dir=No
             raise ValueError(
                 "inference provision destinations are server-generated; no stage_id is accepted")
         user, ws, scratch, _python, cache = _provision_settings(registry, settings, workspace_id)
-        bootstrap = _validate_python(getattr(settings, "training_bootstrap_python", ""),
-                                     "bootstrap Python")
+        bootstrap = _inference_bootstrap(getattr(settings, "training_bootstrap_python", ""))
         configured = str(getattr(settings, "inference_runtime_catalog_sha256", "") or "")
         if configured and not SHA_RE.fullmatch(configured):
             raise PermissionError("configured inference runtime catalog SHA-256 is invalid")
@@ -1921,6 +2031,8 @@ def _inference_settings(registry, settings, workspace_id):
 
 
 def _runtime_metadata(settings, scratch: str, python: str, cache: str) -> dict[str, str]:
+    if python != f"{scratch}/inference-env/bin/python":
+        raise PermissionError("inference Python must be <scratch>/inference-env/bin/python")
     digest = str(getattr(settings, "inference_runtime_catalog_sha256", "") or "")
     if not SHA_RE.fullmatch(digest):
         raise PermissionError("independently reviewed inference runtime catalog SHA-256 is required")
