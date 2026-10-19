@@ -31,12 +31,69 @@ Commit, push, credentials, deployment and administrative operations remain
 separate from permission to edit project files. Read-only workspaces are refused
 by adapters that cannot enforce read-only operation.
 
+**Task-level safety:** Every MCP/REST `dispatch_agent` call now defaults to
+`read_only: true`, even in a writable workspace. For a bounded implementation
+that genuinely needs edits, the caller must explicitly set `read_only: false`;
+the workspace must still permit writes and delegation. Read-only dispatch selects
+the worker CLI's enforceable read-only mode, and is refused when an adapter cannot
+enforce that mode. Delegated commit and push requests are **currently refused**
+even when `read_only: false`, because a caller-supplied boolean is not evidence
+of independent human authorization. Use owner-controlled Git publication
+outside the worker until a verified approval receipt mechanism is implemented.
+The response includes the effective `read_only` setting.
+
+Codex/Jax/Liz/Prof launches use an isolated Python interpreter (`-I`) and a
+sanitized environment at the initial launcher boundary, then create a temporary,
+0700-protected `CODEX_HOME`
+containing only model routing settings and a reference to the existing
+authentication file. User MCP servers, plugins, hooks and notifications are
+not copied. AgentPorter verifies the effective Codex MCP roster is empty
+before starting the worker; failed discovery or any enabled tool blocks launch.
+Project-level Codex MCP/plugin configurations block launch as well.
+All Codex worker command sandboxes explicitly set
+`sandbox_workspace_write.network_access=false`, overriding inherited values.
+Worker environment variables are reduced to a model-auth allowlist. Selected
+Codex profiles and unrecognized model-provider settings fail closed rather
+than silently changing the selected account or provider.
+
+This is configuration and command-sandbox hardening, **not host-user
+isolation**. The CLI still uses host-user credentials, local files remain
+readable subject to the CLI sandbox, and model API traffic necessarily uses
+a network connection. Keep a7's UI permission setting on Always ask, and do
+not delegate untrusted tasks or grant edit mode merely because an agent
+requests it. Non-Codex worker adapters do not yet receive this temporary
+profile treatment; permit only carefully scoped, approved editing with them.
+
+
 After a code change, a restart alone does not update an immutable release.
 Follow [deployment.md](deployment.md) for owner-controlled activation. Verify
 live `list_agents`, then dispatch a bounded file-write check in the intended
 workspace and collect its result before claiming remote editing works.
 
 ## 1. Preflight
+
+An installed CLI or `available: true` is discovery evidence, not a successful
+delegation. Verify the tracked job's result before declaring a worker operational.
+OpenCode startup can require local HTTP connections and package downloads even
+when the requested model uses a public provider endpoint. If the parent execution
+sandbox rejects these connections, preserve the run ID and report the exact denied
+destination. An empty user configuration and `OPENCODE_PURE=1` distinguish optional
+plugin dependencies from a failure that persists in the runtime itself. Do not
+diagnose an authentication or model failure when startup was blocked first, weaken
+the worker's permissions, or claim another worker's success verifies Wei.
+
+Prof is available as `prof`, bound exclusively to the host user's `~/.codex-prof`
+profile. Its `config.toml` and `auth.json` must both exist for discovery to report
+it available. An absent Prof profile never falls back to Jax or Liz. Leave `model`
+unset to preserve Prof's account-specific CLI default; a missing configured model
+is reported as `unknown`, not an invented model selector. Explicit allowed model
+and reasoning overrides remain supported. Prof inherits the same workspace write,
+read-only, and publication controls as the other named Codex workers.
+
+Argie may be configured as a private `argie` identity in `agents.yaml`; the
+underlying `agy` identifier remains available. AgentPorter does not reserve
+`argie` globally, so existing private mappings to other runtimes remain valid.
+Discovery does not establish provider authentication, entitlement, or execution.
 
 Always call `list_agents` before dispatching substantial work.
 
@@ -59,11 +116,14 @@ Prefer leaving `model` unset after checking `effective_model`. Set it explicitly
 
 Keep delegated tasks bounded enough to finish within the worker timeout and the 30-step control-packet budget. Split unrelated implementation, architecture, and review work into separate agents.
 
-For read-only reviews, say explicitly:
+For read-only reviews, keep `read_only: true` (the default), and say explicitly:
 
 > READ-ONLY. Do not call write/edit tools and do not create a report file. Return the complete findings in the worker's final stdout response.
 
-This avoids workers attempting interactive write permissions when the desired deliverable is only a review.
+A read-only prompt is **not a substitute** for the `read_only` parameter. Confirm
+that the returned dispatch metadata reports `read_only: true` and that the
+worker launch uses the appropriate read-only CLI sandbox. If the worker lacks
+such enforcement, dispatch must fail rather than silently run with write access.
 
 For implementation tasks, name the allowed files/directories and state whether commit/push is forbidden.
 
@@ -129,6 +189,16 @@ Do not blindly rerun the full task: a timed-out worker may already have produced
 If a worker requests interactive permission despite an autonomous read-only task, rewrite the follow-up task to forbid file writes and require the answer in final stdout.
 
 ## 7. Model provenance
+
+Prof accepts explicit `model` and `reasoning_effort` dispatch arguments and
+retains its own Codex account profile; a model override does not switch accounts.
+
+Argie is an optional private identity. Its model and reasoning-override
+capabilities depend on its configured runtime. The underlying `agy` adapter
+currently rejects per-call model and reasoning overrides because their
+enforcement is unverified. Inspect `list_agents` before requesting overrides.
+Model availability depends on each worker's account; passing a selector is
+not proof that the requested model was used.
 
 The dispatch response records `requested_model`; terminal job status/result also records `actual_model` when the underlying CLI exposes it. `actual_model = "unknown"` means runtime model provenance could not be verified; it must not be invented from the configured route.
 

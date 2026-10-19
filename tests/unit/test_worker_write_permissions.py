@@ -115,7 +115,7 @@ def test_private_identity_inherits_runtime_write_controls(executable, tmp_path, 
     })
     monkeypatch.setattr("agentporter.agents.adapters.opencode.subprocess.run",
                         lambda *a, **kw: SimpleNamespace(stdout="1.19.0"))
-    result = broker.dispatch_agent(name, "Write a scoped file", "test-workspace")
+    result = broker.dispatch_agent(name, "Write a scoped file", "test-workspace", read_only=False)
     assert result["job_id"] == "test-job"
     kwargs = jobs.start_raw_job.call_args.kwargs
     assert kwargs["workspace_path"] == str(tmp_path)

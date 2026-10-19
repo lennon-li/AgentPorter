@@ -197,10 +197,12 @@ def test_commit_and_push_require_explicit_confirmation():
     assert not read_only.git_commit and not read_only.git_push
 
 
-def test_codex_network_enabled_only_for_confirmed_push(fake_exe):
+def test_codex_network_forced_disabled_even_if_push_flag_was_requested(fake_exe):
     push = ExecutionPolicy.for_workspace(writable=True, allow_push=True)
     for adapter_cls in (CodexAdapter, JaxAdapter, LizAdapter):
         default_argv = adapter_cls(executable_override=fake_exe).build_argv(WS, "P", "m", "high")
         push_argv = adapter_cls(executable_override=fake_exe).build_argv(WS, "P", "m", "high", push)
         assert "sandbox_workspace_write.network_access=true" not in default_argv
-        assert "sandbox_workspace_write.network_access=true" in push_argv
+        assert "sandbox_workspace_write.network_access=true" not in push_argv
+        assert "sandbox_workspace_write.network_access=false" in default_argv
+        assert "sandbox_workspace_write.network_access=false" in push_argv

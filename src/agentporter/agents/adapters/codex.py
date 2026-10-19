@@ -87,8 +87,10 @@ class CodexAdapter(AgentAdapter):
             "-c",
             "approval_policy=never",
         ]
-        if policy.workspace_write and policy.git_push:
-            cmd.extend(["-c", "sandbox_workspace_write.network_access=true"])
+        # CLI flags must override any network=true in persistent config.
+        # Worker publication is disabled until an operator-verified approval
+        # gate exists, regardless of the caller's allow_push assertion.
+        cmd.extend(["-c", "sandbox_workspace_write.network_access=false"])
         if model:
             cmd.extend(["-m", model])
         if reasoning_effort:

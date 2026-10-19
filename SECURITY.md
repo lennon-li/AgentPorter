@@ -28,7 +28,24 @@ limits as denial-of-service mitigation, not complete resource accounting.
 ### Worker delegation: host-user boundary
 
 `dispatch_agent` launches installed coding-agent CLIs as the host user because
-those programs normally require provider credentials and network access.
+those programs normally require provider credentials and model API access.
+Every dispatch is read-only by default. Explicit `read_only: false` and a
+writable, delegation-enabled workspace are needed for edits. Delegated
+`allow_commit` and `allow_push` flags are rejected until server-side,
+operator-verified approval exists; caller booleans do not count as proof.
+
+Codex family workers launch through `python -I -m` with an environment
+allowlist to prevent workspace-controlled module shadowing, then receive a
+short-lived isolated configuration home
+with selected model-provider options and their existing authentication identity.
+Unrelated MCP servers/hooks/plugins are not copied. Runtime MCP listing must
+confirm no enabled tools; failed checks refuse the worker. Project-level MCP/
+plugin configuration is refused. Worker command sandbox network access is
+explicitly disabled, irrespective of inherited persistent settings.
+Only model-provider/authentication environment variables are retained.
+These are defenses in depth, **not OS-level isolation**. The model client
+must still contact its provider, and host-user file access may expose
+information beyond the registered workspace.
 
 Consequences:
 
@@ -36,7 +53,8 @@ Consequences:
 - worker processes may access whatever the host account and their own CLI
   sandbox/policy allow;
 - a read-only workspace is only eligible for an adapter that can enforce
-  read-only execution at the CLI level;
+  read-only execution at the CLI level, and no configured mutable external
+  tools in its isolated profile;
 - prompt wording is not treated as a security boundary;
 - model/reasoning overrides are accepted only when the adapter can actually
   enforce them.

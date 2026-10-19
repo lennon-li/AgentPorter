@@ -6,6 +6,7 @@ import os
 import subprocess
 import logging
 import re
+import sys
 import yaml
 from typing import TYPE_CHECKING, Optional, Dict
 from agentporter.agents.adapters.base import AgentAdapter
@@ -16,6 +17,7 @@ from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter, WeiAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
 from agentporter.agents.policy import ExecutionPolicy
+from agentporter.agents.isolated_codex import safe_launcher_environment
 from agentporter.workspaces.registry import WorkspaceRegistry
 
 if TYPE_CHECKING:
@@ -49,6 +51,9 @@ class AgentBroker:
 
     def _configured_workers(self) -> tuple[dict, dict]:
         """Apply private identity metadata to existing adapters, without new controls."""
+        # Explicit private identities retain precedence; do not claim "argie"
+        # by default because existing profiles may map it to another runtime.
+        adapters, identities = dict(self.adapters), {}
         config_dir = os.environ.get("AGENTPORTER_CONFIG_DIR") or os.path.join(
             os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "agentporter"
         )
@@ -56,13 +61,12 @@ class AgentBroker:
             with open(os.path.join(config_dir, "agents.yaml"), encoding="utf-8") as handle:
                 document = yaml.safe_load(handle)
         except FileNotFoundError:
-            return self.adapters, {}
+            return adapters, identities
         if not isinstance(document, dict) or set(document) != {"agents"}:
             raise ValueError("agents.yaml must contain an agents mapping")
         definitions = document["agents"]
         if not isinstance(definitions, dict):
             raise ValueError("agents.yaml agents must be a mapping")
-        adapters, identities = dict(self.adapters), {}
         for name, spec in definitions.items():
             if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", name):
                 raise ValueError("agent identity names must be lowercase identifiers")
@@ -71,7 +75,7 @@ class AgentBroker:
             runtime = spec.get("runtime")
             if not isinstance(runtime, str) or runtime not in self.adapters:
                 raise ValueError("agent identity runtime must name an existing adapter")
-            if name in self.adapters and runtime != name:
+            if name in adapters and adapters[name] is not self.adapters[runtime]:
                 raise ValueError("agent identities cannot redirect an existing adapter")
             adapter = self.adapters[runtime]
             alias = spec.get("alias", name)
@@ -106,14 +110,8 @@ class AgentBroker:
         adapters, identities = self._configured_workers()
         for key, adapter in adapters.items():
             runtime, alias, role, _ = identities.get(
-                key,
-                (
-                    "codex" if isinstance(adapter, CodexAdapter) else
-                    "opencode" if isinstance(adapter, OpenCodeAdapter) else key,
-                    adapter.alias or key,
-                    adapter.description,
-                    "",
-                ),
+                key, ("codex" if isinstance(adapter, CodexAdapter) else "opencode" if isinstance(adapter, OpenCodeAdapter) else key,
+                      adapter.alias or key, adapter.description, "")
             )
             detection = adapter.detect()
             configured_model = detection.get("configured_model") or "unknown"
@@ -163,6 +161,7 @@ class AgentBroker:
         reasoning_effort: Optional[str] = None,
         allow_commit: bool = False,
         allow_push: bool = False,
+        read_only: bool = True,
     ) -> dict:
         """Dispatch an authorized worker agent asynchronously with enforceable controls."""
         agent_key = agent.lower().strip()
@@ -180,9 +179,14 @@ class AgentBroker:
         ws = self.workspace_registry.get(workspace_id)
         if not ws.allow_agent_dispatch:
             raise PermissionError(f"Workspace '{workspace_id}' does not allow agent dispatch")
-        if not ws.writable and not adapter.supports_read_only:
+        if allow_commit or allow_push:
+            raise PermissionError("Delegated commit/push require a separate operator-verified approval; caller booleans are insufficient")
+        effective_read_only = read_only or not ws.writable
+        if (allow_commit or allow_push) and effective_read_only:
+            raise PermissionError("Commit/push cannot be authorized for a read-only dispatch")
+        if effective_read_only and not adapter.supports_read_only:
             raise PermissionError(
-                f"Agent '{agent_key}' cannot be dispatched to read-only workspace "
+                f"Agent '{agent_key}' cannot be dispatched read-only in workspace "
                 f"'{workspace_id}' because this adapter cannot enforce read-only execution"
             )
         if model and not adapter.supports_model_override:
@@ -196,7 +200,7 @@ class AgentBroker:
         cli_ver = detection.get("cli_version", "unknown")
 
         policy = ExecutionPolicy.for_workspace(
-            writable=ws.writable,
+            writable=ws.writable and not effective_read_only,
             allow_commit=allow_commit,
             allow_push=allow_push,
         )
@@ -239,14 +243,8 @@ class AgentBroker:
                 pass
 
         runtime, alias, role, persona = identities.get(
-            agent_key,
-            (
-                "codex" if isinstance(adapter, CodexAdapter) else
-                "opencode" if isinstance(adapter, OpenCodeAdapter) else agent_key,
-                adapter.alias or agent_key,
-                adapter.description,
-                "",
-            ),
+            agent_key, ("codex" if isinstance(adapter, CodexAdapter) else "opencode" if isinstance(adapter, OpenCodeAdapter) else agent_key,
+                        adapter.alias or agent_key, adapter.description, "")
         )
         identity = ""
         if agent_key in identities:
@@ -260,7 +258,7 @@ class AgentBroker:
         packet = identity + (
             "Permission Level: 1\n"
             "Interaction Mode: AUTONOMOUS\n"
-            f"Authorization: {'MAY MODIFY FILES WITHIN SCOPE' if ws.writable else 'READ-ONLY'}\n"
+            f"Authorization: {'MAY MODIFY FILES WITHIN SCOPE' if policy.workspace_write else 'READ-ONLY'}\n"
             "Step budget: 30\n"
             f"Project Root: {ws.path}\n"
             f"{policy.packet_text()}"
@@ -275,7 +273,7 @@ class AgentBroker:
         controls = (
             {"policy": policy}
             if isinstance(adapter, (CodexAdapter, CopilotAdapter, ClaudeAdapter, OpenCodeAdapter))
-            else {"writable": ws.writable}
+            else {"writable": policy.workspace_write}
         )
         cmd = adapter.build_argv(
             workspace_path=ws.path,
@@ -284,11 +282,29 @@ class AgentBroker:
             reasoning_effort=requested_reasoning,
             **controls,
         )
-        job_env = (
-            adapter.runtime_env(workspace_path=ws.path, policy=policy)
-            if isinstance(adapter, OpenCodeAdapter)
-            else None
-        )
+        if isinstance(adapter, CodexAdapter):
+            # Force a temporary, screened CODEX_HOME and verify the actual MCP
+            # roster before the CLI can start. The user's home config can
+            # contain mutating MCP tools and inherited network permissions.
+            source_home = getattr(adapter, "codex_home", None) or (
+                os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
+            )
+            if cmd[:1] == ["env"] and len(cmd) > 2 and cmd[1].startswith("CODEX_HOME="):
+                cmd = cmd[2:]
+            if not cmd or not os.path.isabs(cmd[0]):
+                raise RuntimeError("Codex executable path must be absolute")
+            cmd = [
+                sys.executable, "-I", "-m", "agentporter.agents.isolated_codex",
+                "--source-home", source_home, "--workspace", ws.path,
+                "--", *cmd,
+            ]
+            launch_env = safe_launcher_environment(source_home)
+        elif isinstance(adapter, OpenCodeAdapter):
+            # Preserve upstream's dedicated Wei/OpenCode ephemeral permissions
+            # and credential handling without allowing them to inherit defaults.
+            launch_env = adapter.runtime_env(workspace_path=ws.path, policy=policy)
+        else:
+            launch_env = None
 
         job_id = self.job_manager.start_raw_job(
             workspace_id=workspace_id,
@@ -301,7 +317,7 @@ class AgentBroker:
             reasoning_level=requested_reasoning or configured_reasoning,
             cli_version=cli_ver,
             timeout_seconds=900,
-            env=job_env,
+            env=launch_env,
         )
 
         return {
@@ -322,5 +338,6 @@ class AgentBroker:
             "model": configured_model,
             "thinking_level": requested_reasoning or configured_reasoning,
             "workspace_id": workspace_id,
+            "read_only": not policy.workspace_write,
             "git_clean_at_dispatch": git_clean,
         }

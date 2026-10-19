@@ -294,7 +294,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/files/patch": {
@@ -347,7 +347,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/files/mkdir": {
@@ -400,7 +400,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/files/move": {
@@ -453,7 +453,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/files/trash": {
@@ -506,7 +506,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/exec/run": {
@@ -559,7 +559,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/exec/start": {
@@ -612,7 +612,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/jobs/{job_id}/status": {
@@ -804,7 +804,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/git/push": {
@@ -858,7 +858,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/git/commit": {
@@ -912,7 +912,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/git/add": {
@@ -966,7 +966,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/git/checkout": {
@@ -1020,7 +1020,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/agents/list": {
@@ -1120,7 +1120,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/venkata/diagnostic": {
@@ -1177,7 +1177,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/venkata/transfer": {
@@ -1234,7 +1234,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/scinet/diagnostic": {
@@ -1291,7 +1291,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/scinet/stage": {
@@ -1338,7 +1338,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/scinet/submit": {
@@ -1395,7 +1395,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/scinet/job-status": {
@@ -1452,7 +1452,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/scinet/job-logs": {
@@ -1509,7 +1509,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     },
     "/api/v1/workspaces/{workspace_id}/scinet/setup": {
@@ -1518,7 +1518,7 @@
           "SciNet"
         ],
         "summary": "Scinet Setup",
-        "description": "Manage SciNet setup, preflight, approvals, or login. login_start requests one Duo push; tap approve on your phone. login_status checks connection. AgentPorter never approves Duo.",
+        "description": "Manage SciNet setup, preflight, approvals, or login. ``login_start`` requests one Duo push; ``login_status`` checks the master. Tap approve on your phone; AgentPorter never accepts passcodes or approves Duo.",
         "operationId": "scinet_setup",
         "parameters": [
           {
@@ -1566,7 +1566,7 @@
             }
           }
         },
-        "x-openai-isConsequential": false
+        "x-openai-isConsequential": true
       }
     }
   },
@@ -1584,7 +1584,7 @@
               }
             ],
             "title": "Agent",
-            "description": "Agent identifier (e.g., codex, jax, liz, claude, opencode, copilot, agy)."
+            "description": "Agent identifier (e.g., codex, jax, liz, prof, argie, claude, opencode, copilot, agy)."
           },
           "name": {
             "anyOf": [
@@ -1761,6 +1761,40 @@
               }
             ],
             "title": "Default Model"
+          },
+          "supports_read_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Read Only",
+            "description": "Whether the adapter provides enforceable read-only mode."
+          },
+          "supports_model_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Model Override"
+          },
+          "supports_reasoning_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Reasoning Override"
           }
         },
         "type": "object",
@@ -1923,14 +1957,20 @@
           "allow_commit": {
             "type": "boolean",
             "title": "Allow Commit",
-            "description": "Human confirmation that the agent may run git commit.",
+            "description": "Reserved; worker commit remains blocked until server-side operator approval exists.",
             "default": false
           },
           "allow_push": {
             "type": "boolean",
             "title": "Allow Push",
-            "description": "Human confirmation that the agent may git push to existing remotes.",
+            "description": "Reserved; worker push remains blocked until server-side operator approval exists.",
             "default": false
+          },
+          "read_only": {
+            "type": "boolean",
+            "title": "Read Only",
+            "description": "Enforce read-only execution; set false explicitly for authorized workspace edits.",
+            "default": true
           }
         },
         "type": "object",
@@ -2108,6 +2148,18 @@
             ],
             "title": "Git Clean At Dispatch",
             "description": "Whether git tree was clean."
+          },
+          "read_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read Only",
+            "description": "Effective read-only policy for this worker dispatch."
           }
         },
         "additionalProperties": true,
@@ -3009,10 +3061,9 @@
         "title": "ScinetJobRequest"
       },
       "ScinetSetupRequest": {
-        "additionalProperties": false,
-        "description": "One consolidated Action so the API stays within the 30-operation Actions limit.",
         "properties": {
           "action": {
+            "type": "string",
             "enum": [
               "start",
               "status",
@@ -3020,61 +3071,119 @@
               "environment_check",
               "record_approvals",
               "login_start",
-              "login_status"
+              "login_status",
+              "inference_preflight",
+              "inference_stage",
+              "inference_provision",
+              "inference_approve",
+              "inference_submit",
+              "inference_results"
             ],
-            "title": "Action",
-            "type": "string"
+            "title": "Action"
           },
           "stage_id": {
             "anyOf": [
               {
+                "type": "string",
                 "maxLength": 32,
                 "minLength": 32,
-                "pattern": "^[a-f0-9]{32}$",
-                "type": "string"
+                "pattern": "^[a-f0-9]{32}$"
               },
               {
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Stage Id"
           },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[0-9]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "previous_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32,
+                "minLength": 32,
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Run Id"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "inspect",
+                  "prepare"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
           "experiment": {
-            "default": "laya_smoke",
+            "type": "string",
             "enum": [
               "laya_smoke",
               "laya_expA",
               "laya_expB"
             ],
             "title": "Experiment",
-            "type": "string"
+            "default": "laya_smoke"
           },
           "reviewer": {
             "anyOf": [
               {
-                "maxLength": 64,
-                "type": "string"
+                "type": "string",
+                "maxLength": 64
               },
               {
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Reviewer"
           },
           "confirmation": {
             "anyOf": [
               {
-                "maxLength": 64,
-                "type": "string"
+                "type": "string",
+                "maxLength": 128
               },
               {
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Confirmation"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 88,
+                "minLength": 88
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
           },
           "approved_fields": {
             "anyOf": [
@@ -3082,35 +3191,35 @@
                 "items": {
                   "type": "string"
                 },
-                "maxItems": 5,
-                "type": "array"
+                "type": "array",
+                "maxItems": 5
               },
               {
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Approved Fields"
           },
           "device": {
             "anyOf": [
               {
-                "const": "cuda",
-                "type": "string"
+                "type": "string",
+                "const": "cuda"
               },
               {
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Device"
           }
         },
+        "additionalProperties": false,
+        "type": "object",
         "required": [
           "action"
         ],
         "title": "ScinetSetupRequest",
-        "type": "object"
+        "description": "One consolidated Action so the API stays within the 30-operation Actions limit."
       },
       "ScinetSubmitRequest": {
         "properties": {

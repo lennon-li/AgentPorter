@@ -31,6 +31,7 @@ from agentporter.tools.execution import create_execution_tools
 from agentporter.tools.git import create_git_tools
 from agentporter.tools.artifacts import create_artifact_tools
 from agentporter.tools.local_http import create_local_http_tool
+from mcp.types import ToolAnnotations
 from agentporter.tools.agents import create_agent_tools
 from agentporter.tools.venkata import create_venkata_tool, Diagnostic
 from agentporter.tools.venkata_transfer import create_venkata_transfer_tool, TransferSource, TransferDestination
@@ -173,7 +174,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         registry, getattr(config, "scinet", None), config.state_dir
     )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("venkata_transfer")
     def venkata_transfer(workspace_id: str, source: TransferSource, files: list[str],
                          destination: TransferDestination = "laya-training") -> dict:
@@ -192,7 +193,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """Run one fixed, read-only SciNet diagnostic through the host-side broker."""
         return _scinet_diagnostic(workspace_id=workspace_id, command=command)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("scinet_login")
     def scinet_login(workspace_id: str, action: ScinetLoginAction = "start") -> dict:
         """Request one fixed SciNet Duo push or check login status; approval stays human."""
@@ -204,13 +205,13 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """Report the running AgentPorter code fingerprint and whether src/ changed since startup."""
         return deploy_info()
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("scinet_stage")
     def scinet_stage(workspace_id: str) -> dict:
         """Stage the approved Laya handoff into a dedicated SciNet directory."""
         return _scinet_training["scinet_stage"](workspace_id=workspace_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("scinet_submit")
     def scinet_submit(
         workspace_id: str, stage_id: str, experiment: ScinetExperiment = "laya_smoke"
@@ -238,7 +239,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             workspace_id=workspace_id, job_id=job_id, kind=kind
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("scinet_setup")
     def scinet_setup(workspace_id: str, stage_id: str) -> dict:
         """Start/resume the fixed SHA-verified login-node setup for a staged run."""
@@ -257,13 +258,13 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """Verify the fixed local Laya inference bundle; never contacts SciNet or submits."""
         return _scinet_inference_preflight(workspace_id=workspace_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("scinet_inference_stage")
     def scinet_inference_stage(workspace_id: str) -> dict:
         """Stage only the digest-pinned standalone inference bundle to fixed SciNet scratch."""
         return _scinet_inference["scinet_inference_stage"](workspace_id=workspace_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("scinet_inference_provision")
     def scinet_inference_provision(
         workspace_id: str, previous_run_id: str,
@@ -273,7 +274,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         return _scinet_inference_provision(
             workspace_id=workspace_id, phase=phase, previous_run_id=previous_run_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("scinet_inference_approve")
     def scinet_inference_approve(
         workspace_id: str, stage_id: str, reviewer: str, signature: str
@@ -284,7 +285,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             reviewer=reviewer, signature=signature,
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("scinet_inference_submit")
     def scinet_inference_submit(workspace_id: str, stage_id: str) -> dict:
         """Submit one approved fixed-template 1xH100, 30-minute inference allocation."""
@@ -310,7 +311,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             workspace_id=workspace_id, stage_id=stage_id, experiment=experiment
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("scinet_record_approvals")
     def scinet_record_approvals(
         workspace_id: str, stage_id: str, reviewer: str, confirmation: str,
@@ -366,43 +367,43 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """Read full or sliced lines of a file, returning content and SHA-256."""
         return _read_file(workspace_id, path, start_line=start_line, end_line=end_line)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("write_file")
     def write_file(workspace_id: str, path: str, content: str, expected_sha256: Optional[str] = None) -> dict:
         """Write content to a file atomically with optional stale-file protection."""
         return _write_file(workspace_id, path, content, expected_sha256=expected_sha256)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("apply_patch")
     def apply_patch(workspace_id: str, patch: str) -> dict:
         """Apply a unified diff patch to the workspace."""
         return _apply_patch(workspace_id, patch)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("mkdir")
     def mkdir(workspace_id: str, path: str) -> dict:
         """Create a directory in the workspace."""
         return _mkdir(workspace_id, path)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("move_path")
     def move_path(workspace_id: str, source: str, destination: str) -> dict:
         """Move or rename a file or folder within the workspace."""
         return _move_path(workspace_id, source, destination)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("trash_path")
     def trash_path(workspace_id: str, path: str) -> dict:
         """Move a file to the recoverable .trash folder rather than permanently deleting it."""
         return _trash_path(workspace_id, path)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("exec_run")
     def exec_run(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 30, network_access: bool = False) -> dict:
         """Execute command synchronously inside bubblewrap; opt in to host network when needed."""
         return _exec_run(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("exec_start")
     def exec_start(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 300, network_access: bool = False) -> dict:
         """Start command asynchronously inside bubblewrap; opt in to host network when needed."""
@@ -426,13 +427,13 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """Retrieve full result and output of a job."""
         return job_manager.get_result(job_id, cursor=cursor, max_bytes=max_bytes)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("job_cancel")
     def job_cancel(job_id: str) -> dict:
         """Cancel a running job."""
         return job_manager.cancel(job_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("local_http_request")
     def local_http_request(workspace_id: str, port: int, method: str = "GET", path: str = "/", body: Optional[str] = None) -> dict:
         """Test a local application listening on loopback (127.0.0.1)."""
@@ -462,31 +463,31 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """Show git object or commit in the workspace (read-only)."""
         return _git_show(workspace_id, ref=ref)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_fetch")
     def git_fetch(workspace_id: str, remote: str = "origin") -> str:
         """Fetch branches and tags from remote repository."""
         return _git_fetch(workspace_id, remote=remote)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_pull")
     def git_pull(workspace_id: str, remote: str = "origin", branch: str = "") -> str:
         """Pull changes from remote repository into current branch."""
         return _git_pull(workspace_id, remote=remote, branch=branch)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_push")
     def git_push(workspace_id: str, remote: str = "origin", branch: str = "", set_upstream: bool = False) -> str:
         """Push local commits to remote repository."""
         return _git_push(workspace_id, remote=remote, branch=branch, set_upstream=set_upstream)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_commit")
     def git_commit(workspace_id: str, message: str, all_files: bool = False) -> str:
         """Commit changes with the specified commit message."""
         return _git_commit(workspace_id, message=message, all_files=all_files)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_add")
     def git_add(workspace_id: str, paths: list[str]) -> str:
         """Stage file paths for git commit."""
@@ -498,7 +499,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """List local and remote branches in workspace."""
         return _git_branch(workspace_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_checkout")
     def git_checkout(workspace_id: str, branch: str, create: bool = False) -> str:
         """Switch branches or create a new branch in workspace."""
@@ -522,7 +523,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """List available CLI agent workers (Codex, Claude, OpenCode, Agy)."""
         return _list_agents()
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("dispatch_agent")
     def dispatch_agent(
         agent: str,
@@ -533,8 +534,9 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         reasoning_effort: Optional[str] = None,
         allow_commit: bool = False,
         allow_push: bool = False,
+        read_only: bool = True,
     ) -> dict:
-        """Dispatch an authorized CLI agent worker asynchronously."""
+        """Dispatch a worker; read_only defaults to true. Explicitly opt in to edits."""
         return _dispatch_agent(
             agent=agent,
             task=task,
@@ -544,6 +546,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             reasoning_effort=reasoning_effort,
             allow_commit=allow_commit,
             allow_push=allow_push,
+            read_only=read_only,
         )
 
     context = {
@@ -699,13 +702,19 @@ def create_asgi_app(config: Config) -> ASGIApp:
             }
         }
         schema["security"] = [{"BearerAuth": []}]
-        # Every GPT Action offers persistent "Always allow" approval (Lennon's
-        # choice, 2026-10-09). Server-side workspace permissions, the offline
-        # sandbox default, and commit/push confirmation flags still apply.
+        # Never tell GPT Actions to silently approve mutating operations.
+        # Client approval is defense in depth, not a server-side human receipt.
+        safe_read_operations = {
+            "list_workspaces", "workspace_info", "list_files", "search_text",
+            "read_file", "git_status", "git_diff", "git_log", "git_show",
+            "list_agents", "job_status", "job_output", "job_result",
+        }
         for path_item in schema.get("paths", {}).values():
             for operation in path_item.values():
                 if isinstance(operation, dict) and "operationId" in operation:
-                    operation["x-openai-isConsequential"] = False
+                    operation["x-openai-isConsequential"] = (
+                        operation["operationId"] not in safe_read_operations
+                    )
         if config.server.action_prefix:
             for path in schema.get("paths", {}).values():
                 for operation in path.values():

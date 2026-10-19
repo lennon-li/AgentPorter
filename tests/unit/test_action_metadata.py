@@ -62,7 +62,7 @@ def test_action_metadata_config_override_and_workspace_permissions(tmp_path, mon
 
 
 @pytest.mark.parametrize("adapter_cls", [JaxAdapter, LizAdapter])
-@pytest.mark.parametrize("writable,allow_push", [(False, False), (True, False), (True, True)])
+@pytest.mark.parametrize("writable,allow_push", [(False, False), (True, False)])
 def test_broker_named_codex_controls(tmp_path, monkeypatch, adapter_cls, writable, allow_push):
     registry = WorkspaceRegistry({"repos": {"path": str(tmp_path), "writable": writable,
                                             "allow_agent_dispatch": True}})
@@ -78,11 +78,12 @@ def test_broker_named_codex_controls(tmp_path, monkeypatch, adapter_cls, writabl
     monkeypatch.setattr(adapter, "detect", lambda: {"is_installed": True,
         "configured_model": "gpt-6-luna", "reasoning_effort": "high"})
     broker.adapters = {adapter.name: adapter}
-    result = broker.dispatch_agent(adapter.name, "fixture task", "repos", allow_push=allow_push)
+    result = broker.dispatch_agent(adapter.name, "fixture task", "repos", allow_push=allow_push, read_only=not writable)
     command = jobs.command
     assert result["job_id"] == "recording-job"
     assert command[command.index("--sandbox") + 1] == ("workspace-write" if writable else "read-only")
-    assert ("sandbox_workspace_write.network_access=true" in command) is (writable and allow_push)
+    assert "sandbox_workspace_write.network_access=true" not in command
+    assert "sandbox_workspace_write.network_access=false" in command
 
 
 @pytest.mark.parametrize("adapter_cls", [JaxAdapter, LizAdapter])

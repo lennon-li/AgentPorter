@@ -40,13 +40,34 @@ def test_config():
 @pytest.fixture
 def client(test_config, monkeypatch):
     # Test REST/broker contracts, not a developer's installed or billed CLI.
-    monkeypatch.setattr(CodexAdapter, "detect", lambda self: {
-        "is_installed": True, "cli_version": "fixture", "provider": "OpenAI",
-        "configured_model": "gpt-6-luna", "reasoning_effort": "high",
-    })
-    monkeypatch.setattr(CodexAdapter, "build_argv", lambda self, **kwargs: [
-        sys.executable, "-c", "print('fixture worker completed')",
-    ])
+    # REST routing contract is tested with a neutral fake worker. Dedicated
+    # isolated_codex tests cover the real Codex launcher with Python -I.
+    from agentporter.agents.broker import AgentBroker
+
+    class FakeRESTWorker:
+        name = "codex"
+        alias = "Codex fixture"
+        provider = "OpenAI"
+        description = "No-model REST contract fixture"
+        supports_read_only = True
+        supports_model_override = True
+        supports_reasoning_override = True
+
+        def detect(self):
+            return {"is_installed": True, "cli_version": "fixture",
+                    "provider": "OpenAI", "configured_model": "gpt-6-luna",
+                    "reasoning_effort": "high"}
+
+        def capabilities(self):
+            return ["verification"]
+
+        def build_argv(self, **kwargs):
+            return [sys.executable, "-c", "print('fixture worker completed')"]
+
+    monkeypatch.setattr(
+        AgentBroker, "_configured_workers",
+        lambda self: ({"codex": FakeRESTWorker()}, {}),
+    )
     app = create_asgi_app(test_config)
     # The SecurityMiddleware is the outermost app, TestClient wraps it.
     with TestClient(app) as client:

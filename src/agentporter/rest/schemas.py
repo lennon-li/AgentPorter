@@ -106,7 +106,7 @@ class ArtifactContentResponse(BaseModel):
     truncated: Optional[bool] = Field(None, description="Whether content was truncated.")
 
 class AgentInfo(BaseModel):
-    agent: Optional[str] = Field(None, description="Agent identifier (e.g., codex, jax, liz, claude, opencode, copilot, agy).")
+    agent: Optional[str] = Field(None, description="Agent identifier (e.g., codex, jax, liz, prof, argie, claude, opencode, copilot, agy).")
     name: Optional[str] = Field(None, description="Agent name.")
     worker_cli: Optional[str] = Field(None, description="Worker CLI binary name.")
     alias: Optional[str] = Field(None, description="Agent persona or alias.")
@@ -122,6 +122,9 @@ class AgentInfo(BaseModel):
     isolation_note: Optional[str] = Field(None)
     effective_model: Optional[str] = Field(None)
     default_model: Optional[str] = Field(None)
+    supports_read_only: Optional[bool] = Field(None, description="Whether the adapter provides enforceable read-only mode.")
+    supports_model_override: Optional[bool] = Field(None)
+    supports_reasoning_override: Optional[bool] = Field(None)
 
 class DispatchResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -141,6 +144,7 @@ class DispatchResponse(BaseModel):
     cli_version: Optional[str] = Field(None, description="CLI version.")
     workspace_id: Optional[str] = Field(None, description="Target workspace ID.")
     git_clean_at_dispatch: Optional[bool] = Field(None, description="Whether git tree was clean.")
+    read_only: Optional[bool] = Field(None, description="Effective read-only policy for this worker dispatch.")
 
 
 # --- Requests ---
@@ -239,5 +243,6 @@ class DispatchAgentRequest(BaseModel):
     purpose: str = Field(default="", description="Context or purpose for the dispatch.")
     model: Optional[str] = Field(None, description="Specific LLM model to use (if applicable).")
     reasoning_effort: Optional[str] = Field(None, description="Reasoning effort level (e.g., 'high', 'low').")
-    allow_commit: bool = Field(False, description="Human confirmation that the agent may run git commit.")
-    allow_push: bool = Field(False, description="Human confirmation that the agent may git push to existing remotes.")
+    allow_commit: bool = Field(False, description="Reserved; worker commit remains blocked until server-side operator approval exists.")
+    allow_push: bool = Field(False, description="Reserved; worker push remains blocked until server-side operator approval exists.")
+    read_only: bool = Field(True, description="Enforce read-only execution; set false explicitly for authorized workspace edits.")

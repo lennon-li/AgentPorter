@@ -85,7 +85,7 @@ def test_list_agents_exposes_configured_and_effective_model(workspace_registry, 
 
 def test_dispatch_inherited_prohibited_model_uses_fallback(workspace_registry, tmp_path):
     broker, adapter = _fake_broker(workspace_registry, tmp_path)
-    result = broker.dispatch_agent("fake-openai", "test", "test-ws")
+    result = broker.dispatch_agent("fake-openai", "test", "test-ws", read_only=False)
 
     try:
         assert adapter.last_model == OPENAI_FALLBACK_MODEL
@@ -99,12 +99,12 @@ def test_dispatch_explicit_prohibited_model_is_rejected(workspace_registry, tmp_
     broker, _ = _fake_broker(workspace_registry, tmp_path)
 
     with pytest.raises(ValueError, match="prohibited"):
-        broker.dispatch_agent("fake-openai", "test", "test-ws", model="gpt-5.6-luna")
+        broker.dispatch_agent("fake-openai", "test", "test-ws", model="gpt-5.6-luna", read_only=False)
 
 
 def test_dispatch_explicit_allowed_model_is_preserved(workspace_registry, tmp_path):
     broker, adapter = _fake_broker(workspace_registry, tmp_path)
-    result = broker.dispatch_agent("fake-openai", "test", "test-ws", model="gpt-6-luna")
+    result = broker.dispatch_agent("fake-openai", "test", "test-ws", model="gpt-6-luna", read_only=False)
 
     try:
         assert adapter.last_model == "gpt-6-luna"

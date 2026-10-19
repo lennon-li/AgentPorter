@@ -20,6 +20,7 @@ def dispatch_agent(workspace_id: str, req: DispatchAgentRequest, request: Reques
             reasoning_effort=req.reasoning_effort,
             allow_commit=req.allow_commit,
             allow_push=req.allow_push,
+            read_only=req.read_only,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

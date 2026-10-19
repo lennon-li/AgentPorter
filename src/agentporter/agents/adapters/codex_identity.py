@@ -80,8 +80,8 @@ class NamedCodexAdapter(CodexAdapter):
 
         policy = policy or ExecutionPolicy.for_workspace(writable=writable)
         sandbox = "workspace-write" if policy.workspace_write else "read-only"
-        # The workspace-write sandbox has no network, so a confirmed push needs it enabled.
-        network = ["-c", "sandbox_workspace_write.network_access=true"] if policy.git_push else []
+        # Override inherited settings even when config enables network access.
+        network = ["-c", "sandbox_workspace_write.network_access=false"]
 
         cmd = [
             "env",
