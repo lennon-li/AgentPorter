@@ -109,7 +109,7 @@ def doctor(config_dir):
 
     # 5. Worker Agents
     job_mgr = JobManager(cfg.state_dir)
-    broker = AgentBroker(registry, job_mgr)
+    broker = AgentBroker(registry, job_mgr, config_dir=cfg.config_dir)
     agents = broker.list_agents()
     click.echo(f"\nDetected Worker Agents ({len(agents)}):")
     for ag in agents:
@@ -225,7 +225,7 @@ def agents(config_dir):
     cfg = Config(config_dir=config_dir)
     registry = WorkspaceRegistry(cfg.workspaces)
     job_mgr = JobManager(cfg.state_dir)
-    broker = AgentBroker(registry, job_mgr)
+    broker = AgentBroker(registry, job_mgr, config_dir=cfg.config_dir)
     for ag in broker.list_agents():
         click.echo(f"Agent: {ag['agent']} ({ag['alias']})")
         click.echo(f"  Provider:         {ag['provider']}")

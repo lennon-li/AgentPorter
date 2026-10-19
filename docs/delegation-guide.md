@@ -82,13 +82,21 @@ plugin dependencies from a failure that persists in the runtime itself. Do not
 diagnose an authentication or model failure when startup was blocked first, weaken
 the worker's permissions, or claim another worker's success verifies Wei.
 
-Prof is available as `prof`, bound exclusively to the host user's `~/.codex-prof`
-profile. Its `config.toml` and `auth.json` must both exist for discovery to report
-it available. An absent Prof profile never falls back to Jax or Liz. Leave `model`
-unset to preserve Prof's account-specific CLI default; a missing configured model
-is reported as `unknown`, not an invented model selector. Explicit allowed model
-and reasoning overrides remain supported. Prof inherits the same workspace write,
-read-only, and publication controls as the other named Codex workers.
+Built-in Prof (`prof`) uses `~/.codex-prof` and built-in Wei (`wei`)
+uses the dedicated free-model OpenCode credential policy. Older operator
+configurations may contain `prof: {runtime: codex}` and
+`wei: {runtime: opencode}`. These two legacy entries are accepted
+**as identity metadata only**: dispatch continues through the protected
+built-in Prof/Wei adapters rather than silently weakening their account or
+free-model restrictions. All other redirects of registered worker names are
+rejected. To keep a separately billed OpenCode Go route, configure a distinct
+identity such as `wei-go: {runtime: opencode}` explicitly in owner-controlled
+`agents.yaml`, and inspect its model/provider before delegation.
+Do not assume the previous `wei` alias still selects OpenCode Go.
+Built-in Prof requires its own `config.toml` and `auth.json` for
+availability. Omit `model` to preserve the worker's configured model;
+missing values remain `unknown`, not invented.
+Dispatch still enforces workspace/task read-only and publication controls.
 
 Argie may be configured as a private `argie` identity in `agents.yaml`; the
 underlying `agy` identifier remains available. AgentPorter does not reserve

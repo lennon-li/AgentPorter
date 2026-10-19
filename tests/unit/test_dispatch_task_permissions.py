@@ -116,3 +116,69 @@ def test_missing_private_argie_does_not_invent_an_identity(tmp_path, monkeypatch
     assert "agy" in adapters
     assert "argie" not in adapters
     assert "argie" not in identities
+
+
+def test_legacy_named_workers_remain_compatible_with_new_builtins(tmp_path, monkeypatch):
+    # Asgard configured Wei/Prof before they became built-in adapters. The
+    # explicit trusted aliases must win so account/model routing is preserved.
+    monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(tmp_path / "host-should-not-win"))
+    config_dir = tmp_path / "selected"
+    config_dir.mkdir()
+    (config_dir / "agents.yaml").write_text(
+        "agents:\n"
+        "  wei:\n    runtime: opencode\n    alias: Wei Go\n"
+        "  prof:\n    runtime: codex\n    alias: Prof Legacy\n"
+        "  argie:\n    runtime: agy\n    alias: Argie\n"
+    )
+    gateway = AgentBroker(SimpleNamespace(get=lambda _: None), Mock(), config_dir=config_dir)
+    adapters, identities = gateway._configured_workers()
+    assert adapters["wei"] is gateway.adapters["wei"]
+    assert identities["wei"][0] == "opencode"
+    assert identities["wei"][1] == "Wei Go"
+    assert adapters["prof"] is gateway.adapters["prof"]
+    assert adapters["argie"] is gateway.adapters["agy"]
+    assert gateway.adapters["wei"] is not gateway.adapters["opencode"]
+    assert gateway.list_agents()  # Live identity discovery must not abort.
+
+
+def test_other_builtin_redirects_still_fail_closed(tmp_path):
+    (tmp_path / "agents.yaml").write_text(
+        "agents:\n  codex:\n    runtime: claude\n"
+    )
+    gateway = AgentBroker(SimpleNamespace(get=lambda _: None), Mock(), config_dir=tmp_path)
+    with pytest.raises(ValueError, match="cannot redirect"):
+        gateway._configured_workers()
+
+
+def test_explicit_configuration_shields_broker_from_invalid_host_config(tmp_path, monkeypatch):
+    host = tmp_path / "host"
+    host.mkdir()
+    (host / "agents.yaml").write_text("agents:\n  jax:\n    runtime: claude\n")
+    monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(host))
+    selected = tmp_path / "selected"
+    selected.mkdir()
+    gateway = AgentBroker(SimpleNamespace(get=lambda _: None), Mock(), config_dir=selected)
+    adapters, identities = gateway._configured_workers()
+    assert "jax" in adapters
+    assert identities == {}
+
+
+def test_legacy_wei_alias_cannot_bypass_free_model_policy(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "agents.yaml").write_text(
+        "agents:\n  wei:\n    runtime: opencode\n    alias: Legacy Wei Go\n"
+    )
+    ws = SimpleNamespace(path=str(tmp_path), writable=True, allow_agent_dispatch=True)
+    jobs = Mock()
+    gateway = AgentBroker(SimpleNamespace(get=lambda _: ws), jobs)
+    wei = gateway.adapters["wei"]
+    monkeypatch.setattr(wei, "detect", lambda: {
+        "is_installed": True, "configured_model": wei.default_model,
+        "provider": "opencode", "reasoning_effort": "unknown", "cli_version": "fixture",
+    })
+    with pytest.raises(ValueError, match="free OpenCode models"):
+        gateway.dispatch_agent(
+            "wei", "do not execute", "test", read_only=False,
+            model="opencode-go/glm-5.3-flash",
+        )
+    jobs.start_raw_job.assert_not_called()

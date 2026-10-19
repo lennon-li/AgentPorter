@@ -141,3 +141,19 @@ def test_cli_key_rotate(tmp_path: Path):
     assert "old-key-123" not in content
     assert "AGENTPORTER_API_KEY=" in content
 
+
+
+def test_explicit_cli_config_dir_ignores_conflicting_host_agents_yaml(tmp_path, monkeypatch):
+    # CLI --config-dir must take precedence over the user's actual agents.yaml.
+    host = tmp_path / "host"
+    host.mkdir()
+    (host / "agents.yaml").write_text(
+        "agents:\n  codex:\n    runtime: claude\n"
+    )
+    monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(host))
+    selected = tmp_path / "selected"
+    selected.mkdir()
+    runner = CliRunner()
+    for verb in ("agents", "doctor"):
+        result = runner.invoke(main, [verb, "--config-dir", str(selected)])
+        assert result.exit_code == 0, (verb, repr(result.exception), result.output[-800:])

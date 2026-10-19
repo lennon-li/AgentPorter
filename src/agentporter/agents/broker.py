@@ -31,9 +31,18 @@ OPENAI_FALLBACK_MODEL = "gpt-6-luna"
 class AgentBroker:
     """Manages agent discovery, capability enforcement, and asynchronous delegation."""
 
-    def __init__(self, workspace_registry: WorkspaceRegistry, job_manager: JobManager):
+    def __init__(
+        self,
+        workspace_registry: WorkspaceRegistry,
+        job_manager: JobManager,
+        *,
+        config_dir: Optional[str | os.PathLike] = None,
+    ):
         self.workspace_registry = workspace_registry
         self.job_manager = job_manager
+        # An explicitly selected AgentPorter configuration takes precedence
+        # over host environment or HOME, including for CLI diagnostics/tests.
+        self.config_dir = os.fspath(config_dir) if config_dir is not None else None
         self.adapters: Dict[str, AgentAdapter] = {
             "codex": CodexAdapter(),
             "jax": JaxAdapter(),
@@ -54,7 +63,7 @@ class AgentBroker:
         # Explicit private identities retain precedence; do not claim "argie"
         # by default because existing profiles may map it to another runtime.
         adapters, identities = dict(self.adapters), {}
-        config_dir = os.environ.get("AGENTPORTER_CONFIG_DIR") or os.path.join(
+        config_dir = self.config_dir or os.environ.get("AGENTPORTER_CONFIG_DIR") or os.path.join(
             os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "agentporter"
         )
         try:
@@ -75,15 +84,22 @@ class AgentBroker:
             runtime = spec.get("runtime")
             if not isinstance(runtime, str) or runtime not in self.adapters:
                 raise ValueError("agent identity runtime must name an existing adapter")
-            if name in adapters and adapters[name] is not self.adapters[runtime]:
-                raise ValueError("agent identities cannot redirect an existing adapter")
             adapter = self.adapters[runtime]
+            if name in adapters and adapters[name] is not adapter:
+                # Older installations defined Wei/Prof before they became
+                # built-ins. Accept their old metadata, but NEVER replace
+                # the built-in adapters' account or model restrictions.
+                if (name, runtime) in {("wei", "opencode"), ("prof", "codex")}:
+                    adapter = adapters[name]
+                else:
+                    raise ValueError("agent identities cannot redirect an existing adapter")
             alias = spec.get("alias", name)
             role = spec.get("description", adapter.description)
             persona = spec.get("persona_reference", "")
             if any(not isinstance(value, str) for value in (alias, role, persona)) or not alias.strip():
                 raise ValueError("agent identity metadata must be text with a nonempty alias")
-            cli = "codex" if isinstance(adapter, CodexAdapter) else adapter.name
+            cli = ("codex" if isinstance(adapter, CodexAdapter) else
+                   "opencode" if isinstance(adapter, OpenCodeAdapter) else adapter.name)
             adapters[name] = adapter
             identities[name] = (cli, alias, role, persona)
         return adapters, identities

@@ -44,7 +44,8 @@ def test_wei_rejects_nonfree_and_insecure_credential(tmp_path, monkeypatch):
     assert adapter.detect()["credential_ready"] is False
 
 
-def test_wei_reports_its_opencode_runtime(monkeypatch):
+def test_wei_reports_its_opencode_runtime(monkeypatch, tmp_path):
+    monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(tmp_path))
     adapter = WeiAdapter(executable_override="/bin/echo")
     monkeypatch.setattr(adapter, "detect", lambda: {
         "is_installed": True,
