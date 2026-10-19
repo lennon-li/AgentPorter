@@ -21,7 +21,66 @@ AgentPorter runs under a host user with writeable repositories, model credential
 | APPROVAL | Require separate human-verifiable receipt bound to exact operation and target | remote fetch/pull, local HTTP POST, cluster submit |
 | LOCKED | Never execute until explicit authorization machinery and isolation exist; fail closed | Git commit/push and untrusted publication |
 
-The complete **53-operation mapping** is in [agent-roster-action-policy.md](agent-roster-action-policy.md). No unknown new action inherits ALLOW.
+The complete **53-operation mapping** in [agent-roster-action-policy.md](agent-roster-action-policy.md) defines overridable defaults. No unknown new action inherits ALLOW, and strictly excluded host capabilities have no public action ID.
+
+## Owner-configurable exposure and authorization policy
+
+The complete 53-action matrix defines **shipped defaults, not immutable owner
+preferences**. Every action that AgentPorter intentionally exposes through MCP
+may have its mode independently overridden by an authenticated operator:
+ALLOW, SCOPE, APPROVAL, or LOCKED. Overrides can further narrow to workspace,
+named worker, path, endpoint, or Git target. Precedence is an exact scoped
+override, then an action override, then the shipped default; more specific
+deny rules win on conflict. The operator policy resides in an access-controlled
+store **outside all agent-writable workspaces**, versioned and audited. Merely
+editing repository documentation, a config file accessible to a worker, or
+sending an MCP request must never change policy.
+
+Example **proposed configuration contract** (not recognized by the current
+server and not a mechanism to grant access today):
+
+```yaml
+version: 1
+default_on_unknown_action: deny
+action_modes:
+  read_file: ALLOW
+  dispatch_agent: SCOPE
+  git_commit: APPROVAL
+  git_push: APPROVAL
+scoped_modes:
+  - action: dispatch_agent
+    workspace_id: Qman
+    agent: jax
+    mode: SCOPE
+```
+
+Permission mode is **distinct from a hard technical safety invariant**.
+Changing `git_push` from LOCKED to APPROVAL can request a publication flow
+only *after* the separately controlled publisher and signed one-use receipt
+issuer exist; it cannot authorize direct host Git, expose credentials, or
+unlock a missing backend. Neither ALLOW nor any more permissive override
+can disable path confinement, sandboxing, receipt requirements imposed by
+sensitive execution backends, or transaction integrity. The server must
+report `blocked_backend_unavailable` rather than pretend a policy override
+succeeded. The current implementation remains fail-closed.
+
+**Excluded actions have no configurable mode and no public registration.**
+Host/root/system administration (including sudo, systemctl, service restart,
+OS package installation, account management, agent-triggered release
+activation), arbitrary SSH/host shell, credential export, force-push,
+destructive ref rewriting, and forged approvals must be absent from all
+MCP discovery and REST/OpenAPI catalogs. An owner who needs host maintenance
+runs a **separate human-owned administrative workflow**, not an MCP policy
+override. Maintain a negative registry/contract test so the server fails
+build or startup on accidentally exposed host administration endpoints.
+Indirect access through exec, loopback, and worker CLIs requires OS-level
+containment; hiding tool names is insufficient.
+
+A complete implementation must atomically validate operator identity,
+override revision, action and scope, independent approval proof (if required),
+and backend technical capability, and log the effective decision. Unknown
+action IDs and invalid modes fail closed. No deployed action becomes
+unrestricted simply because the policy store is missing or unreadable.
 
 ## Required approval receipt
 
@@ -73,7 +132,7 @@ The server verifies signature, audience, freshness, immutable target, permitted 
 
 **Phase 1 (this candidate):** seven-name public allowlist, live inventory, 53-action classification and regression coverage; dedicated Git commit/push endpoints locked; fix Git fetch read-only, pull fast-forward-only, bounded synchronous and asynchronous output and MCP ingress cap. No claim of full permission enforcement.
 
-**Phase 2:** trusted approval issuer and one-time signed receipt verification, explicit server audit ledger, centralized action evaluator. Keep hard publication locks.
+**Phase 2:** protected operator-owned action-mode override store for all 53 exposed actions, trusted approval issuer and one-time signed receipt verification, explicit server audit ledger, centralized action evaluator. Keep publication technically locked until the publisher and approval backend exist, regardless of configured mode.
 
 **Phase 3:** OS-confined workers and generic execution with host credentials isolated. Only then enable receipt-gated commit/push; demonstrate negative tests under every runtime, including Wei and Argie.
 
