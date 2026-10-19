@@ -37,6 +37,46 @@ currently launches as the Asgard host user; AgentPorter does not give delegated
 CLIs an independent Linux/container security boundary. Only the Codex family
 reports enforced read-only delegation.
 
+## Operator-overridable matrix; non-exposed host capabilities
+
+**All 53 public actions have operator-overridable *default policy modes*.**
+The ALLOW / SCOPE / APPROVAL / LOCKED entries below are shipped defaults,
+not an immutable list of owner permissions. An authenticated operator may
+configure a stricter or more permissive mode for any exposed action, including
+the two Git publication actions, when the required enforcement backend exists.
+Overrides are per exact action, workspace and, when appropriate, named agent.
+They are not permissions that a model, worker, MCP client, chat message, or
+repository file can grant itself.
+
+**Policy override is not a bypass of execution prerequisites.** Even after
+changing a default, AgentPorter must still enforce workspace confinement,
+path/command scoping, credential isolation, trusted short-lived approval receipts
+where needed, and the independent Git publisher for remote publication.
+Until the trusted authorizer and confined worker/publisher components exist,
+an override of a presently LOCKED action remains *ineffective* (fail closed);
+no API boolean or editable YAML file may lift these technical gates.
+Operator policy changes belong in a protected control plane outside
+agent-writable workspaces, with authenticated changes, validation, an audit
+trail, atomic versioning, and a safe rollback. The override mechanism is
+**specified but not yet implemented**.
+
+**Hard-excluded capabilities are not matrix rows and are not MCP/REST actions.**
+Do not register host `sudo`, `systemctl` service management/restarts,
+root or OS/package administration, account/permission changes, arbitrary host
+SSH/shell, credential export, uncontrolled deployment, force-push or destructive
+ref rewriting, or manufacturing approvals as public tools. These operations
+must be absent from MCP discovery and OpenAPI, not merely marked LOCKED or
+hidden with an annotation. Any separate human-owned system administration
+workflow stays outside AgentPorter's exposed agent interface. Generic
+execution and delegated CLIs must not offer an indirect path to them; enforce
+that with kernel-backed isolation, not command-string filters.
+
+**Effective decision** = a recognized public action + operator-configured
+mode + verified caller/scope/receipt + non-overridable backend security gates.
+Unknown actions fail closed; modifying this document does not alter runtime
+authorization. In particular, the candidate's current delegation gate remains
+closed while the confined launcher is missing.
+
 ## Permission modes (proposed)
 
 - **ALLOW:** Read-only introspection in a workspace already authorized by the owner;
@@ -51,17 +91,20 @@ reports enforced read-only delegation.
   verification exists. A UI `Always ask` prompt does not provide an API-level
   proof of owner approval.
 
-These are **desired policy decisions**, not existing end-to-end enforcement.
+These are **initial configurable policy decisions**, not existing end-to-end enforcement.
 In this candidate only the dedicated direct `git_commit` and `git_push`
 tools are locked (MCP and REST). **This is not a global Git publication
-block:** general-purpose `exec_run`/`exec_start` tools, writable agents,
-network-enabled execution and external services can still change repository
-metadata or publish indirectly. The future authorizer must cover those paths
+block:** general-purpose `exec_run`/`exec_start` tools and external services can still
+write workspace content and could indirectly change Git metadata without further
+OS hardening. Generic network-enabled execution and host-user agent dispatch
+are deliberately denied in this candidate. The future authorizer must cover those paths
 with OS-enforced restrictions or isolated execution identities. The current
 ChatGPT `Always ask` connector setting is a separate, client-side layer.
 This candidate must not be represented as voice-approval-ready.
 
 ## Exhaustive live action inventory (53 MCP tools)
+
+The mode column is the **initial configurable default**, not a permanent restriction. The protected operator control plane (not yet implemented) will own overrides.
 
 | Action | Recommended mode | Boundary / reason |
 | --- | --- | --- |
@@ -97,7 +140,7 @@ This candidate must not be represented as voice-approval-ready.
 | `mkdir` | **SCOPE** | Explicit writable workspace/path. |
 | `move_path` | **SCOPE** | Explicit writable workspace; conflict guard. |
 | `trash_path` | **SCOPE** | Recoverable trash only; no permanent delete. |
-| `exec_run` | **SCOPE** | Bubblewrap sandbox; MCP defaults offline, REST currently defaults online. Arbitrary commands may write/publish; future scope gate required. |
+| `exec_run` | **SCOPE** | Bubblewrap sandbox; MCP and REST default offline; attempts to enable generic networking are rejected. Arbitrary commands may write workspace content; future scope gate required. |
 | `exec_start` | **SCOPE** | Same as exec_run; keep job ID and bounded lifetime. |
 | `job_cancel` | **SCOPE** | Only authorized job; report actual cancellation state. |
 | `git_add` | **SCOPE** | Stage only exact approved paths; no commit. |
@@ -119,16 +162,21 @@ This candidate must not be represented as voice-approval-ready.
 | `git_push` | **LOCKED** | Dedicated API endpoint denied by default; networked shell/worker bypass remains until full gate. |
 | `scinet_record_approvals` | **APPROVAL** | Existing per-stage, per-experiment fixed-reviewer confirmation mechanism; never treat speech or worker text as human approval. |
 
-## Permanently prohibited capabilities
+## Permanently excluded capabilities (not operator-overridable)
 
-Unrestricted host shell, arbitrary SSH to private systems, sudo/root/system changes,
-credential or token disclosure, workspace traversal, installing hidden MCP servers,
-inherited privileged plugin execution, `git push --force`, destructive branch
-rewrites, bypassing a model/account policy, and manufacturing human approvals
-must **never** be exposed as general agent actions. These are not standalone public capabilities in the
-53-action MCP list. **Not all equivalent shell/worker actions are currently
-OS-blocked**; unrestricted networked execution and host-user CLI delegation
-remain residual risks. This is a policy goal, not a claim of enforcement.
+Unrestricted host shell, arbitrary SSH to private systems, sudo/root/system
+changes, account and package administration, credential or token disclosure,
+workspace traversal, installing hidden MCP servers, inherited privileged
+plugin execution, `git push --force`, destructive branch rewrites, bypassing
+model/account policy, and manufacturing human approvals must **never be public
+MCP/REST operations**. They are not among the 53 public action names, and no
+operator override may turn an excluded capability into a new public action.
+
+Absence from discovery alone does not guarantee containment: a generic shell,
+local loopback service or host-user worker could still provide indirect access
+without OS-enforced isolation. The candidate blocks generic outbound networking
+and unconfined worker launches, but independent attack testing and complete
+authorization are still required before production activation.
 
 The [operator-verified authorization design](action-authorization-design.md)
 specifies the additional server-side receipt and OS containment required to
@@ -153,6 +201,11 @@ turn this classification into enforceable voice-driven permissions.
    and forged approval/commit/push requests. Independent audit required.
 7. Activate with the trusted immutable deployment gate, and compare live
    release fingerprint, actual agent roster, and operation behavior.
+8. Build the protected operator-owned override policy store; cover all 53
+   actions, default to the shipped modes, reject unknown action IDs, and deny
+   attempts to introduce hard-excluded host operations into MCP or REST.
+9. Test both policy overrides and runtime invariant gates; a more permissive
+   requested mode must not bypass confinement, receipt checking, or publication.
 
 ### Catalog integrity
 
