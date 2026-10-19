@@ -46,3 +46,7 @@ scinet:
   # Full Experiment A/B submission stays off unless a human enables it here.
   # training_allow_full_runs: false
   # training_full_walltime: "02:00:00"
+
+# Optional keyless web_search/web_fetch for Jax, Liz, Prof, Phil, and Wei.
+parallel_search:
+  enabled: false

@@ -106,9 +106,11 @@ class SecurityMiddleware:
             return
 
         if scope.get("method", "GET").upper() in {"POST", "PUT", "PATCH"}:
-            # MCP Streamable HTTP may keep a POST request body open while the
-            # server handles the session. Do not wait for end-of-body on MCP;
-            # that would deadlock the transport and block the event loop.
+            # The MCP SDK's RequestBodyLimitMiddleware enforces a byte cap
+            # before Starlette's response machinery, including chunked
+            # requests without Content-Length. Raising from downstream
+            # receive() here would be misreported as HTTP 500 by Starlette.
+            # Do not prebuffer or wait for EOF in this outer middleware.
             if scope.get("path") in {"/mcp", "/mcp/"}:
                 await self.app(scope, receive, send)
                 return

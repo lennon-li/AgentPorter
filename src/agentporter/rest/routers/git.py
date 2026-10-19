@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from typing import Dict, Any, Optional
 from agentporter.rest.schemas import (
     GitDiffRequest, GitLogRequest, GitShowRequest,
@@ -33,15 +33,23 @@ def git_fetch(workspace_id: str, req: GitFetchRequest, request: Request):
 def git_pull(workspace_id: str, req: GitPullRequest, request: Request):
     return request.app.state.tools["git_pull"](workspace_id=workspace_id, remote=req.remote, branch=req.branch)
 
-@router.post("/push", response_model=str)
+@router.post("/push", response_model=str, responses={403: {"description": "Operator approval required; publication locked"}})
 def git_push(workspace_id: str, req: GitPushRequest, request: Request):
-    return request.app.state.tools["git_push"](
-        workspace_id=workspace_id, remote=req.remote, branch=req.branch, set_upstream=req.set_upstream
-    )
+    try:
+        return request.app.state.tools["git_push"](
+            workspace_id=workspace_id, remote=req.remote, branch=req.branch, set_upstream=req.set_upstream
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-@router.post("/commit", response_model=str)
+@router.post("/commit", response_model=str, responses={403: {"description": "Operator approval required; publication locked"}})
 def git_commit(workspace_id: str, req: GitCommitRequest, request: Request):
-    return request.app.state.tools["git_commit"](workspace_id=workspace_id, message=req.message, all_files=req.all_files)
+    try:
+        return request.app.state.tools["git_commit"](
+            workspace_id=workspace_id, message=req.message, all_files=req.all_files
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 @router.post("/add", response_model=str)
 def git_add(workspace_id: str, req: GitAddRequest, request: Request):

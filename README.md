@@ -88,6 +88,8 @@ agentporter serve --host 127.0.0.1 --port 8765
 - [Deployment and verified activation](docs/deployment.md)
 - [MCP clients](docs/mcp-clients.md)
 - [Worker delegation guide](docs/delegation-guide.md)
+- [Named-agent roster and action authorization matrix](docs/agent-roster-action-policy.md)
+- [AgentPorter branch/worktree cleanup and recovery manifest](docs/repository-cleanup-20261019.md)
 - [Microsoft Copilot Studio](docs/copilot-studio.md)
 - [Roadmap / TODO](TODO.md)
 

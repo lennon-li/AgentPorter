@@ -65,6 +65,9 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
 
     def git_fetch(workspace_id: str, remote: str = "origin") -> str:
         ws = _workspace(workspace_id)
+        # Fetch mutates FETCH_HEAD, refs and objects: never allowed in RO.
+        if not ws.writable:
+            raise PermissionError(f"Workspace '{workspace_id}' is read-only")
         clean_remote = remote.strip()
         if not clean_remote or clean_remote.startswith("-") or len(clean_remote) > 256:
             raise ValueError("Invalid remote")
@@ -78,7 +81,9 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         clean_remote = remote.strip()
         if not clean_remote or clean_remote.startswith("-") or len(clean_remote) > 256:
             raise ValueError("Invalid remote")
-        args = ["pull", clean_remote]
+        # Prevent implicit merge commits in the caller's workspace.
+        # Diverged branches require a separately reviewed reconciliation.
+        args = ["pull", "--ff-only", clean_remote]
         if branch.strip():
             clean_branch = branch.strip()
             if clean_branch.startswith("-") or len(clean_branch) > 256:
@@ -88,7 +93,12 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         return out if out.strip() else "Pull completed successfully."
 
     def git_push(workspace_id: str, remote: str = "origin", branch: str = "", set_upstream: bool = False) -> str:
-        ws = _workspace(workspace_id)
+        # Fail closed at the shared tool boundary reached by MCP and REST.
+        # A caller's tool permission/voice request is NOT a verified approval.
+        raise PermissionError(
+            "Git push is locked until a server-verified, scoped human approval "
+            "receipt is implemented"
+        )
         if not ws.writable:
             raise PermissionError(f"Workspace '{workspace_id}' is read-only")
         clean_remote = remote.strip()
@@ -107,7 +117,11 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         return out if out.strip() else f"Pushed to {clean_remote} successfully."
 
     def git_commit(workspace_id: str, message: str, all_files: bool = False) -> str:
-        ws = _workspace(workspace_id)
+        # Same fail-closed boundary as git_push; no untrusted boolean override.
+        raise PermissionError(
+            "Git commit is locked until a server-verified, scoped human approval "
+            "receipt is implemented"
+        )
         if not ws.writable:
             raise PermissionError(f"Workspace '{workspace_id}' is read-only")
         clean_msg = message.strip()

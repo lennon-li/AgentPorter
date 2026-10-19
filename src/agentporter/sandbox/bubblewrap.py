@@ -1,6 +1,7 @@
 """Bubblewrap (bwrap) unprivileged namespace sandbox backend."""
 
 import os
+import selectors
 import time
 import shutil
 import signal
@@ -68,6 +69,15 @@ class BubblewrapSandbox(SandboxBackend):
         sub_cwd: str = "",
         network_access: bool = False,
     ) -> list[str]:
+        # Until a separate trusted approval issuer and constrained egress broker
+        # exist, generic execution is deliberately offline. An API Boolean is
+        # not proof of human authorization and must never expose host SSH/GH
+        # credentials to arbitrary sandbox code.
+        if network_access:
+            raise PermissionError(
+                "Networked generic execution requires independently verified "
+                "approval and scoped egress; unavailable"
+            )
         real_workspace = os.path.realpath(workspace_path)
         if not os.path.isdir(real_workspace):
             raise ValueError(f"Workspace path does not exist: {real_workspace}")
@@ -106,11 +116,8 @@ class BubblewrapSandbox(SandboxBackend):
             if os.path.exists(opt_dir):
                 args.extend(["--ro-bind", opt_dir, opt_dir])
 
-        host_home = os.path.expanduser("~")
-        gitconfig_path = os.path.join(host_home, ".gitconfig")
-        if os.path.isfile(gitconfig_path):
-            args.extend(["--ro-bind", gitconfig_path, "/tmp/.gitconfig"])
-
+        # A generic shell must not inherit host Git configuration (credential
+        # helpers, hooks, or privileged includes).
         # Expose the explicitly supported development tools through read-only
         # mounts while keeping the host PATH and home directory isolated.
         add_tooling_mounts(args)
@@ -121,31 +128,19 @@ class BubblewrapSandbox(SandboxBackend):
             "/workspace",
             "--unshare-all",
         ])
-        if network_access:
-            args.append("--share-net")
-            ssh_dir = os.path.join(host_home, ".ssh")
-            if os.path.isdir(ssh_dir):
-                args.extend(["--dir", "/tmp/.ssh"])
-                for fname in sorted(os.listdir(ssh_dir)):
-                    fpath = os.path.join(ssh_dir, fname)
-                    if os.path.isfile(fpath) and not fname.endswith("~") and not fname.endswith(".bak"):
-                        args.extend(["--ro-bind", fpath, f"/tmp/.ssh/{fname}"])
-
-            gh_config_dir = os.path.join(host_home, ".config", "gh")
-            if os.path.isdir(gh_config_dir):
-                args.extend(["--dir", "/tmp/.config", "--ro-bind", gh_config_dir, "/tmp/.config/gh"])
-
-            local_bin = os.path.join(host_home, ".local", "bin")
-            if os.path.isdir(local_bin):
-                args.extend(["--ro-bind", local_bin, local_bin])
-
-            ssh_auth_sock = os.environ.get("SSH_AUTH_SOCK")
-            if ssh_auth_sock and os.path.exists(ssh_auth_sock):
-                args.extend(["--bind", ssh_auth_sock, ssh_auth_sock])
-        else:
-            args.append("--unshare-net")
-
-        path_env = "/home/yeli/.local/bin:/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin" if (network_access and os.path.isdir(os.path.join(host_home, ".local", "bin"))) else "/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin"
+        # Overmount a Git repository's control directory/file as read-only.
+        # This is defense in depth, not an authorization boundary for nested
+        # repositories, hardlinks, worker CLI access or external publishers.
+        git_metadata = os.path.join(real_workspace, ".git")
+        if os.path.islink(git_metadata):
+            raise PermissionError("Symlinked .git metadata unsupported in generic execution")
+        if os.path.lexists(git_metadata):
+            args.extend(["--ro-bind", git_metadata, "/workspace/.git"])
+        # No host SSH/gh/agent socket mounts under any generic execution mode.
+        # Network-dependent operations must use independently approved,
+        # purpose-built tools, never host-user credential inheritance.
+        args.append("--unshare-net")
+        path_env = "/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin"
 
         args.extend([
             "--clearenv",
@@ -156,9 +151,6 @@ class BubblewrapSandbox(SandboxBackend):
             "--setenv", "LC_ALL", "C.UTF-8",
             "--setenv", "LANG", "C.UTF-8",
         ])
-        if network_access and os.environ.get("SSH_AUTH_SOCK") and os.path.exists(os.environ["SSH_AUTH_SOCK"]):
-            args.extend(["--setenv", "SSH_AUTH_SOCK", os.environ["SSH_AUTH_SOCK"]])
-
         args.extend(["--chdir", target_cwd])
         return args
 
@@ -178,6 +170,12 @@ class BubblewrapSandbox(SandboxBackend):
         max_output_bytes: int | None = None,
         network_access: bool = False,
     ) -> dict:
+        """Run a bounded command without ever accumulating unbounded pipe output.
+
+        stdout/stderr are drained concurrently, each capped to output_limit.
+        When either stream exceeds its budget, terminate the process group
+        instead of reading all data and truncating after collection.
+        """
         if not argv or not isinstance(argv, list) or not all(isinstance(x, str) and x for x in argv):
             raise ValueError("argv must be a non-empty list of non-empty strings")
 
@@ -191,55 +189,124 @@ class BubblewrapSandbox(SandboxBackend):
         ) + ["--"] + argv
 
         t0 = time.time()
+        deadline = time.monotonic() + timeout
         proc = None
+        streams = {"stdout": bytearray(), "stderr": bytearray()}
+        exceeded_stream = None
+        timed_out = False
+        selector = None
+
+        def stop_group() -> None:
+            if proc is None:
+                return
+            try:
+                # Popen(process_group=0) makes a dedicated group for this job.
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except OSError:
+                if proc.poll() is None:
+                    proc.kill()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=2)
+
         try:
             proc = subprocess.Popen(
                 full_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
                 process_group=0,
             )
-            stdout, stderr = proc.communicate(timeout=timeout)
-            exit_code = proc.returncode
-            timed_out = False
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            if proc:
-                try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                except Exception:
-                    pass
-                stdout, stderr = proc.communicate()
+            selector = selectors.DefaultSelector()
+            for name in ("stdout", "stderr"):
+                pipe = getattr(proc, name)
+                os.set_blocking(pipe.fileno(), False)
+                selector.register(pipe, selectors.EVENT_READ, name)
+
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    break
+                ready = selector.select(remaining)
+                if not ready:
+                    if time.monotonic() >= deadline:
+                        timed_out = True
+                        break
+                    continue
+                for key, _ in ready:
+                    pipe = key.fileobj
+                    try:
+                        chunk = os.read(pipe.fileno(), 64 * 1024)
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        selector.unregister(pipe)
+                        pipe.close()
+                        continue
+                    name = key.data
+                    available = output_limit - len(streams[name])
+                    streams[name].extend(chunk[:available])
+                    if len(chunk) > available:
+                        exceeded_stream = name
+                        break
+                if exceeded_stream is not None:
+                    break
+
+            if timed_out or exceeded_stream is not None:
+                stop_group()
+                exit_code = 124 if timed_out else 125
             else:
-                stdout, stderr = "", ""
-            exit_code = 124
-        except Exception as e:
+                try:
+                    proc.wait(timeout=max(0.01, deadline - time.monotonic()))
+                    exit_code = proc.returncode
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    stop_group()
+                    exit_code = 124
+
+        except Exception as exc:
+            stop_group()
             return {
                 "exit_code": 1,
                 "stdout": "",
-                "stderr": f"Sandbox execution error: {e}",
+                "stderr": f"Sandbox execution error: {exc}",
                 "duration": time.time() - t0,
                 "truncated": False,
-                "timed_out": False,
+                "timed_out": timed_out,
+                "timeout_seconds": timeout,
             }
+        finally:
+            if selector is not None:
+                selector.close()
+            if proc is not None:
+                for name in ("stdout", "stderr"):
+                    pipe = getattr(proc, name)
+                    if pipe is not None and not pipe.closed:
+                        pipe.close()
+                if proc.poll() is None:
+                    stop_group()
 
-        truncated = False
-        stdout_b = stdout.encode("utf-8")
-        stderr_b = stderr.encode("utf-8")
-        if len(stdout_b) > output_limit:
-            stdout = stdout_b[:output_limit].decode("utf-8", errors="replace") + "\n... [STDOUT TRUNCATED]"
-            truncated = True
-        if len(stderr_b) > output_limit:
-            stderr = stderr_b[:output_limit].decode("utf-8", errors="replace") + "\n... [STDERR TRUNCATED]"
-            truncated = True
+        stdout = streams["stdout"].decode("utf-8", errors="replace")
+        stderr = streams["stderr"].decode("utf-8", errors="replace")
+        if exceeded_stream is not None:
+            notice = f"\n... [{exceeded_stream.upper()} TRUNCATED: PROCESS KILLED AT OUTPUT LIMIT]"
+            if exceeded_stream == "stdout":
+                stdout += notice
+            else:
+                stderr += notice
+        if timed_out:
+            stderr += "\n... [TIMEOUT: PROCESS GROUP KILLED]"
 
         return {
             "exit_code": exit_code,
             "stdout": stdout,
             "stderr": stderr,
             "duration": time.time() - t0,
-            "truncated": truncated,
+            "truncated": exceeded_stream is not None or timed_out,
             "timed_out": timed_out,
             "timeout_seconds": timeout,
         }

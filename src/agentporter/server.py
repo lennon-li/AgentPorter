@@ -12,7 +12,7 @@ from logging.handlers import RotatingFileHandler
 from starlette.types import ASGIApp
 import uvicorn
 from mcp.server.mcpserver import MCPServer
-from mcp.server.transport_security import TransportSecuritySettings
+from mcp.server.transport_security import DEFAULT_MAX_REQUEST_BODY_SIZE, TransportSecuritySettings
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -133,7 +133,10 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         config.state_dir,
         max_log_bytes=config.sandbox.max_job_log_bytes,
     )
-    agent_broker = AgentBroker(registry, job_manager, config_dir=getattr(config, "config_dir", None))
+    agent_broker = AgentBroker(
+        registry, job_manager, config_dir=getattr(config, "config_dir", None),
+        parallel_search_enabled=getattr(getattr(config, "parallel_search", None), "enabled", False),
+    )
 
     # Instantiate tool sets
     _get_capabilities, _list_workspaces, _workspace_info = create_system_tools(registry, sandbox)
@@ -520,7 +523,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     @mcp.tool()
     @monitored_tool("list_agents")
     def list_agents() -> list[dict]:
-        """List available CLI agent workers (Codex, Claude, OpenCode, Agy)."""
+        """List the seven named worker identities and live availability."""
         return _list_agents()
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
@@ -616,8 +619,13 @@ def create_asgi_app(config: Config) -> ASGIApp:
     """Create Starlette ASGI application with Streamable HTTP and Security Middleware."""
     mcp, context = build_mcp_server(config)
     
+    # Let the MCP SDK reject oversized streamed bodies before Starlette
+    # generates a response; never relax its native four-MiB default.
     streamable_app = mcp.streamable_http_app(
-        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)
+        max_request_body_size=min(
+            config.security.max_payload_bytes, DEFAULT_MAX_REQUEST_BODY_SIZE
+        ),
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
 
     @asynccontextmanager

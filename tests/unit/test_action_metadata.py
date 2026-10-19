@@ -68,7 +68,7 @@ def test_broker_named_codex_controls(tmp_path, monkeypatch, adapter_cls, writabl
                                             "allow_agent_dispatch": True}})
 
     class RecordingJobs:
-        def start_raw_job(self, **kwargs):
+        def start_confined_agent_job(self, **kwargs):
             self.command = kwargs["cmd"]
             return "recording-job"
 
@@ -96,10 +96,12 @@ def test_named_codex_without_config_reports_unknown(tmp_path, adapter_cls):
     assert not detection["is_installed"]
 
 
-def test_rest_exec_requests_default_to_network_access():
-    # Agent7 REST Actions are online unless the call explicitly opts out.
+def test_rest_exec_requests_default_to_offline():
+    # No client-controlled Boolean can confer outbound execution permission.
     from agentporter.rest.schemas import ExecRunRequest, ExecStartRequest
 
-    assert ExecRunRequest(argv=["true"]).network_access is True
-    assert ExecStartRequest(argv=["true"]).network_access is True
+    assert ExecRunRequest(argv=["true"]).network_access is False
+    assert ExecStartRequest(argv=["true"]).network_access is False
     assert ExecRunRequest(argv=["true"], network_access=False).network_access is False
+    # Parsing true is not permission; the tool layer and sandbox must reject it.
+    assert ExecRunRequest(argv=["true"], network_access=True).network_access is True

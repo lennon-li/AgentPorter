@@ -2,12 +2,13 @@
 
 from typing import Optional
 from agentporter.agents.broker import AgentBroker
+from agentporter.agents.roster import PUBLIC_AGENT_IDS, public_agent_inventory
 
 
 def create_agent_tools(broker: AgentBroker):
     def list_agents() -> list[dict]:
-        """List available CLI agent workers (Codex, Claude, OpenCode, Agy)."""
-        return broker.list_agents()
+        """List the seven named workers; generic runtimes remain internal."""
+        return public_agent_inventory(broker.list_agents())
 
     def dispatch_agent(
         agent: str,
@@ -20,7 +21,24 @@ def create_agent_tools(broker: AgentBroker):
         allow_push: bool = False,
         read_only: bool = True,
     ) -> dict:
-        """Dispatch a worker asynchronously; defaults to enforced read-only mode."""
+        """Dispatch an approved named worker; read-only by default."""
+        if agent.lower().strip() not in PUBLIC_AGENT_IDS:
+            raise PermissionError(
+                "Unapproved public agent identity: use one of "
+                + ", ".join(sorted(PUBLIC_AGENT_IDS))
+            )
+        selected = next(item for item in public_agent_inventory(broker.list_agents())
+                        if item["agent"] == agent.lower().strip())
+        if not selected.get("registered") or not selected.get("available"):
+            raise PermissionError(
+                "Named agent is unavailable, unregistered, or misrouted: "
+                + agent.lower().strip() + "; no alternate runtime will be substituted"
+            )
+        if selected.get("delegatable") is False:
+            raise PermissionError(
+                "Named agent registered but delegation blocked: "
+                + str(selected.get("confinement_status") or "OS confinement unavailable")
+            )
         return broker.dispatch_agent(
             agent=agent,
             task=task,

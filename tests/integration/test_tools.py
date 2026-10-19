@@ -172,7 +172,7 @@ def test_git_inspection(workspace_registry, tmp_path: Path):
         tools.git_show("test-ws", ref="--bad")
     with pytest.raises(ValueError):
         tools.git_pull("test-ws", remote="-u")
-    with pytest.raises(ValueError):
+    with pytest.raises(PermissionError, match="server-verified"):
         tools.git_push("test-ws", remote="-u")
     with pytest.raises(ValueError):
         tools.git_add("test-ws", paths=["--all"])

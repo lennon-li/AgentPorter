@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import logging
 import re
 import sys
@@ -17,7 +16,6 @@ from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter, WeiAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
 from agentporter.agents.policy import ExecutionPolicy
-from agentporter.agents.isolated_codex import safe_launcher_environment
 from agentporter.workspaces.registry import WorkspaceRegistry
 
 if TYPE_CHECKING:
@@ -37,9 +35,11 @@ class AgentBroker:
         job_manager: JobManager,
         *,
         config_dir: Optional[str | os.PathLike] = None,
+        parallel_search_enabled: bool = False,
     ):
         self.workspace_registry = workspace_registry
         self.job_manager = job_manager
+        self.parallel_search_enabled = parallel_search_enabled
         # An explicitly selected AgentPorter configuration takes precedence
         # over host environment or HOME, including for CLI diagnostics/tests.
         self.config_dir = os.fspath(config_dir) if config_dir is not None else None
@@ -146,6 +146,9 @@ class AgentBroker:
                     routing_note = f" (policy override from {configured_model})"
             route_target = effective_model or "BLOCKED"
             results.append({
+                # CLI discovery is not an authorization to launch the worker.
+                "delegatable": False,
+                "confinement_status": "blocked_pending_os_confinement",
                 "agent": key,
                 "worker_cli": runtime,
                 "alias": alias,
@@ -195,6 +198,13 @@ class AgentBroker:
         ws = self.workspace_registry.get(workspace_id)
         if not ws.allow_agent_dispatch:
             raise PermissionError(f"Workspace '{workspace_id}' does not allow agent dispatch")
+        # The host-user Popen path has no kernel-enforced boundary; CLI flags
+        # and prompt policy cannot prevent publication or reading host secrets.
+        # Re-enable only via a verified, broker-owned confined launch method.
+        if not callable(getattr(self.job_manager, "start_confined_agent_job", None)):
+            raise PermissionError(
+                "Delegated execution blocked: OS-confined agent launcher is not installed"
+            )
         if allow_commit or allow_push:
             raise PermissionError("Delegated commit/push require a separate operator-verified approval; caller booleans are insufficient")
         effective_read_only = read_only or not ws.writable
@@ -234,29 +244,11 @@ class AgentBroker:
             else ""
         )
 
-        git_clean = True
-        git_dir = os.path.join(ws.path, ".git")
-        if os.path.exists(git_dir):
-            try:
-                env = os.environ.copy()
-                env.update({
-                    "GIT_CONFIG_NOSYSTEM": "1",
-                    "GIT_CONFIG_GLOBAL": "/dev/null",
-                    "GIT_OPTIONAL_LOCKS": "0",
-                    "GIT_PAGER": "cat",
-                    "GIT_EXTERNAL_DIFF": "",
-                })
-                res = subprocess.run(
-                    ["git", "-c", "core.fsmonitor=false", "status", "--short"],
-                    cwd=ws.path,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    env=env,
-                )
-                git_clean = not bool(res.stdout.strip())
-            except Exception:
-                pass
+        # Git cleanliness is not probed with host-user subprocesses from
+        # this broker. The future confined worker backend may report a verified
+        # snapshot or the client may request an independently sandboxed git_status
+        # action. Unknown is safer than host execution or an invented "clean".
+        git_clean = None
 
         runtime, alias, role, persona = identities.get(
             agent_key, ("codex" if isinstance(adapter, CodexAdapter) else "opencode" if isinstance(adapter, OpenCodeAdapter) else agent_key,
@@ -291,6 +283,13 @@ class AgentBroker:
             if isinstance(adapter, (CodexAdapter, CopilotAdapter, ClaudeAdapter, OpenCodeAdapter))
             else {"writable": policy.workspace_write}
         )
+        search_enabled = self.parallel_search_enabled and (
+            agent_key in {"jax", "liz", "prof"} and isinstance(adapter, CodexAdapter)
+            or agent_key == "phil" and isinstance(adapter, PhilAdapter)
+            or agent_key == "wei" and isinstance(adapter, WeiAdapter)
+        )
+        if isinstance(adapter, CopilotAdapter):
+            controls["parallel_search_enabled"] = search_enabled
         cmd = adapter.build_argv(
             workspace_path=ws.path,
             packet=packet,
@@ -299,6 +298,9 @@ class AgentBroker:
             **controls,
         )
         if isinstance(adapter, CodexAdapter):
+            # Import lazily to prevent duplicate sys.modules entry on -m launch.
+            from agentporter.agents.isolated_codex import safe_launcher_environment
+
             # Force a temporary, screened CODEX_HOME and verify the actual MCP
             # roster before the CLI can start. The user's home config can
             # contain mutating MCP tools and inherited network permissions.
@@ -312,17 +314,24 @@ class AgentBroker:
             cmd = [
                 sys.executable, "-I", "-m", "agentporter.agents.isolated_codex",
                 "--source-home", source_home, "--workspace", ws.path,
+                *(["--parallel-search"] if search_enabled else []),
                 "--", *cmd,
             ]
             launch_env = safe_launcher_environment(source_home)
         elif isinstance(adapter, OpenCodeAdapter):
             # Preserve upstream's dedicated Wei/OpenCode ephemeral permissions
             # and credential handling without allowing them to inherit defaults.
-            launch_env = adapter.runtime_env(workspace_path=ws.path, policy=policy)
+            launch_env = adapter.runtime_env(
+                workspace_path=ws.path, policy=policy,
+                parallel_search_enabled=search_enabled,
+            )
         else:
             launch_env = None
 
-        job_id = self.job_manager.start_raw_job(
+        # Launch only via a backend owned by AgentPorter that provides
+        # kernel-enforced workspace, network and credential confinement.
+        # Never downgrade to start_raw_job if a backend is missing or errors.
+        job_id = self.job_manager.start_confined_agent_job(
             workspace_id=workspace_id,
             workspace_path=ws.path,
             cmd=cmd,
@@ -333,6 +342,9 @@ class AgentBroker:
             reasoning_level=requested_reasoning or configured_reasoning,
             cli_version=cli_ver,
             timeout_seconds=900,
+            # The future backend must enforce this exact policy, not just
+            # trust the caller's textual task packet or agent name.
+            policy=policy,
             env=launch_env,
         )
 

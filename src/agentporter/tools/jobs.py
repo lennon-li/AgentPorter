@@ -9,6 +9,8 @@ import sqlite3
 import logging
 import threading
 import subprocess
+import selectors
+import shutil
 from pathlib import Path
 from typing import Optional
 from agentporter.provenance import extract_actual_model
@@ -92,6 +94,36 @@ class JobManager:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         return os.fdopen(fd, "wb")
 
+    @staticmethod
+    def _validate_sandbox_command(cmd: list[str], workspace_path: str) -> None:
+        """Raw async jobs may only launch an offline Bubblewrap process.
+
+        Do not treat an absent agent label as proof of authorization.
+        This is a defense for the sole trusted internal exec_start call
+        site, NOT a general command-classification/shell-policy scheme.
+        """
+        executable = shutil.which("bwrap")
+        if not executable or not cmd or cmd[0] != "bwrap":
+            raise PermissionError("Raw host process execution is forbidden; Bubblewrap required")
+        required = {"--unshare-all", "--unshare-net", "--clearenv", "--die-with-parent"}
+        try:
+            boundary = cmd.index("--")
+        except ValueError as exc:
+            raise PermissionError("Malformed sandbox command: missing command boundary") from exc
+        launcher_args = cmd[:boundary]
+        if not required.issubset(launcher_args) or "--share-net" in launcher_args:
+            raise PermissionError("Untrusted sandbox invocation or network permissions")
+        real_path = os.path.realpath(workspace_path)
+        if not any(
+            launcher_args[i:i+3] == [flag, real_path, "/workspace"]
+            for flag in ("--bind", "--ro-bind")
+            for i in range(len(launcher_args)-2)
+        ):
+            raise PermissionError("Sandbox command does not bind the authorized workspace")
+        if any("SSH_AUTH_SOCK" in arg or "/.ssh" in arg or "/.config/gh" in arg
+               for arg in launcher_args):
+            raise PermissionError("Sandbox command attempts credential access")
+
     def start_raw_job(
         self,
         workspace_id: str,
@@ -106,8 +138,13 @@ class JobManager:
         timeout_seconds: int = 300,
         env: Optional[dict] = None,
     ) -> str:
+        if agent:
+            raise PermissionError(
+                "Agent worker cannot launch through unconfined start_raw_job"
+            )
         if not cmd or not all(isinstance(x, str) and x for x in cmd):
             raise ValueError("cmd must be a non-empty list of non-empty strings")
+        self._validate_sandbox_command(cmd, workspace_path)
         timeout_seconds = max(1, int(timeout_seconds))
 
         job_id = f"job_{uuid.uuid4().hex[:24]}"
@@ -121,9 +158,11 @@ class JobManager:
             proc = subprocess.Popen(
                 cmd,
                 cwd=workspace_path,
-                stdout=stdout_f,
-                stderr=stderr_f,
-                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                # The only legitimate executable here is Bubblewrap; prevent
+                # launcher-time dynamic-loader/environment injections.
+                env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
                 process_group=0,
             )
         except Exception:
@@ -131,7 +170,9 @@ class JobManager:
             stderr_f.close()
             raise
 
-        pgid = os.getpgid(proc.pid)
+        # Popen(process_group=0) sets PGID equal to PID. Reading getpgid
+        # races with an immediately exiting worker and can raise ESRCH.
+        pgid = proc.pid
         with self.lock:
             self.active_processes[job_id] = proc
 
@@ -188,7 +229,9 @@ class JobManager:
     @staticmethod
     def _kill_process_group(proc: subprocess.Popen) -> None:
         try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            # process_group=0 creates a group whose id is proc.pid; it may
+            # survive even if the leader has already exited/reaped.
+            os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
         except Exception:
@@ -208,36 +251,83 @@ class JobManager:
         timeout_seconds: int,
         start_time: float,
     ):
+        """Drain child pipes with a strict per-stream disk budget.
+
+        Unlike redirecting child output straight to log files and periodically
+        checking file sizes, pipe backpressure means a child cannot write
+        unbounded logs between monitor ticks. Continue watching until *pipe
+        EOF*, not merely until the leader exits, since descendants may retain
+        inherited stdout/stderr descriptors.
+        """
         status = "completed"
         exit_code = None
-        deadline = start_time + timeout_seconds
+        # Convert wall-clock start age to a monotonic deadline.
+        remaining = max(0.0, timeout_seconds - (time.time() - start_time))
+        deadline = time.monotonic() + remaining
+        selector = selectors.DefaultSelector()
+        usage = {"stdout": 0, "stderr": 0}
 
         try:
-            while proc.poll() is None:
-                now = time.time()
-                if now >= deadline:
+            for name, pipe, log in (
+                ("stdout", proc.stdout, stdout_f),
+                ("stderr", proc.stderr, stderr_f),
+            ):
+                if pipe is None:
+                    raise RuntimeError(f"Missing {name} pipe")
+                os.set_blocking(pipe.fileno(), False)
+                selector.register(pipe, selectors.EVENT_READ, (name, log))
+
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    status = "timed_out"
+                    exit_code = 124
+                    break
+
+                for key, _ in selector.select(min(remaining, 0.2)):
+                    pipe = key.fileobj
+                    name, log = key.data
+                    try:
+                        chunk = os.read(pipe.fileno(), 64 * 1024)
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        selector.unregister(pipe)
+                        pipe.close()
+                        continue
+
+                    budget = self.max_log_bytes - usage[name]
+                    saved = chunk[:budget]
+                    if saved:
+                        log.write(saved)
+                        log.flush()
+                        usage[name] += len(saved)
+
+                    if len(chunk) > budget:
+                        status = "output_limit_exceeded"
+                        exit_code = 125
+                        break
+
+                if exit_code is not None:
+                    break
+
+            if exit_code is not None:
+                # Group includes ordinary child processes that inherited the
+                # file descriptors, even if the original leader already exited.
+                self._kill_process_group(proc)
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=2)
+            else:
+                try:
+                    proc.wait(timeout=max(0.01, deadline - time.monotonic()))
+                except subprocess.TimeoutExpired:
                     status = "timed_out"
                     exit_code = 124
                     self._kill_process_group(proc)
-                    break
-
-                try:
-                    stdout_size = os.path.getsize(stdout_path)
-                    stderr_size = os.path.getsize(stderr_path)
-                except OSError:
-                    stdout_size = stderr_size = 0
-
-                if stdout_size > self.max_log_bytes or stderr_size > self.max_log_bytes:
-                    status = "output_limit_exceeded"
-                    exit_code = 125
-                    self._kill_process_group(proc)
-                    break
-                time.sleep(0.1)
-
-            if proc.poll() is None:
-                proc.wait(timeout=5)
-            else:
-                proc.wait()
+                    proc.wait(timeout=2)
 
             if exit_code is None:
                 exit_code = proc.returncode
@@ -248,12 +338,21 @@ class JobManager:
             exit_code = 1
             logger.error("Job %s monitor error: %s", job_id, e)
             self._kill_process_group(proc)
-        finally:
             try:
-                stdout_f.close()
-                stderr_f.close()
-            except Exception:
-                pass
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=2)
+        finally:
+            selector.close()
+            for pipe in (proc.stdout, proc.stderr):
+                if pipe is not None and not pipe.closed:
+                    pipe.close()
+            for log in (stdout_f, stderr_f):
+                try:
+                    log.close()
+                except Exception:
+                    pass
 
             finished_at = time.time()
             duration = finished_at - start_time

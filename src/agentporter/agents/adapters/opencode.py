@@ -7,6 +7,7 @@ import stat
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.policy import ExecutionPolicy
+from agentporter.agents.parallel_search import opencode_mcp_config
 
 
 class OpenCodeAdapter(AgentAdapter):
@@ -112,9 +113,12 @@ class OpenCodeAdapter(AgentAdapter):
         workspace_path: str,
         writable: bool = True,
         policy: ExecutionPolicy | None = None,
+        *, parallel_search_enabled: bool = False,
     ) -> dict[str, str]:
         """Return the per-launch permissions profile outside the process argv."""
         _, _, profile = self._launch_profile(workspace_path, writable=writable, policy=policy)
+        if parallel_search_enabled:
+            profile.update(opencode_mcp_config())
         env = os.environ.copy()
         env["OPENCODE_CONFIG_CONTENT"] = json.dumps(profile, separators=(",", ":"))
         return env
@@ -194,8 +198,12 @@ class WeiAdapter(OpenCodeAdapter):
         return result
 
     def runtime_env(self, workspace_path: str, writable: bool = True,
-                    policy: ExecutionPolicy | None = None) -> dict[str, str]:
-        env = super().runtime_env(workspace_path, writable=writable, policy=policy)
+                    policy: ExecutionPolicy | None = None,
+                    *, parallel_search_enabled: bool = False) -> dict[str, str]:
+        env = super().runtime_env(
+            workspace_path, writable=writable, policy=policy,
+            parallel_search_enabled=parallel_search_enabled,
+        )
         profile = json.loads(env["OPENCODE_CONFIG_CONTENT"])
         profile.setdefault("provider", {}).setdefault("opencode", {}).setdefault(
             "options", {}

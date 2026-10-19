@@ -106,7 +106,7 @@ def test_private_identity_inherits_runtime_write_controls(executable, tmp_path, 
     workspace = SimpleNamespace(path=str(tmp_path), writable=True, allow_agent_dispatch=True)
     registry = SimpleNamespace(get=lambda _: workspace)
     jobs = Mock()
-    jobs.start_raw_job.return_value = "test-job"
+    jobs.start_confined_agent_job.return_value = "test-job"
     broker = AgentBroker(registry, jobs)
     adapter = broker.adapters[runtime]
     adapter.executable_override = executable
@@ -117,7 +117,7 @@ def test_private_identity_inherits_runtime_write_controls(executable, tmp_path, 
                         lambda *a, **kw: SimpleNamespace(stdout="1.19.0"))
     result = broker.dispatch_agent(name, "Write a scoped file", "test-workspace", read_only=False)
     assert result["job_id"] == "test-job"
-    kwargs = jobs.start_raw_job.call_args.kwargs
+    kwargs = jobs.start_confined_agent_job.call_args.kwargs
     assert kwargs["workspace_path"] == str(tmp_path)
     argv = kwargs["cmd"]
     assert any("MAY MODIFY FILES WITHIN SCOPE" in arg for arg in argv)
@@ -144,4 +144,4 @@ def test_broker_refuses_unauthorized_workspace(runtime, monkeypatch, tmp_path):
     monkeypatch.setattr(broker.adapters[runtime], "detect", lambda: {"is_installed": True})
     with pytest.raises(PermissionError, match="does not allow"):
         broker.dispatch_agent(runtime, "Write a file", "test-workspace")
-    jobs.start_raw_job.assert_not_called()
+    jobs.start_confined_agent_job.assert_not_called()

@@ -157,3 +157,76 @@ def test_streaming_request_body_is_not_buffered():
         assert received.is_set()
 
     asyncio.run(scenario())
+
+
+
+def test_real_mcp_streaming_endpoint_rejects_undeclared_oversized_body(tmp_path, monkeypatch):
+    """Exercise FastAPI + mounted MCP's own 413 path, not a bare ASGI handler."""
+    from agentporter.config import Config
+    from agentporter.server import create_asgi_app
+
+    monkeypatch.setenv("AGENTPORTER_API_KEY", "test-only-not-production")
+    cfg = Config(config_dir=tmp_path / "cfg", state_dir=tmp_path / "state")
+    cfg.security.max_payload_bytes = 50
+    cfg.security.allowed_hosts.append("testserver")
+
+    def chunks():
+        yield b"x" * 30
+        yield b"y" * 30
+
+    with TestClient(create_asgi_app(cfg), base_url="http://testserver") as client:
+        result = client.post(
+            "/mcp",
+            content=chunks(),
+            headers={
+                "X-AgentPorter-Key": cfg.api_key,
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+    assert result.status_code == 413, result.text
+    assert "Request body too large" in result.text
+
+
+def test_real_mcp_streaming_endpoint_checks_actual_bytes_even_with_lied_length(tmp_path, monkeypatch):
+    from agentporter.config import Config
+    from agentporter.server import create_asgi_app
+
+    monkeypatch.setenv("AGENTPORTER_API_KEY", "test-only-not-production")
+    cfg = Config(config_dir=tmp_path / "cfg", state_dir=tmp_path / "state")
+    cfg.security.max_payload_bytes = 50
+    cfg.security.allowed_hosts.append("testserver")
+
+    with TestClient(create_asgi_app(cfg), base_url="http://testserver") as client:
+        result = client.post(
+            "/mcp",
+            content=b"x" * 90,
+            headers={
+                "X-AgentPorter-Key": cfg.api_key,
+                "Content-Length": "10",
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+    assert result.status_code == 413, result.text
+
+
+def test_mcp_sdk_default_four_mib_ceiling_not_raised_by_gateway(tmp_path, monkeypatch):
+    from mcp.server.mcpserver import MCPServer
+    from mcp.server.transport_security import DEFAULT_MAX_REQUEST_BODY_SIZE
+    from agentporter.config import Config
+    from agentporter.server import create_asgi_app
+
+    monkeypatch.setenv("AGENTPORTER_API_KEY", "test-only-not-production")
+    cfg = Config(config_dir=tmp_path / "cfg", state_dir=tmp_path / "state")
+    cfg.security.max_payload_bytes = 10 * 1024 * 1024
+    observed = []
+    original = MCPServer.streamable_http_app
+
+    def spy(self, **kwargs):
+        observed.append(kwargs.get("max_request_body_size"))
+        return original(self, **kwargs)
+
+    monkeypatch.setattr(MCPServer, "streamable_http_app", spy)
+    create_asgi_app(cfg)
+    assert observed == [DEFAULT_MAX_REQUEST_BODY_SIZE]
