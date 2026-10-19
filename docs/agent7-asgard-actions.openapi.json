@@ -1115,6 +1115,9 @@
               }
             }
           },
+          "403": {
+            "description": "Delegation denied by server-side policy"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1124,9 +1127,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "Delegation denied by server-side policy"
           }
         },
         "x-openai-isConsequential": true
@@ -2283,8 +2283,8 @@
           "network_access": {
             "type": "boolean",
             "title": "Network Access",
-            "description": "Internet access inside the sandbox (GitHub, package installs). Defaults to true; send false to run offline.",
-            "default": true
+            "description": "Generic execution is offline; true is rejected pending scoped network approval.",
+            "default": false
           }
         },
         "type": "object",
@@ -2318,8 +2318,8 @@
           "network_access": {
             "type": "boolean",
             "title": "Network Access",
-            "description": "Internet access inside the sandbox (GitHub, package installs). Defaults to true; send false to run offline.",
-            "default": true
+            "description": "Generic execution is offline; true is rejected pending scoped network approval.",
+            "default": false
           }
         },
         "type": "object",
