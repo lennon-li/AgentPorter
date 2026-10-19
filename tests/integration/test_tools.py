@@ -339,7 +339,8 @@ def test_dispatch_agent_telemetry(workspace_registry, tmp_path: Path):
     assert launch["model"] == "configured-test-model"
     assert launch["requested_model"] == "requested-test-model"
     assert launch["reasoning_level"] == "high"
-    assert launch["policy"].workspace_write is True
+    # dispatch_agent defaults to read-only; only an explicit scope may enable writes.
+    assert launch["policy"].workspace_write is False
 
 
 def test_read_only_worker_must_be_enforceable(sample_workspace, tmp_path: Path):
