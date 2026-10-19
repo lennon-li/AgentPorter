@@ -59,7 +59,7 @@ def test_strictly_prohibited_host_operations_are_not_public_mcp_or_rest():
     import json
 
     mcp_names = set(re.findall(
-        r'@monitored_tool\\("([^"]+)"\\)', SERVER.read_text()
+        r'@monitored_tool\("([^"]+)"\)', SERVER.read_text()
     ))
     saved = json.loads((ROOT / "docs" / "agent7-asgard-actions.openapi.json").read_text())
     rest_names = {
@@ -68,6 +68,8 @@ def test_strictly_prohibited_host_operations_are_not_public_mcp_or_rest():
         for operation in path_item.values()
         if isinstance(operation, dict) and "operationId" in operation
     }
+    assert mcp_names, "MCP registry not discovered; hard exclusion check invalid"
+    assert rest_names, "REST actions not discovered; hard exclusion check invalid"
     assert not (_HARD_EXCLUDED_HOST_ACTIONS & (mcp_names | rest_names))
     forbidden_path_fragments = (
         "/admin/", "/host/", "/sudo", "/systemctl", "/service/restart",
