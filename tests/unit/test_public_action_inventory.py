@@ -43,6 +43,52 @@ def test_publication_operations_are_locked_by_policy():
     assert matrix["dispatch_agent"] == "SCOPE"
 
 
+
+# These are outside the owner-overridable 53-action matrix. A privileged
+# operation must not become a public endpoint merely because it is LOCKED.
+_HARD_EXCLUDED_HOST_ACTIONS = {
+    "sudo", "systemctl", "host_shell", "host_exec", "ssh_exec",
+    "service_restart", "system_restart", "os_package_install",
+    "manage_users", "credential_export", "agentporter_deploy",
+    "agentporter_activate", "git_force_push", "forge_approval",
+}
+
+
+def test_strictly_prohibited_host_operations_are_not_public_mcp_or_rest():
+    """No MCP/REST registration of host administrative capabilities."""
+    import json
+
+    mcp_names = set(re.findall(
+        r'@monitored_tool\\("([^"]+)"\\)', SERVER.read_text()
+    ))
+    saved = json.loads((ROOT / "docs" / "agent7-asgard-actions.openapi.json").read_text())
+    rest_names = {
+        operation["operationId"]
+        for path_item in saved["paths"].values()
+        for operation in path_item.values()
+        if isinstance(operation, dict) and "operationId" in operation
+    }
+    assert not (_HARD_EXCLUDED_HOST_ACTIONS & (mcp_names | rest_names))
+    forbidden_path_fragments = (
+        "/admin/", "/host/", "/sudo", "/systemctl", "/service/restart",
+        "/deploy/activate",
+    )
+    assert all(
+        not any(fragment in path for fragment in forbidden_path_fragments)
+        for path in saved["paths"]
+    )
+
+
+def test_matrix_distinguishes_operator_overrides_from_permanent_exclusions():
+    """The policy catalog documents configurable defaults, not a runtime bypass."""
+    policy = CATALOG.read_text()
+    assert "Operator-overridable matrix" in policy
+    assert "all 53 public actions" in policy.lower()
+    assert "not yet implemented" in policy
+    assert "Permanently excluded capabilities" in policy
+    assert "not MCP/REST actions" in policy
+
+
 def test_pydantic_rest_serialization_preserves_identity_mismatch():
     rows = public_agent_inventory([
         {"agent": "ming", "worker_cli": "opencode", "available": True}
