@@ -10,10 +10,10 @@ import yaml
 from typing import TYPE_CHECKING, Optional, Dict
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
-from agentporter.agents.adapters.codex_identity import JaxAdapter, LizAdapter
+from agentporter.agents.adapters.codex_identity import JaxAdapter, LizAdapter, ProfAdapter
 from agentporter.agents.adapters.copilot import CopilotAdapter, PhilAdapter
 from agentporter.agents.adapters.claude import ClaudeAdapter
-from agentporter.agents.adapters.opencode import OpenCodeAdapter
+from agentporter.agents.adapters.opencode import OpenCodeAdapter, WeiAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
 from agentporter.agents.policy import ExecutionPolicy
 from agentporter.workspaces.registry import WorkspaceRegistry
@@ -36,9 +36,11 @@ class AgentBroker:
             "codex": CodexAdapter(),
             "jax": JaxAdapter(),
             "liz": LizAdapter(),
+            "prof": ProfAdapter(),
             "phil": PhilAdapter(),
             "claude": ClaudeAdapter(),
             "opencode": OpenCodeAdapter(),
+            "wei": WeiAdapter(),
             "agy": AgyAdapter(),
         }
 
@@ -268,6 +270,11 @@ class AgentBroker:
             reasoning_effort=requested_reasoning,
             **controls,
         )
+        job_env = (
+            adapter.runtime_env(workspace_path=ws.path, policy=policy)
+            if isinstance(adapter, OpenCodeAdapter)
+            else None
+        )
 
         job_id = self.job_manager.start_raw_job(
             workspace_id=workspace_id,
@@ -280,6 +287,7 @@ class AgentBroker:
             reasoning_level=requested_reasoning or configured_reasoning,
             cli_version=cli_ver,
             timeout_seconds=900,
+            env=job_env,
         )
 
         return {

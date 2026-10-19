@@ -131,8 +131,8 @@ def test_opencode_supported_controls_fail_closed(fake_exe, monkeypatch):
                         lambda *a, **kw: type("Result", (), {"stdout": "1.19.0"})())
     adapter = OpenCodeAdapter(executable_override=fake_exe)
     argv = adapter.build_argv(WS, "PACKET", "vertex/x")
-    assert argv[2:] == [fake_exe, "run", "--agent", "dispatch", "-m", "vertex/x", "PACKET"]
-    profile = json.loads(argv[1].split("=", 1)[1])
+    assert argv == [fake_exe, "run", "--agent", "dispatch", "-m", "vertex/x", "PACKET"]
+    profile = json.loads(adapter.runtime_env(WS)["OPENCODE_CONFIG_CONTENT"])
     assert profile["agent"]["dispatch"]["permission"]["edit"] == "allow"
     assert not adapter.supports_read_only
     assert not adapter.supports_reasoning_override

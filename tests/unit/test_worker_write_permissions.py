@@ -43,10 +43,10 @@ def test_opencode_per_launch_profile(executable, monkeypatch, version):
                         lambda *a, **kw: SimpleNamespace(stdout=version))
     adapter = OpenCodeAdapter(executable)
     argv = adapter.build_argv("/workspace", "task", model="provider/model")
-    assert argv[0] == "/usr/bin/env"
+    assert argv[0] == executable
     assert argv[-3:] == ["-m", "provider/model", "task"]
     assert "--auto" not in argv
-    config = json.loads(argv[1].split("=", 1)[1])
+    config = json.loads(adapter.runtime_env("/workspace")["OPENCODE_CONFIG_CONTENT"])
     if version.startswith("1."):
         permissions = config["agent"]["dispatch"]["permission"]
         assert permissions["edit"] == "allow"
@@ -126,7 +126,8 @@ def test_private_identity_inherits_runtime_write_controls(executable, tmp_path, 
     elif runtime == "claude":
         assert "Write" in argv and "Bash(git push*)" in argv
     elif runtime == "opencode":
-        assert json.loads(argv[1].split("=", 1)[1])["agent"]["dispatch"]["permission"]["edit"] == "allow"
+        config = json.loads(kwargs["env"]["OPENCODE_CONFIG_CONTENT"])
+        assert config["agent"]["dispatch"]["permission"]["edit"] == "allow"
     elif runtime == "agy":
         assert "accept-edits" in argv and "--sandbox" in argv
     else:

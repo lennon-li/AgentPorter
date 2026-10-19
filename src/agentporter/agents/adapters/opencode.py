@@ -3,6 +3,7 @@
 import os
 import re
 import json
+import stat
 import subprocess
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.policy import ExecutionPolicy
@@ -57,23 +58,18 @@ class OpenCodeAdapter(AgentAdapter):
             "reasoning_effort": "unknown",
         }
 
-    def build_argv(
+    def _launch_profile(
         self,
         workspace_path: str,
-        packet: str,
-        model: str = "",
-        reasoning_effort: str = "",
         writable: bool = True,
         policy: ExecutionPolicy | None = None,
-    ) -> list[str]:
+    ) -> tuple[str, int, dict]:
         exe = self.find_executable(["opencode", "~/.npm-global/bin/opencode", "~/.local/bin/opencode"])
         if not exe:
             raise RuntimeError("OpenCode CLI executable not found on host")
         policy = policy or ExecutionPolicy.for_workspace(writable=writable)
         if not policy.workspace_write:
             raise RuntimeError("OpenCode adapter does not yet enforce read-only execution")
-        if reasoning_effort:
-            raise RuntimeError("OpenCode adapter does not yet enforce reasoning overrides")
         # OpenCode changed its permission schema in v2. Never silently launch
         # without the per-run profile on an unknown/undetectable version.
         try:
@@ -109,11 +105,118 @@ class OpenCodeAdapter(AgentAdapter):
             profile = {"agents": {"dispatch": {
                 "mode": "primary", "permissions": permissions,
             }}}
-        cmd = ["/usr/bin/env", "OPENCODE_CONFIG_CONTENT=" + json.dumps(profile),
-               exe, "run", "--agent", "dispatch"]
+        return exe, major, profile
+
+    def runtime_env(
+        self,
+        workspace_path: str,
+        writable: bool = True,
+        policy: ExecutionPolicy | None = None,
+    ) -> dict[str, str]:
+        """Return the per-launch permissions profile outside the process argv."""
+        _, _, profile = self._launch_profile(workspace_path, writable=writable, policy=policy)
+        env = os.environ.copy()
+        env["OPENCODE_CONFIG_CONTENT"] = json.dumps(profile, separators=(",", ":"))
+        return env
+
+    def build_argv(
+        self,
+        workspace_path: str,
+        packet: str,
+        model: str = "",
+        reasoning_effort: str = "",
+        writable: bool = True,
+        policy: ExecutionPolicy | None = None,
+    ) -> list[str]:
+        exe, major, _ = self._launch_profile(workspace_path, writable=writable, policy=policy)
+        if reasoning_effort:
+            raise RuntimeError("OpenCode adapter does not yet enforce reasoning overrides")
+        cmd = [exe, "run", "--agent", "dispatch"]
         if major == 2:
             cmd.append("--standalone")
         if model:
             cmd.extend(["-m", model])
         cmd.append(packet)
         return cmd
+
+
+class WeiAdapter(OpenCodeAdapter):
+    """Wei uses an isolated OpenCode credential and verified free models."""
+
+    name = "wei"
+    alias = "Wei"
+    provider = "opencode"
+    description = "Wei: coding, review, and tests via the local OpenCode CLI"
+    default_model = "opencode/glm-5.3-flash-free"
+    free_models = frozenset({
+        "opencode/beam-free",
+        "opencode/deepseek-v4.1-flash-free",
+        "opencode/glm-5.3-flash-free",
+        "opencode/longcat-2.5-preview-free",
+        "opencode/mimo-v2.6-flash-free",
+        "opencode/nemotron-3-ultra-free",
+        "opencode/nemotron-3.5-lightning-free",
+        "opencode/nemotron-3.5-super-vl-free",
+        "opencode/space-bunny-free",
+    })
+
+    @staticmethod
+    def _key_path() -> str:
+        return os.path.expanduser("~/.config/opencode/wei-key")
+
+    def _read_key(self) -> str:
+        path = self._key_path()
+        try:
+            metadata = os.stat(path)
+        except OSError as exc:
+            raise RuntimeError("Wei credential file is unavailable") from exc
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o077:
+            raise RuntimeError("Wei credential file must be a private regular file")
+        with open(path, "r", encoding="utf-8") as handle:
+            key = handle.read().strip()
+        if not key:
+            raise RuntimeError("Wei credential file is empty")
+        return key
+
+    def detect(self) -> dict:
+        result = super().detect()
+        try:
+            self._read_key()
+            credential_ready = True
+        except RuntimeError:
+            credential_ready = False
+        result.update({
+            "is_installed": bool(result["is_installed"] and credential_ready),
+            "provider": self.provider,
+            "configured_model": self.default_model,
+            "credential_ready": credential_ready,
+        })
+        return result
+
+    def runtime_env(self, workspace_path: str, writable: bool = True,
+                    policy: ExecutionPolicy | None = None) -> dict[str, str]:
+        env = super().runtime_env(workspace_path, writable=writable, policy=policy)
+        profile = json.loads(env["OPENCODE_CONFIG_CONTENT"])
+        profile.setdefault("provider", {}).setdefault("opencode", {}).setdefault(
+            "options", {}
+        )["apiKey"] = self._read_key()
+        env["OPENCODE_CONFIG_CONTENT"] = json.dumps(profile, separators=(",", ":"))
+        return env
+
+    def build_argv(
+        self,
+        workspace_path: str,
+        packet: str,
+        model: str = "",
+        reasoning_effort: str = "",
+        writable: bool = True,
+        policy: ExecutionPolicy | None = None,
+    ) -> list[str]:
+        selected = model or self.default_model
+        if selected not in self.free_models:
+            raise ValueError("Wei accepts only the configured free OpenCode models")
+        self._read_key()
+        return super().build_argv(
+            workspace_path, packet, model=selected,
+            reasoning_effort=reasoning_effort, writable=writable, policy=policy,
+        )

@@ -124,3 +124,16 @@ class LizAdapter(NamedCodexAdapter):
             description="Liz: correctness-focused implementation, validation, refactoring, and tests via Codex CLI",
             executable_override=executable_override,
         )
+
+
+class ProfAdapter(NamedCodexAdapter):
+    """Prof uses his own Codex account profile."""
+
+    def __init__(self, executable_override=None):
+        super().__init__(
+            name="prof",
+            alias="Prof",
+            codex_home="~/.codex-prof",
+            description="Prof: university-research coding, review, and tests via Codex CLI",
+            executable_override=executable_override,
+        )
