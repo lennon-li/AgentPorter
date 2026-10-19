@@ -13,7 +13,7 @@ See the repository-level [SECURITY.md](../SECURITY.md) for the normative trust-b
 | Sensitive-file disclosure | Sensitive components blocked in reads/writes **and search** | Novel secret filenames not covered by denylist remain workspace data |
 | Arbitrary direct code | Bubblewrap mount/network/environment isolation | No cgroup CPU/memory quotas yet |
 | Runaway async output | Timeout and per-stream log-size limit | Host disk/resource pressure remains possible below limits |
-| Worker-agent overreach | Read-only by default; per-workspace dispatch permission; Codex isolated config and verified empty MCP roster; forced offline command sandbox; fail-closed unsupported adapters | Worker CLIs remain host-user processes; host file reads and model-provider network remain possible; non-Codex edit workers retain provider-specific risks |
+| Worker-agent overreach | Read-only by default; per-workspace dispatch permission; Codex isolated config and verified MCP allowlist; forced offline command sandbox; fail-closed unsupported adapters | Worker CLIs remain host-user processes; host file reads and model-provider network remain possible; non-Codex edit workers retain provider-specific risks |
 | Loopback service access | Per-workspace exact-port allowlist; redirects disabled | Allowed loopback service is trusted |
 | Malicious Git helpers | Global/system config disabled; external diff/fsmonitor/pagers suppressed; output bounded | Repository-local Git config is still present |
 | Model provenance spoofing | Worker prose/stdout is not trusted as provenance | Actual model remains `unknown` unless a trusted adapter channel is added |

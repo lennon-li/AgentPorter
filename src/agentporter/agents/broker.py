@@ -37,9 +37,11 @@ class AgentBroker:
         job_manager: JobManager,
         *,
         config_dir: Optional[str | os.PathLike] = None,
+        parallel_search_enabled: bool = False,
     ):
         self.workspace_registry = workspace_registry
         self.job_manager = job_manager
+        self.parallel_search_enabled = parallel_search_enabled
         # An explicitly selected AgentPorter configuration takes precedence
         # over host environment or HOME, including for CLI diagnostics/tests.
         self.config_dir = os.fspath(config_dir) if config_dir is not None else None
@@ -291,6 +293,13 @@ class AgentBroker:
             if isinstance(adapter, (CodexAdapter, CopilotAdapter, ClaudeAdapter, OpenCodeAdapter))
             else {"writable": policy.workspace_write}
         )
+        search_enabled = self.parallel_search_enabled and (
+            agent_key in {"jax", "liz", "prof"} and isinstance(adapter, CodexAdapter)
+            or agent_key == "phil" and isinstance(adapter, PhilAdapter)
+            or agent_key == "wei" and isinstance(adapter, WeiAdapter)
+        )
+        if isinstance(adapter, CopilotAdapter):
+            controls["parallel_search_enabled"] = search_enabled
         cmd = adapter.build_argv(
             workspace_path=ws.path,
             packet=packet,
@@ -312,13 +321,17 @@ class AgentBroker:
             cmd = [
                 sys.executable, "-I", "-m", "agentporter.agents.isolated_codex",
                 "--source-home", source_home, "--workspace", ws.path,
+                *(["--parallel-search"] if search_enabled else []),
                 "--", *cmd,
             ]
             launch_env = safe_launcher_environment(source_home)
         elif isinstance(adapter, OpenCodeAdapter):
             # Preserve upstream's dedicated Wei/OpenCode ephemeral permissions
             # and credential handling without allowing them to inherit defaults.
-            launch_env = adapter.runtime_env(workspace_path=ws.path, policy=policy)
+            launch_env = adapter.runtime_env(
+                workspace_path=ws.path, policy=policy,
+                parallel_search_enabled=search_enabled,
+            )
         else:
             launch_env = None
 

@@ -39,8 +39,8 @@ allowlist to prevent workspace-controlled module shadowing, then receive a
 short-lived isolated configuration home
 with selected model-provider options and their existing authentication identity.
 Unrelated MCP servers/hooks/plugins are not copied. Runtime MCP listing must
-confirm no enabled tools; failed checks refuse the worker. Project-level MCP/
-plugin configuration is refused. Worker command sandbox network access is
+confirm no enabled tools except the opt-in, fixed Parallel Search endpoint;
+failed checks refuse the worker. Project-level MCP/plugin configuration is refused. Worker command sandbox network access is
 explicitly disabled, irrespective of inherited persistent settings.
 Only model-provider/authentication environment variables are retained.
 These are defenses in depth, **not OS-level isolation**. The model client

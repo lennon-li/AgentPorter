@@ -6,6 +6,29 @@ from pathlib import Path
 from agentporter.config import Config
 
 
+@pytest.mark.parametrize("setting, expected", [
+    ("", False),
+    ("parallel_search: {enabled: true}\n", True),
+    ("parallel_search: {enabled: false}\n", False),
+])
+def test_parallel_search_opt_in_preserves_other_settings(tmp_path, setting, expected):
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(setting + "server: {port: 9876}\n")
+    cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / "state", cache_dir=tmp_path / "cache")
+    assert cfg.parallel_search.enabled is expected
+    assert cfg.server.port == 9876
+
+
+@pytest.mark.parametrize("setting", ["{enabled: 'true'}", "{enabled: 1}", "[]", "{api_key: secret}"])
+def test_parallel_search_rejects_invalid_settings(tmp_path, setting):
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text("parallel_search: " + setting + "\n")
+    with pytest.raises(ValueError, match="parallel_search"):
+        Config(config_dir=cfg_dir, state_dir=tmp_path / "state", cache_dir=tmp_path / "cache")
+
+
 def test_config_generates_api_key_and_private_paths(tmp_path: Path):
     cfg = Config(
         config_dir=tmp_path / "cfg",

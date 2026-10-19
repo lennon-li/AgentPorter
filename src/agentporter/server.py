@@ -133,7 +133,10 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         config.state_dir,
         max_log_bytes=config.sandbox.max_job_log_bytes,
     )
-    agent_broker = AgentBroker(registry, job_manager, config_dir=getattr(config, "config_dir", None))
+    agent_broker = AgentBroker(
+        registry, job_manager, config_dir=getattr(config, "config_dir", None),
+        parallel_search_enabled=getattr(getattr(config, "parallel_search", None), "enabled", False),
+    )
 
     # Instantiate tool sets
     _get_capabilities, _list_workspaces, _workspace_info = create_system_tools(registry, sandbox)

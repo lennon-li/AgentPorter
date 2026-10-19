@@ -6,6 +6,7 @@ import subprocess
 
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.policy import ExecutionPolicy
+from agentporter.agents.parallel_search import copilot_config_path
 
 
 class CopilotAdapter(AgentAdapter):
@@ -54,6 +55,7 @@ class CopilotAdapter(AgentAdapter):
         policy=None,
         *,
         writable: bool = True,
+        parallel_search_enabled: bool = False,
     ) -> list[str]:
         exe = self.find_executable(["copilot", "~/.local/bin/copilot", "~/.npm-global/bin/copilot"])
         if not exe:
@@ -83,6 +85,8 @@ class CopilotAdapter(AgentAdapter):
         args.extend(f"--deny-tool=shell({prefix})" for prefix in policy.denied_commands())
         if not policy.workspace_write:
             args.append("--deny-tool=write")
+        if parallel_search_enabled:
+            args.extend(["--additional-mcp-config", "@" + copilot_config_path()])
         return args
 
 
