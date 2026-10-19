@@ -106,7 +106,14 @@ class AgentBroker:
         adapters, identities = self._configured_workers()
         for key, adapter in adapters.items():
             runtime, alias, role, _ = identities.get(
-                key, (key, adapter.alias or key, adapter.description, "")
+                key,
+                (
+                    "codex" if isinstance(adapter, CodexAdapter) else
+                    "opencode" if isinstance(adapter, OpenCodeAdapter) else key,
+                    adapter.alias or key,
+                    adapter.description,
+                    "",
+                ),
             )
             detection = adapter.detect()
             configured_model = detection.get("configured_model") or "unknown"
@@ -232,7 +239,14 @@ class AgentBroker:
                 pass
 
         runtime, alias, role, persona = identities.get(
-            agent_key, (agent_key, adapter.alias or agent_key, adapter.description, "")
+            agent_key,
+            (
+                "codex" if isinstance(adapter, CodexAdapter) else
+                "opencode" if isinstance(adapter, OpenCodeAdapter) else agent_key,
+                adapter.alias or agent_key,
+                adapter.description,
+                "",
+            ),
         )
         identity = ""
         if agent_key in identities:

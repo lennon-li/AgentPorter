@@ -5,6 +5,7 @@ import json
 import pytest
 
 from agentporter.agents.adapters.opencode import WeiAdapter
+from agentporter.agents.broker import AgentBroker
 from agentporter.agents.policy import ExecutionPolicy
 
 
@@ -41,3 +42,16 @@ def test_wei_rejects_nonfree_and_insecure_credential(tmp_path, monkeypatch):
         adapter.build_argv("/workspace", "task", model="opencode-go/glm-5.3-flash")
     key.chmod(0o644)
     assert adapter.detect()["credential_ready"] is False
+
+
+def test_wei_reports_its_opencode_runtime(monkeypatch):
+    adapter = WeiAdapter(executable_override="/bin/echo")
+    monkeypatch.setattr(adapter, "detect", lambda: {
+        "is_installed": True,
+        "provider": "opencode",
+        "configured_model": adapter.default_model,
+        "cli_version": "1.19.0",
+    })
+    broker = AgentBroker(None, None)
+    broker.adapters = {"wei": adapter}
+    assert broker.list_agents()[0]["worker_cli"] == "opencode"
