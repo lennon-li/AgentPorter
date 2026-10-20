@@ -68,6 +68,7 @@ class BubblewrapSandbox(SandboxBackend):
         writable: bool = True,
         sub_cwd: str = "",
         network_access: bool = False,
+        git_metadata_writable: bool = False,
     ) -> list[str]:
         # Until a separate trusted approval issuer and constrained egress broker
         # exist, generic execution is deliberately offline. An API Boolean is
@@ -134,7 +135,7 @@ class BubblewrapSandbox(SandboxBackend):
         git_metadata = os.path.join(real_workspace, ".git")
         if os.path.islink(git_metadata):
             raise PermissionError("Symlinked .git metadata unsupported in generic execution")
-        if os.path.lexists(git_metadata):
+        if os.path.lexists(git_metadata) and not git_metadata_writable:
             args.extend(["--ro-bind", git_metadata, "/workspace/.git"])
         # No host SSH/gh/agent socket mounts under any generic execution mode.
         # Network-dependent operations must use independently approved,
@@ -169,6 +170,7 @@ class BubblewrapSandbox(SandboxBackend):
         writable: bool = True,
         max_output_bytes: int | None = None,
         network_access: bool = False,
+        git_metadata_writable: bool = False,
     ) -> dict:
         """Run a bounded command without ever accumulating unbounded pipe output.
 
@@ -185,7 +187,9 @@ class BubblewrapSandbox(SandboxBackend):
             self.max_output_bytes,
         )
         full_cmd = self.build_bwrap_args(
-            workspace_path, writable=writable, sub_cwd=cwd, network_access=network_access
+            workspace_path, writable=writable, sub_cwd=cwd,
+            network_access=network_access,
+            git_metadata_writable=git_metadata_writable,
         ) + ["--"] + argv
 
         t0 = time.time()
