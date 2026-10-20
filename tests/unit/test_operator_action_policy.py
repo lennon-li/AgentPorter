@@ -94,19 +94,19 @@ def test_policy_cannot_live_under_agent_writable_workspace(tmp_path):
 
 
 def test_same_operator_guard_applies_to_registered_mcp_and_rest_tools(temp_config):
-    # get_capabilities is exposed by both surfaces; neither can bypass LOCKED.
+    # list_workspaces is exposed by both surfaces; neither can bypass LOCKED.
     _policy_file(temp_config.config_dir, """version: 1
 action_modes:
-  get_capabilities: LOCKED
+  list_workspaces: LOCKED
 """)
     _, context = build_mcp_server(temp_config)
     with pytest.raises(PermissionError, match="technically locked"):
-        context["tools"]["get_capabilities"]()
+        context["tools"]["list_workspaces"]()
     app = create_asgi_app(temp_config).app
     with pytest.raises(PermissionError, match="technically locked"):
-        app.state.tools["get_capabilities"]()
+        app.state.tools["list_workspaces"]()
 
 
-def test_default_policy_still_allows_readonly_server_capabilities(temp_config):
+def test_default_policy_still_allows_readonly_server_inventory(temp_config):
     _, context = build_mcp_server(temp_config)
-    assert "supported_tools" in context["tools"]["get_capabilities"]()
+    assert isinstance(context["tools"]["list_workspaces"](), list)
