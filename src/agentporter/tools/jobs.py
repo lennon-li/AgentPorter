@@ -95,7 +95,7 @@ class JobManager:
         return os.fdopen(fd, "wb")
 
     @staticmethod
-    def _validate_sandbox_command(cmd: list[str], workspace_path: str) -> None:
+    def _validate_sandbox_command(cmd: list[str], workspace_path: str) -> str:
         """Raw async jobs may only launch an offline Bubblewrap process.
 
         Do not treat an absent agent label as proof of authorization.
@@ -123,6 +123,10 @@ class JobManager:
         if any("SSH_AUTH_SOCK" in arg or "/.ssh" in arg or "/.config/gh" in arg
                for arg in launcher_args):
             raise PermissionError("Sandbox command attempts credential access")
+        # Keep the Bwrap executable path resolved by the trusted host lookup.
+        # The launch environment below deliberately strips the host's PATH;
+        # looking up the literal 'bwrap' again would fail for /usr/local or Nix.
+        return os.path.realpath(executable)
 
     def start_raw_job(
         self,
@@ -144,7 +148,7 @@ class JobManager:
             )
         if not cmd or not all(isinstance(x, str) and x for x in cmd):
             raise ValueError("cmd must be a non-empty list of non-empty strings")
-        self._validate_sandbox_command(cmd, workspace_path)
+        trusted_bwrap = self._validate_sandbox_command(cmd, workspace_path)
         timeout_seconds = max(1, int(timeout_seconds))
 
         job_id = f"job_{uuid.uuid4().hex[:24]}"
@@ -156,7 +160,7 @@ class JobManager:
 
         try:
             proc = subprocess.Popen(
-                cmd,
+                [trusted_bwrap, *cmd[1:]],
                 cwd=workspace_path,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
