@@ -122,3 +122,36 @@ def test_raw_job_rejects_fake_bwrap_with_network_share(tmp_path):
     with pytest.raises(PermissionError, match="network permissions"):
         mgr.start_raw_job("demo", str(tmp_path), cmd)
     assert not list(mgr.jobs_dir.glob("*.stdout.log"))
+
+
+def test_async_launcher_uses_trusted_absolute_bwrap_before_scrubbing_path(tmp_path, monkeypatch):
+    """A host-resolved bwrap outside /usr/bin must still launch under a safe PATH."""
+    from agentporter.tools import jobs as job_module
+
+    location = "/opt/test-profile/bin/bwrap"
+    monkeypatch.setattr(job_module.shutil, "which", lambda name: location if name == "bwrap" else None)
+    calls = []
+
+    def capture_launch(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        raise RuntimeError("intentionally intercepted before host execution")
+
+    monkeypatch.setattr(job_module.subprocess, "Popen", capture_launch)
+    manager = JobManager(tmp_path / "state")
+    command = ["bwrap", "--die-with-parent", "--unshare-all", "--unshare-net",
+               "--clearenv", "--bind", str(tmp_path.resolve()), "/workspace",
+               "--", "echo", "safe"]
+    with pytest.raises(RuntimeError, match="intentionally intercepted"):
+        manager.start_raw_job("demo", str(tmp_path), command)
+    assert len(calls) == 1
+    assert calls[0][0][0] == location
+    assert calls[0][0][1:] == command[1:]
+    assert calls[0][1]["env"]["PATH"] == "/usr/bin:/bin"
+
+
+def test_async_launcher_does_not_accept_arbitrary_host_binary(tmp_path, monkeypatch):
+    from agentporter.tools import jobs as job_module
+    monkeypatch.setattr(job_module.shutil, "which", lambda name: "/opt/test-profile/bin/bwrap")
+    manager = JobManager(tmp_path / "state")
+    with pytest.raises(PermissionError, match="Bubblewrap required"):
+        manager.start_raw_job("demo", str(tmp_path), ["python3", "-c", "print(1)"])
