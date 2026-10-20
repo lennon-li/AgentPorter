@@ -60,7 +60,13 @@ def test_async_pipes_stop_unbounded_output_without_disk_overshoot(tmp_path, stre
 
 
 def test_async_monitor_stops_descendant_after_leader_exits(tmp_path):
-    """A leader that exits cannot leave an inherited stdout pipe alive forever."""
+    """Reaping a PID-namespace leader cannot leave output pipes open indefinitely.
+
+    When the sandbox's PID 1 exits, the kernel may immediately kill the
+    descendant and close its inherited pipes: completed is then correct.
+    On hosts that retain the pipes until the deadline, timed_out is correct.
+    Either behavior must settle within the bounded deadline.
+    """
     mgr = JobManager(tmp_path / "state", max_log_bytes=2048)
     code = (
         "import subprocess,sys\n"
@@ -72,20 +78,35 @@ def test_async_monitor_stops_descendant_after_leader_exits(tmp_path):
         cmd=_offline_sandbox_cmd(tmp_path, code),
         timeout_seconds=1,
     )
-    child_pid = None
-    try:
-        status = _wait(mgr, job_id, seconds=5)
-        assert status["status"] == "timed_out", status
-        assert status["exit_code"] == 124
-        text = (mgr.jobs_dir / f"{job_id}.stdout.log").read_text().strip()
-        assert text.isdigit(), text
-        child_pid = int(text)
-        # The child PID is in Bubblewrap's private PID namespace, so do not
-        # inspect the same number under the host /proc namespace. The kernel
-        # removes the sandbox namespace on launcher exit after group kill.
-    finally:
-        # Child ran under a separate PID namespace. No host-pid kill allowed.
-        pass
+    status = _wait(mgr, job_id, seconds=5)
+    assert status["status"] in {"completed", "timed_out"}, status
+    assert status["exit_code"] == (0 if status["status"] == "completed" else 124)
+    assert status["duration"] < 5, status
+    output = (mgr.jobs_dir / f"{job_id}.stdout.log").read_text().strip()
+    assert output.isdigit(), output
+    # The child PID is in Bubblewrap's namespace. Never signal a host PID.
+
+
+def test_async_descendant_held_by_live_leader_must_timeout(tmp_path):
+    """Verify actual deadline/group-kill handling independently of PID 1 reaping."""
+    mgr = JobManager(tmp_path / "state", max_log_bytes=2048)
+    code = (
+        "import subprocess,sys\n"
+        "p=subprocess.Popen([sys.executable,'-B','-c','import time;time.sleep(30)'])\n"
+        "print(p.pid,flush=True)\n"
+        "p.wait()\n"
+    )
+    job_id = mgr.start_raw_job(
+        workspace_id="test", workspace_path=str(tmp_path),
+        cmd=_offline_sandbox_cmd(tmp_path, code),
+        timeout_seconds=1,
+    )
+    status = _wait(mgr, job_id, seconds=5)
+    assert status["status"] == "timed_out", status
+    assert status["exit_code"] == 124, status
+    assert status["duration"] < 5, status
+    output = (mgr.jobs_dir / f"{job_id}.stdout.log").read_text().strip()
+    assert output.isdigit(), output
 
 
 def test_immediately_exiting_worker_does_not_need_getpgid(tmp_path, monkeypatch):
