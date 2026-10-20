@@ -36,7 +36,7 @@ def test_action_metadata_config_override_and_workspace_permissions(tmp_path, mon
         "server:\n  public_url: https://bcc.example.test\n  action_prefix: bcc\n"
     )
     config = Config(config_dir=config_dir, state_dir=tmp_path / "state")
-    config.workspaces = {"repos": {"path": str(tmp_path), "allow_agent_dispatch": True}}
+    config.workspaces = {"repos": {"path": str(tmp_path / "workspace"), "allow_agent_dispatch": True}}
     app = create_asgi_app(config).app
     schema = app.openapi()
     assert schema["info"]["title"] == "BCC AgentPorter API"
