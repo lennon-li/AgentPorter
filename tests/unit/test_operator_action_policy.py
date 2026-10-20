@@ -110,3 +110,31 @@ action_modes:
 def test_default_policy_still_allows_readonly_server_inventory(temp_config):
     _, context = build_mcp_server(temp_config)
     assert isinstance(context["tools"]["list_workspaces"](), list)
+
+def test_authenticated_rest_denials_return_403_not_500(temp_config):
+    """Both generic REST actions and direct deploy-info honor owner locks."""
+    from fastapi.testclient import TestClient
+
+    _policy_file(temp_config.config_dir, """version: 1
+action_modes:
+  list_workspaces: LOCKED
+  server_deploy_info: LOCKED
+""")
+    temp_config.security.allowed_hosts.append("testserver")
+    app = create_asgi_app(temp_config)
+    headers = {"Authorization": f"Bearer {temp_config.api_key}"}
+    with TestClient(app, base_url="http://testserver") as client:
+        for route in ("/api/v1/workspaces/", "/api/v1/server/deploy-info"):
+            response = client.get(route, headers=headers)
+            assert response.status_code == 403, (route, response.text)
+            assert "technically locked" in response.json()["detail"]
+
+
+def test_policy_gate_for_deploy_info_shared_between_mcp_and_rest(temp_config):
+    _policy_file(temp_config.config_dir, """version: 1
+action_modes:
+  server_deploy_info: LOCKED
+""")
+    _, context = build_mcp_server(temp_config)
+    with pytest.raises(PermissionError, match="technically locked"):
+        context["tools"]["server_deploy_info"]()
