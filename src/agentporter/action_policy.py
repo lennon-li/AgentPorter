@@ -166,7 +166,7 @@ class OperatorActionPolicy:
         mode = self.effective_mode(action)
         baseline = DEFAULT_ACTION_MODES[action]
         if mode == "LOCKED" or baseline == "LOCKED":
-            raise PermissionError(f"Action {action} is technically locked")
+            raise PermissionError(f"Action {action} is technically locked pending independently verified approval")
         if mode == "APPROVAL" and baseline in {"ALLOW", "SCOPE"}:
             raise PermissionError(f"Action {action} requires unavailable independent approval")
         if mode == "SCOPE" and baseline == "ALLOW" and not arguments.get("workspace_id"):
