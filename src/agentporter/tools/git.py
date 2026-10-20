@@ -13,7 +13,7 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
             raise PermissionError(f"Workspace '{workspace_id}' does not allow Git operations")
         return ws
 
-    def _run_git(ws_path: str, args: list[str], timeout: int = 10, writable: bool = False, network_access: bool = False) -> str:
+    def _run_git(ws_path: str, args: list[str], timeout: int = 10, writable: bool = False, network_access: bool = False, writable_git_metadata: bool = False) -> str:
         # Repository-local Git configuration is treated as untrusted input.
         # Run Git inside the sandbox and override common executable helper mechanisms.
         argv = [
@@ -34,6 +34,7 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
             writable=writable,
             network_access=network_access,
             max_output_bytes=MAX_GIT_OUTPUT,
+            git_metadata_writable=writable_git_metadata,
         )
         if res["exit_code"] != 0:
             msg = res["stderr"].strip()[:MAX_GIT_OUTPUT]
@@ -143,7 +144,7 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
             if not s or s.startswith("-"):
                 raise ValueError(f"Invalid path: {p}")
             clean_paths.append(s)
-        out = _run_git(ws.path, ["add", "--"] + clean_paths, timeout=30, writable=True)
+        out = _run_git(ws.path, ["add", "--"] + clean_paths, timeout=30, writable=True, writable_git_metadata=True)
         return out if out.strip() else "Staged files successfully."
 
     def git_branch(workspace_id: str) -> str:
@@ -159,7 +160,7 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         if not clean_branch or clean_branch.startswith("-") or len(clean_branch) > 256:
             raise ValueError(f"Invalid branch: {branch}")
         args = ["checkout", "-b", clean_branch] if create else ["checkout", clean_branch]
-        out = _run_git(ws.path, args, timeout=30, writable=True)
+        out = _run_git(ws.path, args, timeout=30, writable=True, writable_git_metadata=True)
         return out if out.strip() else f"Switched to branch {clean_branch}."
 
     class GitTools(tuple):
