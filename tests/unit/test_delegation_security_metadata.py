@@ -25,7 +25,7 @@ _ACTION_READ_ONLY = {
 def _config(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTPORTER_API_KEY", "unit-test-only-key")
     config = Config(config_dir=tmp_path / "private-config", state_dir=tmp_path / "state")
-    config.workspaces = {"test": {"path": str(tmp_path), "allow_agent_dispatch": True}}
+    config.workspaces = {"test": {"path": str(tmp_path / "workspace"), "allow_agent_dispatch": True}}
     return config
 
 
