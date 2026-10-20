@@ -55,6 +55,9 @@ def test_git_mutations_select_trusted_metadata_mode(tmp_path, monkeypatch):
     git.git_checkout("repo", "review", create=True)
     assert [c["git_metadata_writable"] for c in calls] == [False, True, True]
     assert all(c["network_access"] is False for c in calls)
+    # Executable repository hooks must be neutralized even when .git is writable.
+    for call in calls:
+        assert call["argv"][call["argv"].index("core.hooksPath=/dev/null") - 1] == "-c"
 
 
 @pytest.mark.skipif(not BWRAP_USABLE, reason="Kernel Bubblewrap namespace unavailable")
@@ -87,3 +90,35 @@ def test_scoped_git_add_and_checkout_work_without_opening_generic_shell(tmp_path
     )
     assert probe["exit_code"] != 0
     assert subprocess.check_output(["git", "branch", "--show-current"], cwd=root, text=True).strip() == "review"
+
+
+@pytest.mark.parametrize("custom_hooks_path", [False, True])
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Kernel Bubblewrap namespace unavailable")
+def test_git_checkout_does_not_run_repo_post_checkout_hook(tmp_path, custom_hooks_path):
+    """A malicious repo must not bypass locked commit through post-checkout."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "Fixture"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=root, check=True)
+    (root / "safe.txt").write_text("safe\n")
+    subprocess.run(["git", "add", "--", "safe.txt"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "initial"], cwd=root, check=True)
+
+    hooks = root / ".git/hooks" if not custom_hooks_path else root / ".evil-hooks"
+    hooks.mkdir(exist_ok=True)
+    hook = hooks / "post-checkout"
+    hook.write_text("#!/bin/sh\ngit commit --allow-empty -qm HOOK_ESCAPE\n")
+    hook.chmod(0o755)
+    if custom_hooks_path:
+        subprocess.run(["git", "config", "core.hooksPath", str(hooks)], cwd=root, check=True)
+
+    initial = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    sandbox = BubblewrapSandbox(tmp_path / "state")
+    registry = WorkspaceRegistry({"repo": {"path": str(root), "writable": True}})
+    tools = create_git_tools(registry, sandbox)
+    result = tools.git_checkout("repo", "reviewed", create=True)
+    assert "Git error" not in result
+    assert subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip() == initial
+    assert subprocess.check_output(["git", "branch", "--show-current"], cwd=root, text=True).strip() == "reviewed"
+    assert "HOOK_ESCAPE" not in subprocess.check_output(["git", "log", "-1", "--format=%s"], cwd=root, text=True)
