@@ -1,4 +1,4 @@
-"""Fetching changes repository metadata and must respect workspace writability."""
+"""Git network operations fail closed until an audited transport is available."""
 
 from types import SimpleNamespace
 
@@ -25,54 +25,44 @@ class RecordingSandbox:
         return {"exit_code": 0, "stdout": "ok", "stderr": ""}
 
 
-def test_git_fetch_rejected_in_read_only_workspace(tmp_path):
-    workspace = SimpleNamespace(path=str(tmp_path), writable=False, allow_git=True)
+@pytest.mark.parametrize("op", ["git_fetch", "git_pull"])
+def test_network_git_denied_in_read_only_workspace(tmp_path, op):
+    ws = SimpleNamespace(path=str(tmp_path), writable=False, allow_git=True)
     sandbox = RecordingSandbox()
-    tools = create_git_tools(FakeRegistry(workspace), sandbox)
+    git = create_git_tools(FakeRegistry(ws), sandbox)
 
     with pytest.raises(PermissionError, match="read-only"):
-        tools.git_fetch("repo")
+        getattr(git, op)("repo")
     assert sandbox.calls == []
 
 
-def test_git_fetch_can_run_only_when_workspace_is_writable(tmp_path):
-    workspace = SimpleNamespace(path=str(tmp_path), writable=True, allow_git=True)
+@pytest.mark.parametrize("op", ["git_fetch", "git_pull"])
+def test_network_git_locked_even_with_writable_workspace_and_invalid_remote(tmp_path, op):
+    ws = SimpleNamespace(path=str(tmp_path), writable=True, allow_git=True)
     sandbox = RecordingSandbox()
-    tools = create_git_tools(FakeRegistry(workspace), sandbox)
+    git = create_git_tools(FakeRegistry(ws), sandbox)
 
-    assert tools.git_fetch("repo") == "ok"
-    assert len(sandbox.calls) == 1
-    assert sandbox.calls[0]["writable"] is True
-    assert sandbox.calls[0]["network_access"] is True
+    for remote in ("origin", "-unsafe"):
+        with pytest.raises(PermissionError, match="scoped network-capable Git backend"):
+            getattr(git, op)("repo", remote=remote)
+    assert sandbox.calls == []
 
 
-def test_git_fetch_requires_git_permission_even_if_writable(tmp_path):
-    workspace = SimpleNamespace(path=str(tmp_path), writable=True, allow_git=False)
+@pytest.mark.parametrize("op", ["git_fetch", "git_pull"])
+def test_network_git_requires_git_workspace_permission(tmp_path, op):
+    ws = SimpleNamespace(path=str(tmp_path), writable=True, allow_git=False)
     sandbox = RecordingSandbox()
-    tools = create_git_tools(FakeRegistry(workspace), sandbox)
+    git = create_git_tools(FakeRegistry(ws), sandbox)
 
     with pytest.raises(PermissionError, match="does not allow Git"):
-        tools.git_fetch("repo")
+        getattr(git, op)("repo")
     assert sandbox.calls == []
 
 
-def test_git_pull_rejects_implicit_merge_commits(tmp_path):
-    workspace = SimpleNamespace(path=str(tmp_path), writable=True, allow_git=True)
+def test_pull_cannot_merge_or_touch_git_without_network_backend(tmp_path):
+    ws = SimpleNamespace(path=str(tmp_path), writable=True, allow_git=True)
     sandbox = RecordingSandbox()
-    tools = create_git_tools(FakeRegistry(workspace), sandbox)
-
-    assert tools.git_pull("repo", remote="origin", branch="main") == "ok"
-    assert len(sandbox.calls) == 1
-    args = sandbox.calls[0]["argv"]
-    assert args[-4:] == ["pull", "--ff-only", "origin", "main"]
-    assert sandbox.calls[0]["network_access"] is True
-
-
-def test_git_pull_is_read_only_workspace_denied_before_network(tmp_path):
-    workspace = SimpleNamespace(path=str(tmp_path), writable=False, allow_git=True)
-    sandbox = RecordingSandbox()
-    tools = create_git_tools(FakeRegistry(workspace), sandbox)
-
-    with pytest.raises(PermissionError, match="read-only"):
-        tools.git_pull("repo")
+    git = create_git_tools(FakeRegistry(ws), sandbox)
+    with pytest.raises(PermissionError, match="Git pull is locked"):
+        git.git_pull("repo", remote="origin", branch="main")
     assert sandbox.calls == []
