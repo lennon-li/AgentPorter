@@ -66,32 +66,25 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
 
     def git_fetch(workspace_id: str, remote: str = "origin") -> str:
         ws = _workspace(workspace_id)
-        # Fetch mutates FETCH_HEAD, refs and objects: never allowed in RO.
         if not ws.writable:
             raise PermissionError(f"Workspace '{workspace_id}' is read-only")
-        clean_remote = remote.strip()
-        if not clean_remote or clean_remote.startswith("-") or len(clean_remote) > 256:
-            raise ValueError("Invalid remote")
-        out = _run_git(ws.path, ["fetch", clean_remote], timeout=60, writable=True, network_access=True)
-        return out if out.strip() else f"Fetched from {clean_remote} successfully."
+        # Network-enabled generic Bubblewrap execution is forbidden. Until a
+        # dedicated Git transport with scoped egress, credentials, metadata
+        # access and independent approval exists, refuse rather than attempt a
+        # permanently failing sandbox call or silently bypass network isolation.
+        raise PermissionError(
+            "Git fetch is locked: scoped network-capable Git backend and "
+            "independently verified approval are unavailable"
+        )
 
     def git_pull(workspace_id: str, remote: str = "origin", branch: str = "") -> str:
         ws = _workspace(workspace_id)
         if not ws.writable:
             raise PermissionError(f"Workspace '{workspace_id}' is read-only")
-        clean_remote = remote.strip()
-        if not clean_remote or clean_remote.startswith("-") or len(clean_remote) > 256:
-            raise ValueError("Invalid remote")
-        # Prevent implicit merge commits in the caller's workspace.
-        # Diverged branches require a separately reviewed reconciliation.
-        args = ["pull", "--ff-only", clean_remote]
-        if branch.strip():
-            clean_branch = branch.strip()
-            if clean_branch.startswith("-") or len(clean_branch) > 256:
-                raise ValueError("Invalid branch")
-            args.append(clean_branch)
-        out = _run_git(ws.path, args, timeout=60, writable=True, network_access=True)
-        return out if out.strip() else "Pull completed successfully."
+        raise PermissionError(
+            "Git pull is locked: scoped network-capable Git backend and "
+            "independently verified approval are unavailable"
+        )
 
     def git_push(workspace_id: str, remote: str = "origin", branch: str = "", set_upstream: bool = False) -> str:
         # Fail closed at the shared tool boundary reached by MCP and REST.
