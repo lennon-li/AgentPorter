@@ -572,6 +572,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         "agent_broker": agent_broker,
         "operator_action_policy": operator_policy,
         "tools": {
+            "server_deploy_info": server_deploy_info,
             "list_workspaces": list_workspaces,
             "workspace_info": workspace_info,
             "list_files": list_files,
@@ -658,6 +659,12 @@ def create_asgi_app(config: Config) -> ASGIApp:
     
     app.state.tools = context["tools"]
 
+    @app.exception_handler(PermissionError)
+    async def permission_error_response(request, exc: PermissionError):
+        """Return authorization denials as 403 rather than HTTP 500."""
+        return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+
     @app.get("/health")
     async def health():
         return JSONResponse({"status": "healthy"})
@@ -666,7 +673,8 @@ def create_asgi_app(config: Config) -> ASGIApp:
     # host paths are never exposed through the tunnel without the API key.
     @app.get("/api/v1/server/deploy-info", operation_id="server_deploy_info")
     async def server_deploy_info():
-        return JSONResponse(deploy_info())
+        # Enforce the same operator policy as the MCP tool.
+        return JSONResponse(context["tools"]["server_deploy_info"]())
     
     app.include_router(api_router, prefix="/api/v1")
     # streamable_http_app already serves its endpoint at /mcp. Mounting it at
