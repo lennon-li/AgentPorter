@@ -210,6 +210,7 @@ def test_rest_action_is_schema_visible_bounded_and_permission_gated():
     with TemporaryDirectory() as root:
         config = SimpleNamespace(
             state_dir=Path(root),
+            config_dir=Path(root).with_name(Path(root).name + "-operator-config"),
             workspaces={"asgard": {"path": root}},
             server=ServerSettings(action_prefix="asgard"),
             sandbox=SandboxSettings(),
@@ -251,6 +252,7 @@ def test_training_actions_are_schema_visible_but_separate_from_diagnostics():
     with TemporaryDirectory() as root:
         config = SimpleNamespace(
             state_dir=Path(root),
+            config_dir=Path(root).with_name(Path(root).name + "-operator-config"),
             workspaces={"asgard": {"path": root}},
             server=ServerSettings(action_prefix="asgard"),
             sandbox=SandboxSettings(),
