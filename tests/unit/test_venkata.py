@@ -118,7 +118,8 @@ class VenkataTests(unittest.TestCase):
         from agentporter.server import create_asgi_app
         with tempfile.TemporaryDirectory() as root:
             cfg = SimpleNamespace(
-                state_dir=Path(root), workspaces={"test": {"path": root}},
+                state_dir=Path(root), config_dir=Path(root).with_name(Path(root).name + "-operator-config"),
+                workspaces={"test": {"path": root}},
                 server=ServerSettings(action_prefix="bcc"), sandbox=SandboxSettings(),
                 security=SecuritySettings(allowed_hosts=["testserver"]), api_key="synthetic-test-key")
             app = create_asgi_app(cfg)
