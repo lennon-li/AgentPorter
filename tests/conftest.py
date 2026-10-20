@@ -7,6 +7,12 @@ from agentporter.config import Config
 from agentporter.workspaces.registry import WorkspaceRegistry
 
 
+@pytest.fixture(autouse=True)
+def isolate_agent_identities(tmp_path, monkeypatch):
+    """Source tests must never consume the host's private identity registry."""
+    monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(tmp_path / "agent-config"))
+
+
 @pytest.fixture
 def temp_config(tmp_path: Path) -> Config:
     config_dir = tmp_path / "config"

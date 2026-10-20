@@ -13,12 +13,16 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
             raise PermissionError(f"Workspace '{workspace_id}' does not allow Git operations")
         return ws
 
-    def _run_git(ws_path: str, args: list[str], timeout: int = 10, writable: bool = False, network_access: bool = False) -> str:
+    def _run_git(ws_path: str, args: list[str], timeout: int = 10, writable: bool = False, network_access: bool = False, writable_git_metadata: bool = False) -> str:
         # Repository-local Git configuration is treated as untrusted input.
         # Run Git inside the sandbox and override common executable helper mechanisms.
         argv = [
             "git",
             "-c", "core.fsmonitor=false",
+            # No hooks from .git/hooks, core.hooksPath, or inherited config.
+            # The dedicated Git-metadata writable mode must never run a
+            # repository-supplied post-checkout command with ref write rights.
+            "-c", "core.hooksPath=/dev/null",
             "-c", "core.untrackedCache=false",
             "-c", "diff.external=",
             "-c", "pager.status=false",
@@ -34,6 +38,7 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
             writable=writable,
             network_access=network_access,
             max_output_bytes=MAX_GIT_OUTPUT,
+            git_metadata_writable=writable_git_metadata,
         )
         if res["exit_code"] != 0:
             msg = res["stderr"].strip()[:MAX_GIT_OUTPUT]
@@ -65,30 +70,33 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
 
     def git_fetch(workspace_id: str, remote: str = "origin") -> str:
         ws = _workspace(workspace_id)
-        clean_remote = remote.strip()
-        if not clean_remote or clean_remote.startswith("-") or len(clean_remote) > 256:
-            raise ValueError("Invalid remote")
-        out = _run_git(ws.path, ["fetch", clean_remote], timeout=60, writable=True, network_access=True)
-        return out if out.strip() else f"Fetched from {clean_remote} successfully."
+        if not ws.writable:
+            raise PermissionError(f"Workspace '{workspace_id}' is read-only")
+        # Network-enabled generic Bubblewrap execution is forbidden. Until a
+        # dedicated Git transport with scoped egress, credentials, metadata
+        # access and independent approval exists, refuse rather than attempt a
+        # permanently failing sandbox call or silently bypass network isolation.
+        raise PermissionError(
+            "Git fetch is locked: scoped network-capable Git backend and "
+            "independently verified approval are unavailable"
+        )
 
     def git_pull(workspace_id: str, remote: str = "origin", branch: str = "") -> str:
         ws = _workspace(workspace_id)
         if not ws.writable:
             raise PermissionError(f"Workspace '{workspace_id}' is read-only")
-        clean_remote = remote.strip()
-        if not clean_remote or clean_remote.startswith("-") or len(clean_remote) > 256:
-            raise ValueError("Invalid remote")
-        args = ["pull", clean_remote]
-        if branch.strip():
-            clean_branch = branch.strip()
-            if clean_branch.startswith("-") or len(clean_branch) > 256:
-                raise ValueError("Invalid branch")
-            args.append(clean_branch)
-        out = _run_git(ws.path, args, timeout=60, writable=True, network_access=True)
-        return out if out.strip() else "Pull completed successfully."
+        raise PermissionError(
+            "Git pull is locked: scoped network-capable Git backend and "
+            "independently verified approval are unavailable"
+        )
 
     def git_push(workspace_id: str, remote: str = "origin", branch: str = "", set_upstream: bool = False) -> str:
-        ws = _workspace(workspace_id)
+        # Fail closed at the shared tool boundary reached by MCP and REST.
+        # A caller's tool permission/voice request is NOT a verified approval.
+        raise PermissionError(
+            "Git push is locked until a server-verified, scoped human approval "
+            "receipt is implemented"
+        )
         if not ws.writable:
             raise PermissionError(f"Workspace '{workspace_id}' is read-only")
         clean_remote = remote.strip()
@@ -107,7 +115,11 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         return out if out.strip() else f"Pushed to {clean_remote} successfully."
 
     def git_commit(workspace_id: str, message: str, all_files: bool = False) -> str:
-        ws = _workspace(workspace_id)
+        # Same fail-closed boundary as git_push; no untrusted boolean override.
+        raise PermissionError(
+            "Git commit is locked until a server-verified, scoped human approval "
+            "receipt is implemented"
+        )
         if not ws.writable:
             raise PermissionError(f"Workspace '{workspace_id}' is read-only")
         clean_msg = message.strip()
@@ -129,7 +141,7 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
             if not s or s.startswith("-"):
                 raise ValueError(f"Invalid path: {p}")
             clean_paths.append(s)
-        out = _run_git(ws.path, ["add", "--"] + clean_paths, timeout=30, writable=True)
+        out = _run_git(ws.path, ["add", "--"] + clean_paths, timeout=30, writable=True, writable_git_metadata=True)
         return out if out.strip() else "Staged files successfully."
 
     def git_branch(workspace_id: str) -> str:
@@ -145,7 +157,7 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         if not clean_branch or clean_branch.startswith("-") or len(clean_branch) > 256:
             raise ValueError(f"Invalid branch: {branch}")
         args = ["checkout", "-b", clean_branch] if create else ["checkout", clean_branch]
-        out = _run_git(ws.path, args, timeout=30, writable=True)
+        out = _run_git(ws.path, args, timeout=30, writable=True, writable_git_metadata=True)
         return out if out.strip() else f"Switched to branch {clean_branch}."
 
     class GitTools(tuple):

@@ -94,7 +94,7 @@ def test_prof_registration_discovery_and_authorized_dispatch(prof, tmp_path, mon
     monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(tmp_path))
     workspace = SimpleNamespace(path=str(tmp_path), writable=True, allow_agent_dispatch=True)
     jobs = Mock()
-    jobs.start_raw_job.return_value = "prof-job"
+    jobs.start_confined_agent_job.return_value = "prof-job"
     broker = AgentBroker(SimpleNamespace(get=lambda _: workspace), jobs)
     assert isinstance(broker.adapters["prof"], ProfAdapter)
     broker.adapters = {"prof": prof}
@@ -107,13 +107,13 @@ def test_prof_registration_discovery_and_authorized_dispatch(prof, tmp_path, mon
     assert result["job_id"] == "prof-job"
     assert result["worker_cli"] == "codex"
     assert result["requested_model"] == ""
-    argv = jobs.start_raw_job.call_args.kwargs["cmd"]
+    argv = jobs.start_confined_agent_job.call_args.kwargs["cmd"]
     assert argv[1:4] == ["-I", "-m", "agentporter.agents.isolated_codex"]
     assert argv[argv.index("--source-home") + 1] == prof.codex_home
     assert "-m" not in argv[argv.index("--") + 1:]
     assert "workspace-write" in argv
-    jobs.start_raw_job.reset_mock()
+    jobs.start_confined_agent_job.reset_mock()
     workspace.allow_agent_dispatch = False
     with pytest.raises(PermissionError, match="does not allow"):
         broker.dispatch_agent("prof", "test", "research")
-    jobs.start_raw_job.assert_not_called()
+    jobs.start_confined_agent_job.assert_not_called()

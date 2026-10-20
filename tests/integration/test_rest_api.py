@@ -45,7 +45,7 @@ def client(test_config, monkeypatch):
     from agentporter.agents.broker import AgentBroker
 
     class FakeRESTWorker:
-        name = "codex"
+        name = "jax"
         alias = "Codex fixture"
         provider = "OpenAI"
         description = "No-model REST contract fixture"
@@ -66,7 +66,9 @@ def client(test_config, monkeypatch):
 
     monkeypatch.setattr(
         AgentBroker, "_configured_workers",
-        lambda self: ({"codex": FakeRESTWorker()}, {}),
+        lambda self: ({"jax": FakeRESTWorker()}, {
+            "jax": ("codex", "Jax", "Fixture-only REST contract worker", "")
+        }),
     )
     app = create_asgi_app(test_config)
     # The SecurityMiddleware is the outermost app, TestClient wraps it.
@@ -154,43 +156,51 @@ def test_exec_run_rest(client, test_config):
     data = response.json()
     assert "rest_exec" in data["stdout"]
 
+def test_public_rest_agent_list_is_named_only(client, test_config):
+    headers = {"Authorization": f"Bearer {test_config.api_key}"}
+    response = client.get("/api/v1/workspaces/test-workspace/agents/list", headers=headers)
+    assert response.status_code == 200
+    entries = response.json()
+    assert [x["agent"] for x in entries] == [
+        "jax", "liz", "prof", "phil", "wei", "ming", "argie"
+    ]
+    assert all(x["registered"] is False for x in entries if x["agent"] != "jax")
+
+
+@pytest.mark.parametrize("action,payload", [
+    ("commit", {"message": "no unverified commit", "all_files": False}),
+    ("push", {"remote": "origin", "branch": "main", "set_upstream": False}),
+])
+def test_direct_git_publication_requires_verified_approval(client, test_config, action, payload):
+    headers = {"Authorization": f"Bearer {test_config.api_key}"}
+    response = client.post(
+        f"/api/v1/workspaces/test-workspace/git/{action}",
+        json=payload, headers=headers,
+    )
+    assert response.status_code == 403
+    assert "approval" in response.json()["detail"].lower()
+
+
+def test_public_rest_rejects_generic_runtime(client, test_config):
+    headers = {"Authorization": f"Bearer {test_config.api_key}"}
+    response = client.post(
+        "/api/v1/workspaces/test-workspace/agents/dispatch",
+        json={"agent": "codex", "task": "Do not launch"},
+        headers=headers,
+    )
+    assert response.status_code == 403
+    assert "unapproved" in response.json()["detail"].lower()
+
+
 def test_dispatch_agent_rest(client, test_config):
     headers = {"Authorization": f"Bearer {test_config.api_key}"}
-
-    prohibited_req = {
-        "agent": "codex",
-        "task": "echo blocked dispatch test",
-        "purpose": "unit test",
-        "model": "gpt-5.6-luna",
-        "reasoning_effort": "high"
-    }
-    response = client.post("/api/v1/workspaces/test-workspace/agents/dispatch", json=prohibited_req, headers=headers)
-    assert response.status_code == 400
-    assert "prohibited" in response.json()["detail"].lower()
-
-    dispatch_req = {
-        "agent": "codex",
-        "task": "echo rest dispatch test",
-        "purpose": "unit test",
-        "model": "gpt-6-luna",
-        "reasoning_effort": "high"
-    }
-    response = client.post("/api/v1/workspaces/test-workspace/agents/dispatch", json=dispatch_req, headers=headers)
-    assert response.status_code == 200
-    data = response.json()
-    assert "dispatch_id" in data
-    assert "job_id" in data
-    assert data["dispatch_id"] == data["job_id"]
-    assert data["status"] == "running"
-    assert data["worker_cli"] == "codex"
-    assert data["requested_model"] == "gpt-6-luna"
-    # Let the monitor finish its SQLite write before the temp state is removed.
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        status = client.get(f"/api/v1/jobs/{data['job_id']}/status", headers=headers)
-        assert status.status_code == 200
-        if status.json()["status"] == "completed":
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("fixture worker did not complete before teardown")
+    # The seven-agent catalog remains discoverable, but real launch is denied
+    # pending kernel-confined backend. Neither read nor write can bypass it.
+    for read_only in (True, False):
+        response = client.post(
+            "/api/v1/workspaces/test-workspace/agents/dispatch",
+            json={"agent": "jax", "task": "do not launch", "read_only": read_only},
+            headers=headers,
+        )
+        assert response.status_code == 403
+        assert "delegation blocked" in response.json()["detail"].lower()

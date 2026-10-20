@@ -4,6 +4,7 @@ import os
 import time
 import shutil
 import pytest
+from unittest.mock import Mock
 from pathlib import Path
 from agentporter.tools.system import create_system_tools
 from agentporter.tools.files import create_file_tools
@@ -170,9 +171,9 @@ def test_git_inspection(workspace_registry, tmp_path: Path):
     # Invalid input validations
     with pytest.raises(ValueError):
         tools.git_show("test-ws", ref="--bad")
-    with pytest.raises(ValueError):
+    with pytest.raises(PermissionError, match="scoped network-capable Git backend"):
         tools.git_pull("test-ws", remote="-u")
-    with pytest.raises(ValueError):
+    with pytest.raises(PermissionError, match="server-verified"):
         tools.git_push("test-ws", remote="-u")
     with pytest.raises(ValueError):
         tools.git_add("test-ws", paths=["--all"])
@@ -306,7 +307,10 @@ class _FakeAgent(AgentAdapter):
 
 
 def test_dispatch_agent_telemetry(workspace_registry, tmp_path: Path):
+    # A trusted confinement backend is not yet installed. The test must
+    # verify dispatch metadata without launching a worker as the host user.
     job_mgr = JobManager(tmp_path / "state")
+    job_mgr.start_confined_agent_job = Mock(return_value="job_fixture123")
     broker = AgentBroker(workspace_registry, job_mgr)
     broker.register_adapter(_FakeAgent())
 
@@ -325,17 +329,18 @@ def test_dispatch_agent_telemetry(workspace_registry, tmp_path: Path):
     assert res["requested_model"] == "requested-test-model"
     assert res["actual_model"] == "unknown"
     assert res["reasoning_level"] == "high"
-    assert res["job_id"].startswith("job_")
+    assert res["job_id"] == "job_fixture123"
 
-    for _ in range(50):
-        st = job_mgr.get_status(res["job_id"])
-        if st["status"] != "running":
-            break
-        time.sleep(0.02)
-    assert st["status"] == "completed"
-    assert st["requested_model"] == "requested-test-model"
-    assert st["configured_model"] == "configured-test-model"
-    assert st["actual_model"] == "unknown"
+    job_mgr.start_confined_agent_job.assert_called_once()
+    launch = job_mgr.start_confined_agent_job.call_args.kwargs
+    assert launch["workspace_id"] == "test-ws"
+    assert launch["agent"] == "fake"
+    assert launch["provider"] == "Test"
+    assert launch["model"] == "configured-test-model"
+    assert launch["requested_model"] == "requested-test-model"
+    assert launch["reasoning_level"] == "high"
+    # dispatch_agent defaults to read-only; only an explicit scope may enable writes.
+    assert launch["policy"].workspace_write is False
 
 
 def test_read_only_worker_must_be_enforceable(sample_workspace, tmp_path: Path):
@@ -349,5 +354,7 @@ def test_read_only_worker_must_be_enforceable(sample_workspace, tmp_path: Path):
         supports_read_only = False
 
     broker.register_adapter(UnsafeFake())
+    # Exercise read-only enforcement after a mock confinement capability is present.
+    job_mgr.start_confined_agent_job = Mock(return_value="job_unused")
     with pytest.raises(PermissionError, match="cannot enforce read-only"):
         broker.dispatch_agent("unsafe", "review only", "ro")

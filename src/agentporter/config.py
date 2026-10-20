@@ -56,6 +56,11 @@ class SandboxSettings:
 
 
 @dataclass
+class ParallelSearchSettings:
+    enabled: bool = False
+
+
+@dataclass
 class ScinetSettings:
     """Private deployment-supplied endpoint and training policy settings."""
 
@@ -106,6 +111,7 @@ class Config:
         self.server = ServerSettings()
         self.security = SecuritySettings()
         self.sandbox = SandboxSettings()
+        self.parallel_search = ParallelSearchSettings()
         self.scinet = ScinetSettings()
         self.workspaces: dict[str, dict[str, Any]] = {}
         self.api_key: str = ""
@@ -182,6 +188,14 @@ class Config:
         try:
             with open(config_file, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
+
+            parallel = data.get("parallel_search", {})
+            if not isinstance(parallel, dict) or set(parallel) - {"enabled"}:
+                raise ValueError("parallel_search accepts only enabled")
+            if "enabled" in parallel:
+                if not isinstance(parallel["enabled"], bool):
+                    raise ValueError("parallel_search.enabled must be a boolean")
+                self.parallel_search.enabled = parallel["enabled"]
 
             srv = data.get("server", {})
             if "host" in srv:

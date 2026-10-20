@@ -8,7 +8,11 @@ router = APIRouter(prefix="/workspaces/{workspace_id}/agents", tags=["Agents"])
 def list_agents(workspace_id: str, request: Request):
     return request.app.state.tools["list_agents"]()
 
-@router.post("/dispatch", response_model=DispatchResponse)
+@router.post(
+    "/dispatch",
+    response_model=DispatchResponse,
+    responses={403: {"description": "Delegation denied by server-side policy"}},
+)
 def dispatch_agent(workspace_id: str, req: DispatchAgentRequest, request: Request):
     try:
         return request.app.state.tools["dispatch_agent"](
@@ -25,4 +29,4 @@ def dispatch_agent(workspace_id: str, req: DispatchAgentRequest, request: Reques
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PermissionError as exc:
-        raise HTTPException(status_code=400, detail=f"Dispatch prohibited: {exc}") from exc
+        raise HTTPException(status_code=403, detail=f"Dispatch prohibited: {exc}") from exc

@@ -106,7 +106,11 @@ class ArtifactContentResponse(BaseModel):
     truncated: Optional[bool] = Field(None, description="Whether content was truncated.")
 
 class AgentInfo(BaseModel):
-    agent: Optional[str] = Field(None, description="Agent identifier (e.g., codex, jax, liz, prof, argie, claude, opencode, copilot, agy).")
+    agent: Optional[str] = Field(None, description="Named agent: jax, liz, prof, phil, wei, ming, or argie.")
+    registered: Optional[bool] = Field(None, description="Whether this named identity is registered on the host.")
+    delegatable: Optional[bool] = Field(None, description="Whether AgentPorter currently permits executing this named worker, distinct from installed/available.")
+    confinement_status: Optional[str] = Field(None, description="Reason delegation is blocked or description of verified confinement backend.")
+    routing_error: Optional[str] = Field(None, description="Unavailable identity or worker-CLI mismatch; no fallback.")
     name: Optional[str] = Field(None, description="Agent name.")
     worker_cli: Optional[str] = Field(None, description="Worker CLI binary name.")
     alias: Optional[str] = Field(None, description="Agent persona or alias.")
@@ -185,15 +189,17 @@ class ExecRunRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=30, description="Timeout in seconds for execution.")
-    # REST Actions (Agent7) are online by default (Lennon, 2026-10-09); MCP stays offline by default.
-    network_access: bool = Field(default=True, description="Internet access inside the sandbox (GitHub, package installs). Defaults to true; send false to run offline.")
+    # A client flag cannot authenticate permission for outbound traffic.
+    # Until trusted receipts and destination-scoped egress exist, true is rejected.
+    network_access: bool = Field(default=False, description="Generic execution is offline; true is rejected pending scoped network approval.")
 
 class ExecStartRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=300, description="Timeout in seconds for the background job.")
-    # REST Actions (Agent7) are online by default (Lennon, 2026-10-09); MCP stays offline by default.
-    network_access: bool = Field(default=True, description="Internet access inside the sandbox (GitHub, package installs). Defaults to true; send false to run offline.")
+    # A client flag cannot authenticate permission for outbound traffic.
+    # Until trusted receipts and destination-scoped egress exist, true is rejected.
+    network_access: bool = Field(default=False, description="Generic execution is offline; true is rejected pending scoped network approval.")
 
 class JobOutputRequest(BaseModel):
     cursor: int = Field(default=0, description="Byte offset to start reading from.")

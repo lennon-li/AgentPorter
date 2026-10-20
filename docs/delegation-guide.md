@@ -1,5 +1,17 @@
 # Worker Delegation Guide
 
+The public MCP/REST delegation interface uses the [seven named agents and action policy](agent-roster-action-policy.md). Generic runtime adapter IDs remain internal.
+
+**Release-stage restriction:** The work-in-progress hardening candidate
+temporarily rejects *all* worker launches until a kernel-confined worker
+backend exists, while retaining the seven discoverable identities and their
+configured models. The launch instructions below describe the historical
+deployed behavior and intended future permissions; they are **not** proof
+that this candidate can currently delegate. Inspect `delegatable` and
+`confinement_status` separately from `available`.
+Do not deploy the WIP candidate as a functioning seven-agent service.
+
+
 AgentPorter worker delegation is asynchronous. A successful `dispatch_agent` response means the worker process started; it does **not** mean the worker finished or that its final answer has been collected.
 
 ## Writing within authorized workspaces
@@ -47,8 +59,9 @@ sanitized environment at the initial launcher boundary, then create a temporary,
 0700-protected `CODEX_HOME`
 containing only model routing settings and a reference to the existing
 authentication file. User MCP servers, plugins, hooks and notifications are
-not copied. AgentPorter verifies the effective Codex MCP roster is empty
-before starting the worker; failed discovery or any enabled tool blocks launch.
+not copied. AgentPorter verifies the effective Codex MCP roster before starting
+the worker. Only the optional Parallel Search server described below is permitted;
+failed discovery or any other enabled tool blocks launch.
 Project-level Codex MCP/plugin configurations block launch as well.
 All Codex worker command sandboxes explicitly set
 `sandbox_workspace_write.network_access=false`, overriding inherited values.
@@ -69,6 +82,36 @@ After a code change, a restart alone does not update an immutable release.
 Follow [deployment.md](deployment.md) for owner-controlled activation. Verify
 live `list_agents`, then dispatch a bounded file-write check in the intended
 workspace and collect its result before claiming remote editing works.
+
+### Parallel Search MCP
+
+Parallel Search is optional and disabled by default. Enable it in the operator's
+AgentPorter `config.yaml` with `parallel_search: {enabled: true}`. When enabled,
+dispatched Jax, Liz, Prof, Phil, and Wei receive an additive, keyless remote MCP server:
+`parallel-search` at `https://search.parallel.ai/mcp`. It exposes only
+`web_search` and `web_fetch`. The server is configured at dispatch time:
+temporary screened Codex homes for Jax/Liz/Prof, Copilot's documented
+additional-MCP file for Phil, and OpenCode's per-run configuration for Wei.
+No user profile, account, model, reasoning preference, credential, or persistent
+MCP setting is overwritten. Existing user MCP servers remain excluded from the
+isolated Codex worker profile; only the fixed search server is added.
+
+An unreachable or rate-limited Parallel endpoint is reported by the respective
+CLI as an MCP connection/tool error. AgentPorter does not retry against a paid
+provider or silently substitute another search service.
+
+Verify search with actual MCP calls in a fresh dispatched job for each identity:
+request `parallel-search` `web_search` for current CRAN policies, then
+`web_fetch` of the official documentation URL. Retain tool-call events and the
+job ID, including connection errors or HTTP 429 responses. Links in an answer,
+`mcp list`, or successful host requests are not live tool proof. If a CLI
+continues after an MCP failure, report search as unavailable.
+
+Codex shell networking remains disabled by dispatch policy. A failed shell
+`curl` probe is not equivalent to a failed remote MCP call: inspect MCP
+startup/tool events separately. Compare non-secret proxy variable presence,
+DNS errors, and TLS errors before changing network policy. Do not enable
+unrestricted shell networking to repair MCP access. There is no paid fallback.
 
 ## 1. Preflight
 

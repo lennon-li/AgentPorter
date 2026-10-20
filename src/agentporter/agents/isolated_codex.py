@@ -17,6 +17,10 @@ import sys
 import tempfile
 import tomllib
 
+from agentporter.agents.parallel_search import (
+    PARALLEL_MCP_NAME, PARALLEL_MCP_URL, codex_config_toml,
+)
+
 _ROOT_KEYS = (
     "model", "model_provider", "model_reasoning_effort", "openai_base_url",
     "chatgpt_base_url", "model_context_window", "model_max_output_tokens",
@@ -149,7 +153,10 @@ def _safe_environment(profile: Path, provider_env: set[str]) -> dict[str, str]:
     return env
 
 
-def _validate_mcp_roster(executable: str, cwd: Path, env: dict[str, str]) -> None:
+def _validate_mcp_roster(
+    executable: str, cwd: Path, env: dict[str, str],
+    *, parallel_search_enabled: bool = False,
+) -> None:
     try:
         result = subprocess.run(
             [executable, *_CHECK_FLAGS, "mcp", "list", "--json"],
@@ -159,14 +166,27 @@ def _validate_mcp_roster(executable: str, cwd: Path, env: dict[str, str]) -> Non
         listed = json.loads(result.stdout)
     except (subprocess.SubprocessError, OSError, ValueError) as exc:
         raise RuntimeError("Cannot verify isolated Codex MCP roster") from exc
-    if not isinstance(listed, list) or any(
-        not isinstance(server, dict) or server.get("enabled", True)
-        for server in listed
-    ):
-        raise RuntimeError("Isolated Codex profile contains enabled MCP tools")
+    if not isinstance(listed, list) or any(not isinstance(server, dict) for server in listed):
+        raise RuntimeError("Isolated Codex profile contains unexpected MCP tools")
+    enabled = [server for server in listed if server.get("enabled", True)]
+    if not parallel_search_enabled:
+        if enabled:
+            raise RuntimeError("Isolated Codex profile contains enabled MCP tools")
+        return
+    if len(listed) != 1 or len(enabled) != 1 or enabled[0].get("name") != PARALLEL_MCP_NAME:
+        raise RuntimeError("Isolated Codex profile contains unexpected MCP tools")
+    server = enabled[0]
+    transport = server.get("transport")
+    if (server.get("enabled") is not True or not isinstance(transport, dict)
+            or transport.get("type") != "streamable_http"
+            or transport.get("url") != PARALLEL_MCP_URL):
+        raise RuntimeError("Parallel Search MCP transport does not match allowlist")
 
 
-def run(source_home: str, workspace: str, command: list[str]) -> int:
+def run(
+    source_home: str, workspace: str, command: list[str],
+    *, parallel_search_enabled: bool = False,
+) -> int:
     if not command or not Path(command[0]).is_absolute():
         raise RuntimeError("Codex executable must be an absolute path")
     if len(command) < 2 or command[1] != "exec":
@@ -175,6 +195,9 @@ def run(source_home: str, workspace: str, command: list[str]) -> int:
     source = Path(source_home).expanduser().resolve()
     _reject_project_overrides(workspace_path)
     clean_config, provider_env = _clean_profile_data(source)
+    if parallel_search_enabled:
+        # Root table must precede model-provider TOML tables.
+        clean_config = codex_config_toml() + clean_config
     with tempfile.TemporaryDirectory(prefix="agentporter-codex-") as home:
         profile = Path(home)
         os.chmod(profile, 0o700)
@@ -187,7 +210,10 @@ def run(source_home: str, workspace: str, command: list[str]) -> int:
                 raise RuntimeError("Unsafe Codex auth.json ownership or permissions")
             (profile / "auth.json").symlink_to(auth)
         env = _safe_environment(profile, provider_env)
-        _validate_mcp_roster(command[0], workspace_path, env)
+        _validate_mcp_roster(
+            command[0], workspace_path, env,
+            parallel_search_enabled=parallel_search_enabled,
+        )
         result = subprocess.run(
             [command[0], command[1], *_CHECK_FLAGS, *command[2:]],
             cwd=workspace_path, env=env, check=False,
@@ -199,13 +225,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-home", required=True)
     parser.add_argument("--workspace", required=True)
+    parser.add_argument("--parallel-search", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     command = args.command
     if command and command[0] == "--":
         command = command[1:]
     try:
-        return run(args.source_home, args.workspace, command)
+        return run(
+            args.source_home, args.workspace, command,
+            parallel_search_enabled=args.parallel_search,
+        )
     except (RuntimeError, ValueError, OSError) as exc:
         print(f"Isolated Codex launch refused: {exc}", file=sys.stderr)
         return 2
