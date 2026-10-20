@@ -19,6 +19,10 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         argv = [
             "git",
             "-c", "core.fsmonitor=false",
+            # No hooks from .git/hooks, core.hooksPath, or inherited config.
+            # The dedicated Git-metadata writable mode must never run a
+            # repository-supplied post-checkout command with ref write rights.
+            "-c", "core.hooksPath=/dev/null",
             "-c", "core.untrackedCache=false",
             "-c", "diff.external=",
             "-c", "pager.status=false",
