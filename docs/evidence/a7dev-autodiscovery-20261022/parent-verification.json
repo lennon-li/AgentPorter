@@ -48,6 +48,22 @@
     "portable_test_change": "optional deployment-overlay integration uses importorskip; full native integration still passes",
     "ci_dependency": "acl added for native ACL fixtures",
     "isolated_tracked_base_focused": "58 passed, 1 optional deployment-overlay integration skipped",
-    "secret_scan": "23 staged files checked; no private-key/provider-token pattern matches"
+    "secret_scan": "23 staged files checked; no private-key/provider-token pattern matches",
+    "isolated_tracked_base_full": {
+      "passed": 893,
+      "skipped": 1,
+      "subtests_passed": 24,
+      "warnings": 1,
+      "umask": "077",
+      "note": "unchanged Venkata fixture assumes private directory mode; host default umask run produced 1 failure; private-umask run passed. Optional deployment-overlay integration skipped only in isolated base."
+    },
+    "publication": {
+      "remote": "origin (local repository /home/yeli/repos/AgentPorter)",
+      "branch": "a7dev-autodiscovery-20261022",
+      "implementation_commit": "c0a64a0fed0ca2abc3b8134476d7efae059dd222",
+      "remote_revision_verified": true,
+      "hosted_ci": "No hosted CI run triggered by push to local origin; local isolated suite used Python 3.13."
+    },
+    "unrelated_work": "Pre-existing dirty and untracked changes preserved; excluded from commits"
   }
 }
