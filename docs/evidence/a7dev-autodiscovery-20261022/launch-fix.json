@@ -1,0 +1,71 @@
+{
+  "status": "launch-fix frozen for independent review and parent verification",
+  "timestamp_utc": "2026-10-22T12:53:23.948427+00:00",
+  "scope": [
+    "scripts/autodiscover-a7dev.py",
+    "scripts/install-a7dev-autodiscovery.sh",
+    "scripts/agentporter-dev-autodiscovery.service",
+    "tests/security/test_a7dev_autodiscovery.py",
+    "docs/A7DEV_AUTODISCOVERY_20261022.md"
+  ],
+  "sha256": {
+    "scripts/autodiscover-a7dev.py": "3992c76db55e32e6fc2a8b1614b8ff6a161ffde93672315d3230b83eb5e35050",
+    "scripts/install-a7dev-autodiscovery.sh": "545b583f6f9ed5e5d1aa50f20c43a25e6676592621adad8d60e97d9fe3982538",
+    "scripts/agentporter-dev-autodiscovery.service": "168a05cb78c4342ba72ac4bb596ed96d1086e6ee26ee14ddd95c7f20ffbeefed",
+    "tests/security/test_a7dev_autodiscovery.py": "1697e28a34b383fbeeb19b88464e120d4c9212716127276a4aceffeda9d3acc4",
+    "docs/A7DEV_AUTODISCOVERY_20261022.md": "0578bad76e11341d1368ffb5499a9a1ae95b5c7bd6031bf31f80b2043877c038"
+  },
+  "unchanged_timer_sha256": "0104f6620fd60e7dd4e74c3375473538a09cceb96fae146415952907dda4a9eb",
+  "problem": "Existing private root0700 /usr/local/libexec prevents service-UID child access; runuser introduces PAM dependency. Terminal history also omitted three known terminal statuses.",
+  "changes": [
+    "Immutable helper location /opt/agentporter-autodiscovery/autodiscover-a7dev.py; new root0755 directory and root0644 file; installer and systemd ExecStart aligned.",
+    "Direct subprocess.Popen user=serviceUID, group=serviceGID, extra_groups=[], close_fds=True, cwd=/, fixed PATH/HOME/LANG environment; no runuser/PAM dependency.",
+    "Failure/timeout diagnostics terminate and reap child within bounded waits, nonblocking-read at most4096 stderr bytes, sanitize control characters, retain guard ownership evidence.",
+    "Existing exact-token guard recovery untouched; no guard/journal/private-libexec deletion or permission widening.",
+    "Add known terminal statuses timed_out/output_limit_exceeded/interrupted; active/unresolved/unknown statuses still defer.",
+    "Docs and static helper/unit checksum pins updated."
+  ],
+  "verification": {
+    "native_focused": {
+      "command": ".venv/bin/python -m pytest -q tests/security/test_a7dev_autodiscovery.py --tb=short",
+      "exit_code": 0,
+      "result": "58 passed in 2.80s",
+      "scope": "owned temporary ACL and SQLite fixtures; no sudo/root/account impersonation"
+    },
+    "bash_syntax": {
+      "command": "bash -n scripts/install-a7dev-autodiscovery.sh",
+      "exit_code": 0
+    },
+    "systemd_static": {
+      "command": "systemd-analyze verify scripts/agentporter-dev-autodiscovery.service scripts/agentporter-dev-autodiscovery.timer",
+      "exit_code": 0,
+      "unrelated_warnings": [
+        "vpnagentd.service executable mode",
+        "anydesk.service legacy /var/run PIDFile"
+      ]
+    },
+    "static_pins": "installer pin test passes for helper/service/timer/acquisition runner",
+    "child_proc_fd": "native temporary WAL database via pinned proc FD exercises READY/VERIFY/RELEASE; exact guards removed and all files remain fixture-owner-owned"
+  },
+  "red_green": {
+    "launch_regressions": "4 failed before launch fix; corresponding4 passed afterward",
+    "terminal_history": "3 failed for omitted terminal statuses before expansion; all11 terminal/nonterminal parametrizations pass afterward"
+  },
+  "not_verified": [
+    "Actual privileged root-to-agentporter-dev Popen transition under systemd capability/confinement settings",
+    "Actual installed /opt path traversal by service UID and production PAM-independent rootunit acceptance",
+    "Live timer enrollment, service restart/health, or guard recovery against real gateway",
+    "Parent full regression gate and independent final review"
+  ],
+  "live_changes_performed": false,
+  "installers_executed": false,
+  "commits_or_pushes": false,
+  "credentials_read": false,
+  "old_private_libexec_untouched": true,
+  "guard_and_journal_untouched": true,
+  "notes": [
+    "No isolated privileged user namespace was used; UID drop and accessibility are verified by exact-Popen/static permission-model tests, not actual root impersonation.",
+    "Native numerical serviceUID ACL entries are tested only on temporary owned fixtures.",
+    "Barrier diagnostics are bounded even when stderr pipe fills or child hangs."
+  ]
+}

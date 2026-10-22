@@ -1,0 +1,19 @@
+{
+  "actual_registry_public_policy_and_worker_launcher_compatible": true,
+  "allowed": [
+    "read",
+    "write",
+    "git_read",
+    "offline_exec",
+    "read_only_dispatch"
+  ],
+  "denied": [
+    "https_download",
+    "git_push",
+    "dispatch_agent"
+  ],
+  "new_workspace": [
+    "new-project"
+  ],
+  "live_changes": false
+}

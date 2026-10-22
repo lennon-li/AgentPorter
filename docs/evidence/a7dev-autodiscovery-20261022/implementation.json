@@ -1,0 +1,82 @@
+{
+  "status": "implementation frozen; parent acceptance and activation pending",
+  "timestamp_utc": "2026-10-22T02:52:44.182841+00:00",
+  "scope": [
+    "scripts/autodiscover-a7dev.py",
+    "scripts/install-a7dev-autodiscovery.sh",
+    "scripts/agentporter-dev-autodiscovery.service",
+    "scripts/agentporter-dev-autodiscovery.timer",
+    "tests/security/test_a7dev_autodiscovery.py",
+    "docs/A7DEV_AUTODISCOVERY_20261022.md"
+  ],
+  "sha256": {
+    "scripts/autodiscover-a7dev.py": "a36c59c52fd0c9eba43a46b0c2c9d33e9fc6d90d1089513b36491bf5bad57bce",
+    "scripts/install-a7dev-autodiscovery.sh": "3500f75ecd0d160cf8ca43b2d02b056333ea02feaebd7bac1e5ef3bdf8348e92",
+    "scripts/agentporter-dev-autodiscovery.service": "4efe46bcfda3ff4cfd8bfd99a708677f323c0a993a90d12e7ba609f480668186",
+    "scripts/agentporter-dev-autodiscovery.timer": "0104f6620fd60e7dd4e74c3375473538a09cceb96fae146415952907dda4a9eb",
+    "tests/security/test_a7dev_autodiscovery.py": "487cb40c297abaf445f5ba73aef1ea554d561a6bd45bd23136a90c8ecc4286d1",
+    "docs/A7DEV_AUTODISCOVERY_20261022.md": "3f559bbfd5dec59388327c227d54f7999917faa10689f3d6755dbd4e143b761d"
+  },
+  "verification": {
+    "focused_native": {
+      "command": ".venv/bin/python -m pytest -q tests/security/test_a7dev_autodiscovery.py --tb=short",
+      "exit_code": 0,
+      "result": "42 passed in 2.71s (after synchronous installer first-run acceptance)",
+      "isolation": "native yeli; owned temporary ACL/SQLite fixtures only; no sudo"
+    },
+    "shell_syntax": {
+      "command": "bash -n scripts/install-a7dev-autodiscovery.sh",
+      "exit_code": 0
+    },
+    "systemd_static": {
+      "command": "systemd-analyze verify scripts/agentporter-dev-autodiscovery.service scripts/agentporter-dev-autodiscovery.timer",
+      "exit_code": 0,
+      "unrelated_host_warnings": [
+        "vpnagentd.service executable mode",
+        "anydesk.service legacy /var/run PIDFile"
+      ]
+    },
+    "pins": "focused test verifies all helper/service/timer/acquisition-runner static SHA256 pins"
+  },
+  "red_green": {
+    "initial_missing_helper": "pytest collection failed before implementation",
+    "core_plan_acl": "2 failures before row-state deep-copy and native UID execution; subsequent 15 passed",
+    "durable_guards": "2 missing-function failures before implementation; subsequent guards green",
+    "managed_explicit_overlap": "4 failed before revocation implementation; subsequent28 passed",
+    "privacy": "12 failed before case-insensitive sensitive-class correction; subsequent41 passed",
+    "pin_check": "1 failed before final static pins refreshed; final42 passed",
+    "installer_first_run": "1 installer sequencing failure before adding synchronous first oneshot; final42 passed"
+  },
+  "implemented": [
+    "strict bounded duplicate/alias rejecting YAML; private nofollow single-link control-file reads",
+    "descriptor-pinned candidate/ACL traversal; O_PATH special-file avoidance; device+mount-ID checks; bounded entry/depth/time traversal",
+    "case-insensitive private classes including SSH/GnuPG/config/cache; Git metadata read-only; default service ACL deny; unrelated effective ACL rights preserved",
+    "ordinary offline profile across registry/public policy/read-only worker roots; explicit preservation; capacity64; stale-row pruning; managed overlap revocation",
+    "service-UID initial BEGIN IMMEDIATE quiet check; durable exact-token INSERT/UPDATE guards continuously block admissions through startup health; root ownership journal before commit",
+    "exact-byte configuration and managed-state backup/recovery; known partial restore; unknown bytes/guard SQL refusal; no-op/busy no restart",
+    "checksum-pinned user installer with immutable root helper; acquisition repair fallback ordering; hardened root oneshot and30-second timer",
+    "installer synchronously starts root oneshot after daemon-reload and before timer enablement; first-run failure returns nonzero, busy/deferred scan does not claim enrollment"
+  ],
+  "review_fixes": [
+    "new explicit child/ancestor/same-path alias revokes unchanged auto scope and stops ACL traversal; shared runtime row retained for authoritative samepath alias",
+    "case-insensitive privacy classes aligned with sensitive path policy and additional known credential/cache directories"
+  ],
+  "not_verified": [
+    "installer activation and root-owned installed file identity",
+    "real systemd confinement/runuser/PAM/capability behavior",
+    "effective access while impersonating actual service UID (ACL entries themselves verified natively)",
+    "live helper crash/recovery/startup health and new workspace discovery",
+    "production-scale scan duration and capacity behavior on actual repos",
+    "parent full regression gate and independent final rerun"
+  ],
+  "live_changes_performed": false,
+  "installers_executed": false,
+  "commits_or_pushes": false,
+  "notes": [
+    "No credentials read; no network calls by worker; no live ACL/config/service changes.",
+    "Default restricted sandbox maps only uid1000; distinct numeric ACL fixtures require native approved exec.",
+    "Acquisition release already repaired according to parent; installer skips runner when repaired release active.",
+    "Fatal unresolved recovery retains durable admission guard and journal intentionally; do not manually bypass."
+  ],
+  "evidence_scope": "Historical pre-activation snapshot; superseded for current status/hashes by parent-verification.json"
+}

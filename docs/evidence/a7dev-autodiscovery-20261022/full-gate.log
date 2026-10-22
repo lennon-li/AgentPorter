@@ -1,0 +1,69 @@
+........................................................................ [  4%]
+........................................................................ [  8%]
+........................................................................ [ 12%]
+........................................................................ [ 16%]
+........................................................................ [ 21%]
+........................................................................ [ 25%]
+........................................................................ [ 29%]
+........................................................................ [ 33%]
+........................................................................ [ 37%]
+........................................................................ [ 42%]
+........................................................................ [ 46%]
+........................................................................ [ 50%]
+........................................................................ [ 54%]
+........................................................................ [ 59%]
+........................................................................ [ 63%]
+........................................................................ [ 67%]
+........................................................................ [ 71%]
+........................................................................ [ 75%]
+........................................................................ [ 80%]
+........................................................................ [ 84%]
+........................................................................ [ 88%]
+........................................................................ [ 92%]
+........................................................................ [ 97%]
+................................................ [ 99%]
+..                                                                       [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.13/site-packages/starlette/testclient.py:53
+  /home/yeli/agent-work/agentporter-dev/.venv/lib/python3.13/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1706 passed, 1 warning, 24 subtests passed in 105.38s (0:01:45)
+{"event": "public_https_denied_or_error", "workspace_id": "cranary", "host": "api.github.com", "method": "GET", "error_type": "PermissionError"}
+{"event": "public_https_denied_or_error", "workspace_id": "cranary", "host": "api.github.com", "method": "GET", "error_type": "ValueError"}
+{"event": "public_https_denied_or_error", "workspace_id": "cranary", "host": "api.github.com", "method": "GET", "error_type": "ValueError"}
+PASS: 65 offline HTTPS security cases; no outbound connections
+PASS: scoped exec_run/exec_start routing, offline regression, fake async launcher
+{"event": "public_https_denied_or_error", "workspace_id": "cranary", "host": "api.github.com", "method": "HEAD", "error_type": "ValueError"}
+{"event": "public_https_denied_or_error", "workspace_id": "cranary", "host": "api.github.com", "method": "HEAD", "error_type": "ValueError"}
+PASS: encoded query credential names
+PASS: HEAD control characters denied
+PASS: reason phrase not reflected
+PASS: HEAD metadata aggregate limit
+PASS: mutable ancestor rejected
+PASS: symlinked config directory rejected
+PASS: pinned directory resists rename-and-replace race
+PASS: all scoped HTTPS audit regression checks
+PASS: narrow relay key mode enforced
+PASS: explicit upstream loopback and workspace allowlist
+PASS: independent receiving-gateway workspace scope
+PASS: seven-agent identity, workspace, read-only and publication gates
+PASS: durable relay job ownership and idempotency
+PASS: authenticated, bounded relay protocol and restart-persistent public IDs
+PASS: mismatched workspace roots fail closed
+PASS: unsafe numeric-PID cancellation disabled
+PASS: SQLite cross-instance concurrency admission is atomic
+PASS: five rejected dispatches do not consume relay capacity
+PASS: lost reply retries same durable idempotency ID
+PASS: production delegation relay offline security tests
+PASS: path swap cannot redirect a pinned privileged credential write
+PASS: credential refresh preserves owner/mode, atomicity and symlink rejection
+PASS: bounded, repeatable Obsidian skills and policies data snapshot
+PASS: missing executables not advertised as available
+PASS: external symlink payload rejected
+PASS: compiled code excluded from shared skills data
+PASS: release-source validation rejects mutable/untrusted paths
+PASS: shared resources mounted read-only inside the existing bwrap boundary
+PASS: shared agent resources offline security checks
+PASS: complete development candidate verification

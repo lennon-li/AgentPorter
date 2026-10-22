@@ -4,6 +4,20 @@ AgentPorter is being developed by dogfooding: use it for real work, record frict
 
 ## Current state
 
+### A7Dev operator deployment — 2026-10-22
+
+- [x] Install acquisition/Git repair in development only; receipt integrity verified.
+- [x] Enable automatic discovery of eligible direct `~/repos` folders with the
+  ordinary project profile; protected registrations and network policy preserved.
+- [x] Verify repeated installed timer scans and public `references` registration;
+  offline execution succeeds as UID 994 with zero effective/ambient capabilities.
+- Publication branch: `a7dev-autodiscovery-20261022`, based on deployment revision
+  `65dbf44`; operator explicitly authorized branch creation and push for closure.
+
+Deployment details and verification limits are recorded in
+`docs/A7DEV_AUTODISCOVERY_20261022.md`. The generic package roadmap below predates
+this machine-specific development deployment.
+
 - Generic MCP package has been extracted from the original M3 gateway.
 - Direct execution uses Bubblewrap with network disabled and a cleared environment.
 - File, Git, artifact, async-job, and worker-agent tools exist.

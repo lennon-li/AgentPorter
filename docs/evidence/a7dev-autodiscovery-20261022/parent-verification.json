@@ -1,0 +1,53 @@
+{
+  "status": "live activation and repeated scans verified; publication on authorized dedicated branch",
+  "full_gate": {
+    "passed": 1722,
+    "subtests_passed": 24,
+    "failed": 0,
+    "offline_security_checks": "all passed",
+    "scope": "launch correction before final unit-only AmbientCapabilities correction; final focused59 and static unit checks passed afterward"
+  },
+  "final_focused_tests_passed": 59,
+  "actual_registry_policy_worker_launcher_integration": "passed with temporary fixtures",
+  "independent_review": "launch correction approved; final AmbientCapabilities setting verified by parent against systemd v255 exec-invoke.c and live activation",
+  "scan_interval_seconds": 30,
+  "new_profile": "file read/write, offline execution, Git inspection and read-only delegation",
+  "network_scope_changed": false,
+  "explicit_registrations_preserved": true,
+  "current_additional_candidate": null,
+  "live_changes_performed": true,
+  "activated": true,
+  "no_commits_or_pushes": true,
+  "activation_command": "bash /home/yeli/agent-work/agentporter-dev/scripts/install-a7dev-autodiscovery.sh",
+  "source_sha256": {
+    "scripts/autodiscover-a7dev.py": "3992c76db55e32e6fc2a8b1614b8ff6a161ffde93672315d3230b83eb5e35050",
+    "scripts/install-a7dev-autodiscovery.sh": "f5bcb81a6ebf9d2737da49a87069710a17019ecbcf728538ea27e78d11ad87f1",
+    "scripts/agentporter-dev-autodiscovery.service": "44c809c3b10bdf93921b5f23b656098cfaab3f9eb1526e24c44e19a5045b2e1e",
+    "scripts/agentporter-dev-autodiscovery.timer": "0104f6620fd60e7dd4e74c3375473538a09cceb96fae146415952907dda4a9eb",
+    "tests/security/test_a7dev_autodiscovery.py": "3cda1292c611bae9378308dc87549f3da62153f081dd18359b3a3fd7d0ec3af3",
+    "docs/A7DEV_AUTODISCOVERY_20261022.md": "4299ff137183d445c34db4f85b5b85c3e44cce6e559c5516166ae39dd6cdd436"
+  },
+  "live_verification": {
+    "date": "2026-10-22",
+    "service_result": "success",
+    "exec_main_status": 0,
+    "timer": "enabled and active; repeated successful scans",
+    "new_workspace": "references",
+    "public_permissions": "ordinary project profile",
+    "offline_execution_exit_code": 0,
+    "uid": 994,
+    "workspace_writable": true,
+    "effective_capabilities": "0",
+    "ambient_capabilities": "0",
+    "no_new_privileges": true,
+    "gateway": "active"
+  },
+  "closure_verification": {
+    "branch": "a7dev-autodiscovery-20261022",
+    "native_focused": "59 passed",
+    "portable_test_change": "optional deployment-overlay integration uses importorskip; full native integration still passes",
+    "ci_dependency": "acl added for native ACL fixtures",
+    "isolated_tracked_base_focused": "58 passed, 1 optional deployment-overlay integration skipped",
+    "secret_scan": "23 staged files checked; no private-key/provider-token pattern matches"
+  }
+}

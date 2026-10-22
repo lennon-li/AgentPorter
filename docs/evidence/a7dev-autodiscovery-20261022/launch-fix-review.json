@@ -1,0 +1,95 @@
+{
+  "reviewer": "Jax / independent native Codex worker",
+  "timestamp_utc": "2026-10-22T12:53:31.145580+00:00",
+  "scope": [
+    "scripts/autodiscover-a7dev.py",
+    "scripts/install-a7dev-autodiscovery.sh",
+    "scripts/agentporter-dev-autodiscovery.service",
+    "scripts/agentporter-dev-autodiscovery.timer",
+    "tests/security/test_a7dev_autodiscovery.py",
+    "docs/A7DEV_AUTODISCOVERY_20261022.md",
+    "docs/superpowers/specs/2026-10-22-a7dev-autodiscovery.md",
+    "docs/superpowers/plans/2026-10-22-a7dev-autodiscovery.md"
+  ],
+  "verdict": "PASS for prepared artifacts; activation and live behavior NOT verified",
+  "input_integrity_sha256": {
+    "scripts/autodiscover-a7dev.py": "3992c76db55e32e6fc2a8b1614b8ff6a161ffde93672315d3230b83eb5e35050",
+    "scripts/install-a7dev-autodiscovery.sh": "545b583f6f9ed5e5d1aa50f20c43a25e6676592621adad8d60e97d9fe3982538",
+    "scripts/agentporter-dev-autodiscovery.service": "168a05cb78c4342ba72ac4bb596ed96d1086e6ee26ee14ddd95c7f20ffbeefed",
+    "scripts/agentporter-dev-autodiscovery.timer": "0104f6620fd60e7dd4e74c3375473538a09cceb96fae146415952907dda4a9eb",
+    "tests/security/test_a7dev_autodiscovery.py": "1697e28a34b383fbeeb19b88464e120d4c9212716127276a4aceffeda9d3acc4",
+    "docs/A7DEV_AUTODISCOVERY_20261022.md": "0578bad76e11341d1368ffb5499a9a1ae95b5c7bd6031bf31f80b2043877c038",
+    "docs/superpowers/specs/2026-10-22-a7dev-autodiscovery.md": "812d47c4ed655b4ee10d5b0e7ad0dc44c266023f3061192c76b540447aac43f7",
+    "docs/superpowers/plans/2026-10-22-a7dev-autodiscovery.md": "d8848fbef638997f9143bbf2531cbb951df336da5b5dc26240236b90f64066e7"
+  },
+  "installer_pins": {
+    "helper": {
+      "sha256": "3992c76db55e32e6fc2a8b1614b8ff6a161ffde93672315d3230b83eb5e35050",
+      "match": true
+    },
+    "service": {
+      "sha256": "168a05cb78c4342ba72ac4bb596ed96d1086e6ee26ee14ddd95c7f20ffbeefed",
+      "match": true
+    },
+    "timer": {
+      "sha256": "0104f6620fd60e7dd4e74c3375473538a09cceb96fae146415952907dda4a9eb",
+      "match": true
+    },
+    "repair": {
+      "sha256": "c877cfe7a3f3e82567c1fec5f4f8e395d12a3f936d978e38ef96f8171b4c6614",
+      "match": true
+    }
+  },
+  "open_critical_or_important_findings": [],
+  "resolved_findings": [
+    {
+      "severity": "Important",
+      "title": "Existing managed roots ignored newly authoritative overlapping explicit registrations",
+      "original_reference": "scripts/autodiscover-a7dev.py plan managed-retention loop and new-candidate-only overlap handling",
+      "evidence": "Synthetic reproduction originally retained managed parent after restricted nested explicit registration; corrected planner derives authoritative roots and revokes matching auto rows before ACL traversal. Child/ancestor/same-path alias, no-refresh and real launcher/policy regressions pass.",
+      "status": "fixed and verified"
+    },
+    {
+      "severity": "Important",
+      "title": "Incomplete and case-sensitive private-name denylist exposed private credential classes to ordinary ACL enrollment",
+      "original_reference": "scripts/autodiscover-a7dev.py private_name",
+      "evidence": "Original private_name returned false for id_rsa/id_ed25519/.gnupg/.ENV/key.PEM. Corrected classifier folds case and denies existing sensitive filenames and credential/config directories; native named-user deny/no-traversal regressions pass.",
+      "status": "fixed and verified"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv/bin/python -m pytest -q tests/security/test_a7dev_autodiscovery.py",
+      "result": "58 passed in 2.71s (final /opt/direct-setuid launch and complete terminal status classification revision)",
+      "mode": "native require_escalated; owned temporary fixtures only, no sudo/root/service/config actions"
+    },
+    {
+      "command": "bash -n scripts/install-a7dev-autodiscovery.sh",
+      "result": "exit 0"
+    },
+    {
+      "command": "systemd-analyze verify scripts/agentporter-dev-autodiscovery.service scripts/agentporter-dev-autodiscovery.timer",
+      "result": "exit 0; unrelated existing host vpnagentd executable-mode and anydesk legacy PIDFile warnings"
+    },
+    {
+      "command": "installer static helper/service/timer/repair SHA256 pin comparison",
+      "result": "all four match"
+    }
+  ],
+  "review_notes": [
+    "Durable guard token recorded before transaction commit; BEGIN IMMEDIATE quiet check and exact static admission guards atomically installed; writer lock released for gateway startup; exact owned guards verified/removed only after health or recorded rollback.",
+    "Known partial config/state images restored; unknown newer bytes fail closed; pending journal/guards survive interrupted rollback; no active job cancellation path.",
+    "FD traversal uses no-follow O_PATH descriptors for entries and skips special files, hardlinks, other owners, device and mount crossings; root candidate identity checked before/after enrollment.",
+    "Read-only Git ACL is not itself rename protection; existing generic sandbox root .git read-only overmount and file API sensitive-path checks supply additional existing controls. Nested Git semantics intentionally not redesigned.",
+    "Final installer rereview: synchronous systemctl start of root oneshot occurs after daemon-reload and before enable --now timer; set -e aborts installation on nonzero reconciliation service failure. Busy/deferred successful scans preserve existing semantics. Static sequencing regression and full focused native suite verified.",
+    "Launch fix rereview: installed helper moves to dedicated root-owned 0755 /opt/agentporter-autodiscovery, preserving private libexec ancestors. Barrier Popen directly switches UID/GID with empty supplementary groups, isolated interpreter, cwd=/, minimal fixed environment and closed unrelated FDs; bounded sanitized child diagnostics terminate/kill before draining stderr. Root journal remains intact on failed launch. TERMINAL aligns known completed/failed/cancelled/timed_out/output_limit_exceeded/interrupted states; active/cleanup_failed/unknown remain blocked. Synthetic launch/protocol/WAL/terminal regressions pass. No new Important/Critical findings."
+  ],
+  "declined_to_judge": [
+    "No installer activation, live ACL changes, live config registration, production/service changes, credential reads, commits or pushes authorized/executed.",
+    "Installed-unit confinement and real service-UID effective access NOT verified.",
+    "Live gateway crash/rollback/end-to-end timer discovery and production-scale scan duration NOT verified.",
+    "Existing gateway network/publication and nested Git semantics inspected only as dependency context, not independently re-audited.",
+    "Unrelated dirty tree excluded."
+  ],
+  "report_path": "/tmp/jax-autodiscovery-final-review.json"
+}

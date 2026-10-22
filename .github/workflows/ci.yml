@@ -22,7 +22,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap ripgrep patch r-base
+          sudo apt-get install -y bubblewrap ripgrep patch r-base acl
 
       - uses: actions/setup-python@v5
         with:
