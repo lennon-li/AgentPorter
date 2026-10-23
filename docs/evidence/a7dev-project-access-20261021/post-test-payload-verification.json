@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "archive_sha256": "c2924acec4e2a5bb15b36c41891929179f614c211a79a5a57f5b53e258d28566",
+  "payload_entries": 26359,
+  "allowed_local_relocations": {
+    "venv/pyvenv.cfg": {
+      "before": "f6a281f3f1573e016e1de61ad908ef03751158d051a671ecacc192d64a7bb6a9",
+      "after": "e46be20e60d6fa7bb77b817d39b2c808786bb0fdf58e9705996b5c554e6c8373"
+    },
+    "venv/lib/python3.13/site-packages/agentporter_development.pth": {
+      "before": "ce1e0bbfadc4fe6a25660d2093a2e06d05d14f9c05785a3e38b6a3061c95f747",
+      "after": "d84ff81a6c5a83ed277c8f8e065a264f298999ebd4cdbf13e166c32bc2a8f309"
+    }
+  },
+  "installed": false,
+  "production_changed": false
+}

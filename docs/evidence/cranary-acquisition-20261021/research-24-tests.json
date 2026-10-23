@@ -1,0 +1,74 @@
+[
+  {
+    "test": "test_ropensci_evidence.py",
+    "arguments": {
+      "workspace_id": "cranary",
+      "argv": [
+        "python3",
+        "-B",
+        "test_ropensci_evidence.py"
+      ],
+      "cwd": "data-raw/cran-history/reports/2026-10-19-laya-dataset-source-research",
+      "timeout_seconds": 30,
+      "network_access": false
+    },
+    "is_error": false,
+    "data": {
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "test_author_self_report_not_independent (__main__.ReviewEvidenceTests.test_author_self_report_not_independent) ... ok\ntest_complete_comment_counts (__main__.ReviewEvidenceTests.test_complete_comment_counts) ... ok\ntest_followup_not_extra_sample (__main__.ReviewEvidenceTests.test_followup_not_extra_sample) ... ok\ntest_frozen_manifest_unchanged_and_frozen_issues (__main__.ReviewEvidenceTests.test_frozen_manifest_unchanged_and_frozen_issues) ... ok\ntest_no_label_promotion (__main__.ReviewEvidenceTests.test_no_label_promotion) ... ok\ntest_policy_issue_excluded (__main__.ReviewEvidenceTests.test_policy_issue_excluded) ... ok\ntest_raw_receipts_authentic (__main__.ReviewEvidenceTests.test_raw_receipts_authentic) ... ok\ntest_reviewer_git_commit_citation_is_precise_but_unverified (__main__.ReviewEvidenceTests.test_reviewer_git_commit_citation_is_precise_but_unverified) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 0.004s\n\nOK\n",
+      "duration": 0.10346269607543945,
+      "truncated": false,
+      "timed_out": false,
+      "timeout_seconds": 30
+    }
+  },
+  {
+    "test": "test_historical_population.py",
+    "arguments": {
+      "workspace_id": "cranary",
+      "argv": [
+        "python3",
+        "-B",
+        "test_historical_population.py"
+      ],
+      "cwd": "data-raw/cran-history/reports/2026-10-19-laya-dataset-source-research",
+      "timeout_seconds": 30,
+      "network_access": false
+    },
+    "is_error": false,
+    "data": {
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "test_corrupted_gzip_rejected (__main__.PopulationPreviewTests.test_corrupted_gzip_rejected) ... ok\ntest_outcomes_are_never_used_for_selection (__main__.PopulationPreviewTests.test_outcomes_are_never_used_for_selection) ... ok\ntest_parse_multiline_and_versions (__main__.PopulationPreviewTests.test_parse_multiline_and_versions) ... ok\ntest_refuse_ambiguous_or_partial_frames (__main__.PopulationPreviewTests.test_refuse_ambiguous_or_partial_frames) ... ok\ntest_snapshot_metadata_not_promoted (__main__.PopulationPreviewTests.test_snapshot_metadata_not_promoted) ... ok\ntest_url_date_alignment (__main__.PopulationPreviewTests.test_url_date_alignment) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.003s\n\nOK\n",
+      "duration": 0.09965729713439941,
+      "truncated": false,
+      "timed_out": false,
+      "timeout_seconds": 30
+    }
+  },
+  {
+    "test": "test_quality_gate.py",
+    "arguments": {
+      "workspace_id": "cranary",
+      "argv": [
+        "python3",
+        "-B",
+        "test_quality_gate.py"
+      ],
+      "cwd": "data-raw/cran-history/reports/2026-10-19-laya-dataset-source-research",
+      "timeout_seconds": 30,
+      "network_access": false
+    },
+    "is_error": false,
+    "data": {
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "test_archive_source_lineage (__main__.QualityGateTests.test_archive_source_lineage) ... ok\ntest_detail_archive_lineage (__main__.QualityGateTests.test_detail_archive_lineage) ... ok\ntest_flavor_counts (__main__.QualityGateTests.test_flavor_counts) ... ok\ntest_frozen_candidates (__main__.QualityGateTests.test_frozen_candidates) ... ok\ntest_input_digests (__main__.QualityGateTests.test_input_digests) ... ok\ntest_manifest_detail_lineage (__main__.QualityGateTests.test_manifest_detail_lineage) ... ok\ntest_no_historical_byte_identity_claim (__main__.QualityGateTests.test_no_historical_byte_identity_claim) ... ok\ntest_no_rights_or_review_claim (__main__.QualityGateTests.test_no_rights_or_review_claim) ... ok\ntest_no_training_promotion (__main__.QualityGateTests.test_no_training_promotion) ... ok\ntest_ten_source_records (__main__.QualityGateTests.test_ten_source_records) ... ok\n\n----------------------------------------------------------------------\nRan 10 tests in 0.003s\n\nOK\n",
+      "duration": 0.10421395301818848,
+      "truncated": false,
+      "timed_out": false,
+      "timeout_seconds": 30
+    }
+  }
+]

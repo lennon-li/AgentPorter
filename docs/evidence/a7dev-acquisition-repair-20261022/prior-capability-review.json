@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-21",
+  "reviewer": "nested_workspace_gate (independent of capability implementation)",
+  "scope": [
+    "src/agentporter/tools/system.py",
+    "src/agentporter/server.py",
+    "tests/security/test_capability_inventory.py"
+  ],
+  "installed_baseline": "/opt/agentporter-development/versions/20261021T232414.837654Z",
+  "verdict": "PASS for source inventory correction and synthetic authorization checks; installation/live correction not verified",
+  "findings": [],
+  "authorization_changes": false,
+  "source_edits_by_reviewer": false,
+  "observations": [
+    "Diff against installed server.py contains only the factory call passing a lazy synchronous SDK registry inventory callback.",
+    "system.py adds an optional backward-compatible factory callback, sorted unique supported-tool names, and HTTPS download to standalone fallback.",
+    "No public policy, workspace scope, middleware, operator authorization, network policy or credential path changed by these inspected diffs.",
+    "SDK tools/list already reveals the same registered names to authenticated clients; capability parity introduces no additional tool identities beyond that inventory.",
+    "Callback uses SDK private manager API; pinned installed SDK supports synchronous list_tools(), verified against public SDK async list_tools() parity in tests.",
+    "Capability support describes registered implementation, not caller authorization. Existing execution and authorization gates remain authoritative."
+  ],
+  "source_sha256": {
+    "src/agentporter/tools/system.py": "217dd18662ab116936d380f7a26f3e0a32518fa4c69df560d9616bd8fffc4d75",
+    "src/agentporter/server.py": "67c10ae0f888d8a148b2ada1d4c7671f38a2c4382d3ef6b9a186061729e94c0a",
+    "tests/security/test_capability_inventory.py": "12be6eed4112fe6ec2f1b71ca88db9b5d6776424f0edfa9f86472989b9df7f38"
+  },
+  "installed_sha256": {
+    "src/agentporter/server.py": "6750dcb135c8044a5fe5758af9eadafbd19f12dec0c584fe85238e9706bfea96",
+    "src/agentporter/tools/system.py": "c17c69c886ac99a09033ee6ee5f6c4f0d41cf360738a267e321fc39ad33b6a9d"
+  },
+  "validation": {
+    "command": ".venv/bin/python -m pytest -q tests/security/test_capability_inventory.py tests/security/test_closeout_client_policy.py tests/security/test_public_delegation_readiness.py tests/unit/test_operator_action_policy.py --basetemp=/tmp/aci-1021-a",
+    "execution": "Unprivileged outside tool sandbox; synthetic fixtures only",
+    "result": "33 passed, 1 existing Starlette/AnyIO deprecation warning in 4.06 seconds",
+    "diff_check": "git diff --check passed",
+    "coverage": [
+      "Parity with actual SDK tools/list",
+      "Lazy dynamic add/remove inventory",
+      "Unauthenticated requests rejected HTTP401",
+      "Public HTTPS still denied before acquisition callback",
+      "Owner HTTPS policy remains disabled without private authorization",
+      "Workspace-specific dispatch remains policy/runtime scoped",
+      "Internal and public authorization remain distinct",
+      "Existing operator action policy restrictions"
+    ]
+  },
+  "limitations": [
+    "No source installation or live service change performed by reviewer",
+    "Final artifact hashes and live public acceptance remain parent-owned"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "run_id": "/root/review_acquisition",
+  "provider": "OpenAI",
+  "runtime": "Codex native",
+  "model": "inherited",
+  "effort": "inherited",
+  "project_root": "/home/yeli/agent-work/agentporter-dev",
+  "profile": "review",
+  "write_scope": [
+    "/tmp/jax-a7dev-final-review.json"
+  ],
+  "result": "docs/evidence/a7dev-acquisition-repair-20261022/independent-final-review.json",
+  "verification_required": false,
+  "status": "verified"
+}

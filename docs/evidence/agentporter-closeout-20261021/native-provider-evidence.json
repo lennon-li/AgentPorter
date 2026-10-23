@@ -1,0 +1,600 @@
+[
+  {
+    "agent": "jax",
+    "returncode": 0,
+    "duration": 10.165562510024756,
+    "final_fixture_nonce": "ORIGIN_CANARY_1873960fc4017d521a467b85ab66f2de",
+    "native_tool_events": [
+      {
+        "tool": "command_execution",
+        "exit_code": 0,
+        "fixture_nonce": "ORIGIN_CANARY_1873960fc4017d521a467b85ab66f2de"
+      }
+    ],
+    "raw_evidence_sha256": "d454d80a85955064354f279612f28ca03e94e5b6509e48a8cd582f14b31a3f8c",
+    "raw_evidence_location": "/tmp/provider-origin-jax-result-czt43g3i",
+    "installed_service_uid_verified": false,
+    "independent_review_clearance": false,
+    "observed_route_admissions": []
+  },
+  {
+    "agent": "liz",
+    "returncode": 0,
+    "duration": 13.773304047062993,
+    "final_fixture_nonce": "ORIGIN_CANARY_d87ea5034746569f442a18085f325dca",
+    "native_tool_events": [
+      {
+        "tool": "command_execution",
+        "exit_code": 0,
+        "fixture_nonce": "ORIGIN_CANARY_d87ea5034746569f442a18085f325dca"
+      }
+    ],
+    "raw_evidence_sha256": "fe6adac1aeb2043da720dfb4512d103ea7b62f5646d2df4ab9f1547f87f026ad",
+    "raw_evidence_location": "/tmp/provider-origin-liz-result-tpv9s7cr",
+    "installed_service_uid_verified": false,
+    "independent_review_clearance": false,
+    "observed_route_admissions": [
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]/codex",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/models",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/wham/accounts/check",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/models",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]/codex",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/ps/mcp",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/codex/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/ps/mcp",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]/codex",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/wham/settings/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]/codex",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/ps/mcp",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]/codex",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/codex/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/codex/[other]/[other]",
+        "route_admitted": false
+      }
+    ]
+  },
+  {
+    "agent": "prof",
+    "returncode": 0,
+    "duration": 13.276284372899681,
+    "final_fixture_nonce": "ORIGIN_CANARY_631e3b3235310e7f970acfca436bab2d",
+    "native_tool_events": [
+      {
+        "tool": "command_execution",
+        "exit_code": 0,
+        "fixture_nonce": "ORIGIN_CANARY_631e3b3235310e7f970acfca436bab2d"
+      }
+    ],
+    "raw_evidence_sha256": "6ff4ed5fb2b16c739011a2172d49d743e554398303ca08a213bbdfd5bceb36da",
+    "raw_evidence_location": "/tmp/provider-origin-prof-result-ngnlygr1",
+    "installed_service_uid_verified": false,
+    "independent_review_clearance": false,
+    "observed_route_admissions": [
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/wham/accounts/check",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/models",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/models",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]/codex",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]/codex",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/ps/mcp",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/codex/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/ps/mcp",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]/codex",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/wham/settings/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]/codex",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/ps/mcp",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "GET",
+        "path_shape": "backend-api/ps/[other]/[other]/codex",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/codex/responses",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/codex/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "chatgpt.com",
+        "method": "POST",
+        "path_shape": "backend-api/codex/[other]/[other]",
+        "route_admitted": false
+      }
+    ]
+  },
+  {
+    "agent": "ming",
+    "returncode": 0,
+    "duration": 5.490920579060912,
+    "final_fixture_nonce": "ORIGIN_CANARY_98d6aa578aa71b712c5de1be9b74ef70",
+    "native_tool_events": [
+      {
+        "tool": "Read",
+        "is_error": false,
+        "fixture_nonce": "ORIGIN_CANARY_98d6aa578aa71b712c5de1be9b74ef70"
+      }
+    ],
+    "raw_evidence_sha256": "75ac7fc82434e28de81811a6da78807ec418d6063c5ee2f7876d7ad4522702ea",
+    "raw_evidence_location": "/tmp/provider-origin-ming-result-p9qaptrz",
+    "installed_service_uid_verified": false,
+    "independent_review_clearance": false,
+    "observed_route_admissions": [
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "POST",
+        "path_shape": "[other]/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "GET",
+        "path_shape": "[other]/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "GET",
+        "path_shape": "v1/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "GET",
+        "path_shape": "[other]/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "GET",
+        "path_shape": "[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "GET",
+        "path_shape": "[other]/[other]/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "GET",
+        "path_shape": "v1/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "POST",
+        "path_shape": "v1/[other]",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "POST",
+        "path_shape": "v1/[other]",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "POST",
+        "path_shape": "[other]/[other]/v2/[other]",
+        "route_admitted": false
+      },
+      {
+        "phase": "http",
+        "origin": "api.anthropic.com",
+        "method": "POST",
+        "path_shape": "[other]/[other]/v2/[other]",
+        "route_admitted": false
+      }
+    ]
+  },
+  {
+    "agent": "wei",
+    "returncode": 0,
+    "duration": 8.279382850043476,
+    "final_fixture_nonce": "ORIGIN_CANARY_ce40f50617d9120c6cec514efe16f2f1",
+    "native_tool_events": [
+      {
+        "tool": "read",
+        "status": "completed",
+        "fixture_nonce": "ORIGIN_CANARY_ce40f50617d9120c6cec514efe16f2f1"
+      }
+    ],
+    "raw_evidence_sha256": "01cf540325a4879a24e128c2c981ccd40ac97da3d6ee3b2ea0e60ee0fe524512",
+    "raw_evidence_location": "/tmp/provider-origin-wei-result-9avx_5zr",
+    "installed_service_uid_verified": false,
+    "independent_review_clearance": false,
+    "observed_route_admissions": [
+      {
+        "phase": "http",
+        "origin": "opencode.ai",
+        "method": "POST",
+        "path_shape": "inference/openai/v1/chat/completions",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "opencode.ai",
+        "method": "POST",
+        "path_shape": "inference/openai/v1/chat/completions",
+        "route_admitted": true
+      },
+      {
+        "phase": "http",
+        "origin": "opencode.ai",
+        "method": "POST",
+        "path_shape": "inference/openai/v1/chat/completions",
+        "route_admitted": true
+      }
+    ]
+  }
+]

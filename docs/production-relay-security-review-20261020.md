@@ -1,0 +1,61 @@
+# Independent production relay security review — 2026-10-20
+
+Status: **Production activation blocked on publication-capability enforcement.** The narrowly scoped relay API has useful controls, but the current arbitrary-public-HTTPS worker capability cannot substantiate the requested publication restriction. This is separate from the earlier clearance of the exact v7 artifact for installation on A7Dev. No production candidate or production activation is cleared by that installation review.
+
+## Scope and operating limits
+
+Reviewed development relay implementation and integration in `production_relay.py`, `middleware.py`, `server.py`, `jobs.py` and `broker.py`; worker execution policy, adapter policy translations, namespace construction, and offline relay tests; read-only production repository status at `3e70cc9273d226d962b4939399247edf2d02b1e1`. Existing unrelated production artifacts remain untouched. No providers, real credential reads, root commands, service changes, external publication, or AgentPorter delegation were performed. Test execution outside the tool sandbox remained the unprivileged existing account.
+
+## Blocking finding: public HTTPS permits external publication capability
+
+The relay requires literal `read_only=True`, rejects commit/push grants, and launches only the existing isolated runtime. Read-only workspace and Git metadata mounts enforce local project immutability. They do not prohibit Git operations on temporary repositories or external side effects. The current public CONNECT egress accepts arbitrary public port-443 destinations and transports opaque bytes; it is not a method/path publication filter. The native policy module explicitly describes shell denial patterns as CLI prefix matches, not an OS sandbox. Codex's native sandbox is normalized to `danger-full-access` inside the outer Bubblewrap boundary; unsupported native read-only adapters rely on that outer boundary. Isolated OpenCode's screened profile allows shell execution.
+
+An independent actual host probe reproduced the capability without any network access: a synthetic-credential, read-only Bubblewrap worker created and committed a repository under its private `/tmp`, then successfully executed `git push` to a second bare repository under that same private `/tmp`. Output: `READONLY_OUTER_SANDBOX_PERMITS_TMP_GIT_PUSH`; the selected `/workspace` remained unchanged. This proves the filesystem boundary works and a general prohibition of publication operations is not established by it. This probe made no external publication and does not assert that a provider token necessarily grants repository access.
+
+The user's production acceptance explicitly requires publication restrictions to remain enforced. With arbitrary external HTTPS, claiming that restriction universally would exceed the evidence. Either constrain the worker's external capabilities to the approved provider/search services, with an actual destination binding, or obtain an explicit decision accepting the narrower API/workspace guarantee. A CONNECT hostname allowlist alone should not be described as a cryptographic host binding: shared CDN endpoints can route TLS by ClientHello SNI. A bounded fail-closed SNI/CONNECT authority binding or a trusted application proxy is needed before claiming arbitrary unapproved destinations are inaccessible. GitHub API access is particularly sensitive: a blanket `api.github.com` grant also reaches repository mutation endpoints.
+
+## Candidate service routes and evidence limits
+
+| Identity/service | Evidence and narrow route guidance |
+| --- | --- |
+| Jax | Canonical Codex config explicitly selects Headroom at `http://127.0.0.1:9787/v1`. Retain the existing fixed-service model-only bridge. No direct public provider route should be silently substituted. |
+| Liz, Prof | Canonical config selects `openai`, with no explicit base URL. Existing subscription/default CLI routes must be established from the configured account behavior; `chatgpt.com`, `auth.openai.com` and `api.openai.com` appear in the installed CLI but binary presence alone does not justify granting all of them. |
+| Wei | Runtime explicitly selects `opencode-go/glm-5.3-flash`; code fixes its base URL to `https://opencode.ai/inference/go/openai/v1`. `opencode.ai` is directly supported by current route evidence. |
+| Ming | `api.anthropic.com` and the canonical OAuth refresh authority are candidates. `platform.claude.com` occurs in installed provider code; establish the exact account route before admission. Avoid admitting staging, telemetry, documentation and arbitrary GitHub domains found in bundled code. |
+| Argie | `cloudcode-pa.googleapis.com` and `oauth2.googleapis.com` are candidate model/refresh authorities; confirm the actual canonical account endpoints. Installed code contains multiple staging and auxiliary Google routes, which are not an approved blanket allowlist. |
+| Phil | Admit only verified Copilot model authorities. If startup/refresh requires a GitHub API route, constrain the method/path through a trusted broker; a whole-domain GitHub API grant cannot enforce repository-publication restrictions. Quota remains an external entitlement condition. |
+| Parallel Search | Only the existing fixed `search.parallel.ai` service, and only with explicit operator opt-in; retain the two approved MCP tools. |
+
+## Controls verified by inspection
+
+- Internal relay requests require the dedicated bearer key, loopback client address, exact endpoint and POST method; ordinary API authentication is not accepted as fallback. The relay key must differ from the ordinary API key. Request bodies are bounded before dispatch.
+- Production enables only explicitly named upstream workspaces. Receiving A7Dev independently enforces its own operator scope. Startup checks ensure registered roots match that receiving scope; dispatch additionally compares the production and receiving root strings exactly. The receiving broker performs its normal workspace authorization and OS-confinement checks.
+- Allowed operations exclude arbitrary tools/commands, generic network operations, and cancellation. Dispatch is limited to the seven named identities and literal read-only jobs. Commit and push flags are rejected before launch; no unconfined provider fallback is introduced.
+- Durable SQLite request IDs and opaque production job IDs prevent accepting unrelated receiving-gateway jobs. Reservation uses a transaction for cross-instance concurrency, retries reuse idempotency keys, and uncertain outcomes do not trigger a second unconfined launch. Receiving-side cancellation is excluded pending a PID-safe backend.
+- Per-call output is clamped, client response reads are bounded, and receiving logs already have strict stream budgets. Job metadata/log handling remains in the receiving service's private state; the relay does not copy provider credentials into production state.
+- Keys and operator policy files are required to be private, owned by root or the gateway account, and reached through trusted directory descriptors. These checks establish restricted operator configuration; they do **not** make gateway-owned mode-0600 files literally immutable against that gateway UID. A future production deployment must accurately record actual owners/modes and keep all policy/state paths outside worker mounts.
+- Network namespaces, filesystem masks, credential homes and private receiving state remain owned by A7Dev's existing launcher. A7 is a narrow authenticated client, not another provider fleet. Actual installed service/state separation still requires the production candidate's deployment review.
+
+## Independent verification
+
+- `tests/unit/test_production_delegation_relay.py`: **12 passed** on the unprivileged host.
+- `tests/unit/test_dispatch_task_permissions.py`: **14 passed**.
+- `tests/verify_production_relay_offline.py`: **PASS** on the unprivileged host, covering key modes, scope/path mismatches, read-only/publication flags, durable job ownership/idempotency, cancellation exclusion, concurrency and failed-dispatch capacity.
+- Actual offline read-only Bubblewrap temporary-repository push capability: **reproduced**, with no workspace mutation and no external network.
+- Initial runs inside the tool sandbox rejected filesystem ancestors mapped to UID 65534; rerunning on the real host resolved that execution-environment artifact without weakening ownership checks.
+
+Production activation remains blocked until the external-publication capability finding is resolved or explicitly narrowed by the user, the reconciled immutable production artifact is reviewed, and the requested live negative/positive relay acceptance tests and rollback verification succeed.
+
+## Follow-up: production candidate provider/SNI gate
+
+Reviewed the new implementation in `/tmp/agentporter-production-candidate-source-v1`, leaving the approved development v7 sources, archive and helper hashes untouched. Added independent `tests/security/test_provider_egress_audit.py` in that candidate only. Its **32 tests pass** against the exact candidate source loaded by file, rather than the candidate virtualenv's older installed wheel. Fixtures cover fragmented TLS records/socket reads; duplicate, encrypted, missing, multiple and non-ASCII SNI; malformed/truncated/oversized records and handshakes; CONNECT/SNI mismatches; host and SNI rejection before DNS/upstream connection; successful forwarding to the approved authority; and absence of repository-hosting/API domains and implicit Parallel Search grants for all seven identities. No live network or provider requests were made.
+
+The gate meaningfully narrows capability: it rejects unapproved CONNECT names before resolution, reads a bounded ClientHello under a deadline, rejects ECH and duplicate routing extensions, and requires SNI to match the selected approved authority before opening the upstream connection. No parser bypass was found in these independent fixtures. The fixed Headroom capability remains distinct.
+
+Three important acceptance boundaries remain:
+
+1. **The hardening must execute on the receiving worker gateway.** A7's production relay does not execute its own `DevelopmentRuntime`; A7Dev launches delegated workers. Installing this patch only in the production repository/service leaves immutable A7Dev v7's arbitrary-public-HTTPS capability active. A newly reviewed receiving-gateway artifact or equivalent receiving-side enforcement is required. The user's authorization for the exact v7 archive is not evidence that v7 contains this later patch.
+2. **Jax's current candidate host list exceeds its explicit canonical route.** `provider_hosts('jax')` currently grants the same three public OpenAI authorities as Liz/Prof, whereas Jax's inspected canonical route is the fixed Headroom service. Remove unnecessary direct model authorities for that route, or derive the admitted set from the screened explicit canonical route. Parallel Search can remain a separate explicit grant. Ming/Argie candidate routes remain hypotheses until demonstrated with their existing accounts; no provider substitution is justified by the allowlist.
+3. **SNI is not the encrypted HTTP authority.** This gate closes the obvious arbitrary-SNI-on-a-shared-address path. It cannot inspect or bind the subsequent encrypted HTTP `Host`/`:authority`, URI, or method, and therefore cannot alone prove that an allowed shared frontend rejects all domain-fronting or same-provider mutation paths. Production claims must match this limit. For a stronger external-publication guarantee, verify that the actual approved services reject mismatched HTTP authorities and constrain any provider/API endpoints that offer unrelated write capabilities, or use a trusted application proxy for those routes. This review made no such live frontend test. A general GitHub API grant remains absent, correctly avoiding its repository mutation surface.
+
+These are production acceptance conditions, not a claim that the earlier exact v7 artifact has changed or that privileged operations have occurred. Production activation remains blocked on the receiving-side effective policy, exact demonstrated account routes, and the required live isolation/publication/provider checks.

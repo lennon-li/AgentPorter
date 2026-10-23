@@ -1,0 +1,460 @@
+--- v17-r3/src/agentporter/action_policy.py
++++ v19/src/agentporter/action_policy.py
+@@ -50,6 +50,7 @@
+     "trash_path",
+     "exec_run",
+     "exec_start",
++    "https_download",
+     "job_cancel",
+     "git_add",
+     "git_checkout",
+--- v17-r3/src/agentporter/client_policy.py
++++ v19/src/agentporter/client_policy.py
+@@ -25,6 +25,7 @@
+     **dict.fromkeys(('git_status', 'git_diff', 'git_log', 'git_show', 'git_branch'), 'git_read'),
+     **dict.fromkeys(('git_add', 'git_checkout'), 'git_write'),
+     'dispatch_agent': 'dispatch', 'exec_run': 'exec', 'exec_start': 'exec',
++    'https_download': 'https',
+ }
+ JOB_READ = {'job_status', 'job_output', 'job_result'}
+ SCOPES = {'read', 'write', 'exec', 'https', 'git_read', 'git_write', 'dispatch'}
+--- v17-r3/src/agentporter/https_download.py
++++ v19/src/agentporter/https_download.py
+@@ -0,0 +1,233 @@
++"""Fixed-purpose, owner-approved binary acquisition, never shell networking.
++
++The trusted worker reopens the private approval, writes a passed private spool
++descriptor and returns only bounded metadata. Publication is no-overwrite,
++descriptor-relative and restricted to the owner's research receipt directory.
++"""
++from __future__ import annotations
++
++import argparse
++from contextlib import nullcontext
++import datetime
++import hashlib
++import hmac
++import json
++import logging
++import os
++import re
++import secrets
++import stat
++import subprocess
++import sys
++import tempfile
++import threading
++
++from agentporter.scoped_https import ScopedPublicHTTPSPolicy, _PinnedPublicHTTPS
++
++LOG = logging.getLogger("agentporter.https_download")
++
++
++def checksum(value):
++    if value is not None and (not isinstance(value, str) or not re.fullmatch("[0-9a-f]{64}", value)):
++        raise ValueError("Expected SHA256 must be 64 lowercase hexadecimal characters")
++    return value
++
++
++def stream_download(policy, workspace_id, url, output, *, expected_sha256=None,
++                    max_bytes=16 * 1024 * 1024, timeout_seconds=60,
++                    connection_factory=_PinnedPublicHTTPS):
++    checksum(expected_sha256)
++    host, target, grant = policy.authorize_download(workspace_id, url)
++    if type(max_bytes) is not int or not 1 <= max_bytes <= grant['max_response_bytes']:
++        raise ValueError("Requested byte limit exceeds owner download approval")
++    if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= grant['timeout_seconds']:
++        raise ValueError("Requested timeout exceeds owner download approval")
++    digest = hashlib.sha256(); size = 0
++    connection = connection_factory(host, timeout=timeout_seconds)
++    try:
++        connection.request("GET", target, headers={
++            "User-Agent": "AgentPorter-Acquisition/1.0", "Accept": "application/octet-stream, */*",
++            "Accept-Encoding": "identity", "Connection": "close"})
++        response = connection.getresponse()
++        # No redirects, partial responses, automatic decompression or credentials.
++        if response.status != 200:
++            LOG.warning(json.dumps({'event': 'download_http_rejected', 'host': host,
++                                    'http_status': response.status}))
++            raise PermissionError("Acquisition requires HTTP 200; redirects/partial responses denied")
++        headers = response.getheaders()
++        encodings = [v.lower().strip() for k, v in headers if k.lower() == 'content-encoding']
++        if encodings and encodings != ['identity']:
++            raise ValueError("Encoded transfer body is not permitted")
++        lengths = [v for k, v in headers if k.lower() == 'content-length']
++        transfers = [v.lower().strip() for k, v in headers if k.lower() == 'transfer-encoding']
++        if (len(lengths) > 1 or lengths and not re.fullmatch('[0-9]{1,12}', lengths[0])
++                or lengths and transfers or transfers and transfers != ['chunked']):
++            raise ValueError("Ambiguous response framing")
++        declared = int(lengths[0]) if lengths else None
++        if declared is not None and declared > max_bytes:
++            raise ValueError("Declared download size exceeds byte budget")
++        while True:
++            block = response.read(min(65536, max_bytes - size + 1))
++            if not block:
++                break
++            size += len(block)
++            if size > max_bytes:
++                raise ValueError("Download exceeds byte budget")
++            digest.update(block); output.write(block)
++        if declared is not None and size != declared:
++            raise ValueError("Incomplete download body")
++        actual = digest.hexdigest()
++        if expected_sha256 is not None and not hmac.compare_digest(expected_sha256, actual):
++            raise ValueError("Download SHA256 differs from independently supplied expected digest")
++        safe = {}
++        for name, value in headers:
++            name = name.lower()
++            if name in {'content-type', 'content-length', 'etag', 'last-modified'}:
++                if len(value.encode('utf-8')) > 512 or any(ord(c) < 32 or ord(c) == 127 for c in value):
++                    raise ValueError("Unsafe download receipt header")
++                if name in safe:
++                    raise ValueError("Duplicate download receipt header")
++                safe[name] = value
++        output.flush()
++        return {'http_status': 200, 'bytes': size, 'sha256': actual,
++                'expected_sha256_verified': expected_sha256 is not None,
++                'headers': safe, 'retrieved_at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
++    finally:
++        connection.close()
++
++
++def publish(workspace_path, directory, name, source, expected):
++    if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', name):
++        raise ValueError("Destination must be a simple non-hidden filename")
++    # Directory comes only from the independently loaded owner approval.
++    if not re.fullmatch(r'data-raw/cran-history/reports/[A-Za-z0-9][A-Za-z0-9._-]{0,100}/downloads', directory):
++        raise PermissionError("Unapproved acquisition destination")
++    directory_fd = os.open(workspace_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
++    temporary = '.acquire-' + secrets.token_hex(16)
++    created = False
++    try:
++        for component in directory.split('/'):
++            try:
++                os.mkdir(component, mode=0o755, dir_fd=directory_fd)
++            except FileExistsError:
++                pass
++            child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory_fd)
++            os.close(directory_fd); directory_fd = child
++        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory_fd)
++        created = True
++        try:
++            digest = hashlib.sha256(); size = 0; source.seek(0)
++            with os.fdopen(fd, 'wb', closefd=False) as target:
++                while block := source.read(65536):
++                    size += len(block)
++                    if size > expected['bytes']:
++                        raise ValueError("Spool size differs from worker receipt")
++                    digest.update(block); target.write(block)
++                if size != expected['bytes'] or digest.hexdigest() != expected['sha256']:
++                    raise ValueError("Spool checksum differs from worker receipt")
++                target.flush(); os.fsync(fd)
++            # Atomic, no replacement, no following existing destination links.
++            os.link(temporary, name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd, follow_symlinks=False)
++            os.fsync(directory_fd)
++        finally:
++            os.close(fd)
++        return directory + '/' + name
++    finally:
++        if created:
++            os.unlink(temporary, dir_fd=directory_fd)
++        os.close(directory_fd)
++
++
++def create_https_download_tool(registry, policy, state_dir, *, resources=None, slot=None):
++    concurrent = threading.BoundedSemaphore(1)
++
++    def https_download(workspace_id, url, filename, expected_sha256=None,
++                       max_bytes=16 * 1024 * 1024, timeout_seconds=60):
++        ws = registry.get(workspace_id)
++        if not ws.writable or not ws.allow_execute:
++            raise PermissionError("Workspace does not allow acquisition")
++        host, _, grant = policy.authorize_download(workspace_id, url)
++        checksum(expected_sha256)
++        if not isinstance(filename, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', filename):
++            raise ValueError("Destination must be a simple non-hidden filename")
++        if type(max_bytes) is not int or not 1 <= max_bytes <= grant['max_response_bytes']:
++            raise ValueError("Invalid download byte budget")
++        if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= grant['timeout_seconds']:
++            raise ValueError("Invalid download time budget")
++        if not concurrent.acquire(blocking=False):
++            raise PermissionError("Acquisition capacity exhausted")
++        url_hash = hashlib.sha256(url.encode()).hexdigest()
++        LOG.info(json.dumps({'event': 'download_start', 'workspace_id': workspace_id,
++                             'host': host, 'url_sha256': url_hash, 'max_bytes': max_bytes}))
++        try:
++            with slot() if slot is not None else nullcontext():
++                with tempfile.TemporaryFile(dir=state_dir) as spool:
++                    cmd = [sys.executable, '-I', '-m', 'agentporter.https_download',
++                           '--config-dir', str(policy.config_dir), '--workspace-id', workspace_id,
++                           '--url', url, '--output-fd', str(spool.fileno()),
++                           '--max-bytes', str(max_bytes), '--timeout', str(timeout_seconds)]
++                    if expected_sha256 is not None:
++                        cmd += ['--expected-sha256', expected_sha256]
++                    lease = resources.create() if resources is not None else None
++                    try:
++                        result = subprocess.run(lease.command(cmd) if lease else cmd, cwd='/',
++                            env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'HOME': '/nonexistent'},
++                            pass_fds=(spool.fileno(),), stdin=subprocess.DEVNULL,
++                            capture_output=True, timeout=timeout_seconds, check=False)
++                    finally:
++                        if lease is not None:
++                            lease.close()
++                    if result.returncode or len(result.stdout) > 4096 or len(result.stderr) > 4096:
++                        LOG.warning(json.dumps({'event': 'download_worker_rejected',
++                            'workspace_id': workspace_id, 'host': host, 'url_sha256': url_hash,
++                            'returncode': result.returncode,
++                            'diagnostic': result.stderr[:4096].decode('utf-8', errors='replace')}))
++                        raise ValueError('Scoped acquisition failed; inspect bounded audit log')
++                    receipt = json.loads(result.stdout)
++                    if (not isinstance(receipt, dict) or type(receipt.get('bytes')) is not int
++                            or not 0 <= receipt['bytes'] <= max_bytes
++                            or receipt.get('http_status') != 200
++                            or receipt.get('expected_sha256_verified') is not (expected_sha256 is not None)):
++                        raise ValueError('Invalid worker acquisition receipt')
++                    checksum(receipt.get('sha256'))
++                    if receipt.get('sha256') is None or expected_sha256 is not None and receipt['sha256'] != expected_sha256:
++                        raise ValueError('Invalid worker checksum receipt')
++                    relative = publish(ws.path, grant['directory'], filename, spool, receipt)
++                    receipt.update(workspace_id=workspace_id, path=relative, source_url=url,
++                                   training_eligible=False, historical_identity_verified=False)
++                    LOG.info(json.dumps({'event': 'download_result', 'workspace_id': workspace_id,
++                        'host': host, 'url_sha256': url_hash, 'sha256': receipt['sha256'], 'bytes': receipt['bytes']}))
++                    return receipt
++        except BaseException as exc:
++            LOG.warning(json.dumps({'event': 'download_failed', 'workspace_id': workspace_id,
++                                   'host': host, 'url_sha256': url_hash, 'error_type': type(exc).__name__}))
++            raise
++        finally:
++            concurrent.release()
++    return https_download
++
++
++def main():
++    parser = argparse.ArgumentParser(allow_abbrev=False)
++    for name in ('config-dir', 'workspace-id', 'url'):
++        parser.add_argument('--' + name, required=True)
++    for name in ('output-fd', 'max-bytes', 'timeout'):
++        parser.add_argument('--' + name, required=True, type=int)
++    parser.add_argument('--expected-sha256')
++    args = parser.parse_args()
++    try:
++        if args.output_fd < 3 or not stat.S_ISREG(os.fstat(args.output_fd).st_mode):
++            raise ValueError('Private spool descriptor required')
++        policy = ScopedPublicHTTPSPolicy(args.config_dir)
++        with os.fdopen(args.output_fd, 'wb', closefd=False) as output:
++            result = stream_download(policy, args.workspace_id, args.url, output,
++                expected_sha256=args.expected_sha256, max_bytes=args.max_bytes, timeout_seconds=args.timeout)
++        sys.stdout.write(json.dumps(result) + '\n')
++        return 0
++    except Exception as exc:
++        sys.stderr.write('Scoped acquisition denied: ' + type(exc).__name__ + '\n')
++        return 77
++
++
++if __name__ == '__main__':
++    raise SystemExit(main())
+--- v17-r3/src/agentporter/rest/routers/exec.py
++++ v19/src/agentporter/rest/routers/exec.py
+@@ -1,12 +1,16 @@
+ from fastapi import APIRouter, Request
+ from typing import Dict, Any
+ from agentporter.rest.schemas import (
+-    ExecRunRequest, ExecStartRequest, JobOutputRequest,
++    ExecRunRequest, ExecStartRequest, JobOutputRequest, HTTPSDownloadRequest,
+     ExecResponse, JobStartResponse, JobStatusResponse, JobOutputResponse, JobResultResponse, GenericActionResponse
+ )
+ 
+ router = APIRouter(prefix="/workspaces/{workspace_id}/exec", tags=["Exec"])
+ jobs_router = APIRouter(prefix="/jobs", tags=["Jobs"])
++
++@router.post("/https-download", include_in_schema=False)
++def https_download(workspace_id: str, req: HTTPSDownloadRequest, request: Request):
++    return request.app.state.tools["https_download"](workspace_id=workspace_id, **req.model_dump())
+ 
+ @router.post("/run", response_model=ExecResponse)
+ def exec_run(workspace_id: str, req: ExecRunRequest, request: Request):
+--- v17-r3/src/agentporter/rest/schemas.py
++++ v19/src/agentporter/rest/schemas.py
+@@ -187,6 +187,14 @@
+ class TrashPathRequest(BaseModel):
+     path: str = Field(description="Relative path to move to the .trash folder.")
+ 
++class HTTPSDownloadRequest(BaseModel):
++    url: str
++    filename: str
++    expected_sha256: Optional[str] = None
++    max_bytes: int = 16777216
++    timeout_seconds: int = 60
++
++
+ class ExecRunRequest(BaseModel):
+     argv: List[str] = Field(description="Command and arguments to execute.")
+     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
+--- v17-r3/src/agentporter/scoped_https.py
++++ v19/src/agentporter/scoped_https.py
+@@ -7,6 +7,7 @@
+ from __future__ import annotations
+ 
+ import hashlib
++import datetime
+ import http.client
+ import ipaddress
+ import json
+@@ -17,6 +18,7 @@
+ import subprocess
+ import sys
+ import stat
++import re
+ from pathlib import Path
+ from urllib.parse import urlsplit, unquote
+ 
+@@ -46,9 +48,26 @@
+     "cran-archive.r-project.org",
+     "bioconductor.org",
+ })
++REVIEWED_PUBLIC_HTTPS_HOSTS = PROPOSED_CRANARY_HOSTS | {"packagemanager.posit.co"}
+ MAX_BYTES_CAP = 1024 * 1024
+ TIMEOUT_CAP = 20
++DOWNLOAD_BYTES_CAP = 16 * 1024 * 1024
++DOWNLOAD_TIMEOUT_CAP = 60
+ SUPPORTED_METHODS = frozenset({"GET", "HEAD"})
++
++
++def _download_target(host, target):
++    """Only dated Posit source snapshots and CRAN archive artifacts."""
++    if host == "packagemanager.posit.co":
++        match = re.fullmatch(r"/cran/(\d{4}-\d{2}-\d{2})/src/contrib/(PACKAGES(?:\.gz)?|[A-Za-z][A-Za-z0-9.]*_[A-Za-z0-9.+_-]+\.tar\.gz)", target)
++        if match:
++            datetime.date.fromisoformat(match[1])
++            return
++    elif host == "cran.r-project.org":
++        match = re.fullmatch(r"/src/contrib/Archive/([A-Za-z][A-Za-z0-9.]*)/([A-Za-z][A-Za-z0-9.]*)_[A-Za-z0-9.+_-]+\.tar\.gz", target)
++        if match and match[1] == match[2]:
++            return
++    raise PermissionError("Download URL outside reviewed historical source paths")
+ 
+ 
+ def _url_parts(url: str):
+@@ -221,7 +240,7 @@
+                 os.close(fd)
+         if not isinstance(document, dict) or set(document) != {"version", "workspaces"}:
+             raise ValueError("Public HTTPS policy requires version and workspaces")
+-        if type(document["version"]) is not int or document["version"] != 1:
++        if type(document["version"]) is not int or document["version"] not in (1, 2):
+             raise ValueError("Invalid Public HTTPS policy version")
+         scopes = document["workspaces"]
+         if not isinstance(scopes, dict):
+@@ -230,9 +249,11 @@
+             raise ValueError("HTTPS policy must name only the cranary workspace")
+         validated = {}
+         for workspace, spec in scopes.items():
++            keys = {"hosts", "methods", "max_response_bytes", "timeout_seconds"}
++            if document["version"] == 2:
++                keys.add("downloads")
+             if (not isinstance(workspace, str) or not workspace
+-                    or not isinstance(spec, dict) or
+-                    set(spec) != {"hosts", "methods", "max_response_bytes", "timeout_seconds"}):
++                    or not isinstance(spec, dict) or set(spec) != keys):
+                 raise ValueError("Invalid scoped HTTPS policy entry")
+             hosts = spec["hosts"]
+             methods = spec["methods"]
+@@ -241,7 +262,7 @@
+                 raise ValueError("HTTPS host list must contain strings")
+             if len(set(hosts)) != len(hosts):
+                 raise ValueError("HTTPS host list must be nonempty and unique")
+-            if any(not isinstance(h, str) or h not in PROPOSED_CRANARY_HOSTS for h in hosts):
++            if any(not isinstance(h, str) or h not in REVIEWED_PUBLIC_HTTPS_HOSTS for h in hosts):
+                 raise ValueError("Public HTTPS site outside reviewed R-research catalog")
+             if workspace != "cranary":
+                 raise ValueError("Public HTTPS approval scope limited to cranary")
+@@ -260,6 +281,26 @@
+                 "hosts": frozenset(hosts), "methods": frozenset(methods),
+                 "max_response_bytes": limit, "timeout_seconds": timeout,
+             }
++            if document["version"] == 2:
++                downloads = spec["downloads"]
++                if (not isinstance(downloads, dict) or set(downloads) != {
++                        "hosts", "directory", "max_response_bytes", "timeout_seconds"}
++                        or not isinstance(downloads["hosts"], list)
++                        or not downloads["hosts"]
++                        or not all(isinstance(h, str) and h in hosts and h in {
++                            "cran.r-project.org", "packagemanager.posit.co"} for h in downloads["hosts"])
++                        or len(set(downloads["hosts"])) != len(downloads["hosts"])
++                        or type(downloads["max_response_bytes"]) is not int
++                        or not 1 <= downloads["max_response_bytes"] <= DOWNLOAD_BYTES_CAP
++                        or type(downloads["timeout_seconds"]) is not int
++                        or not 1 <= downloads["timeout_seconds"] <= DOWNLOAD_TIMEOUT_CAP):
++                    raise ValueError("Invalid owner-approved download budgets/hosts")
++                directory = downloads["directory"]
++                # A narrow research receipt subtree, never an executable/config path.
++                if (not isinstance(directory, str) or not re.fullmatch(
++                        r"data-raw/cran-history/reports/[A-Za-z0-9][A-Za-z0-9._-]{0,100}/downloads", directory)):
++                    raise ValueError("Download destination must be a research receipt subtree")
++                validated[workspace]["downloads"] = dict(downloads)
+         return validated
+ 
+     def authorize(self, workspace_id, method, url):
+@@ -267,7 +308,17 @@
+         scope = self.scopes.get(workspace_id)
+         if not scope or host not in scope["hosts"] or method not in scope["methods"]:
+             raise PermissionError("Public HTTPS request not owner-approved for workspace, method and host")
++        if host == "packagemanager.posit.co":
++            _download_target(host, target)
+         return host, target, scope
++
++    def authorize_download(self, workspace_id, url):
++        host, target, scope = self.authorize(workspace_id, "GET", url)
++        grant = scope.get("downloads")
++        if not grant or host not in grant["hosts"]:
++            raise PermissionError("Binary acquisition has no independent owner approval")
++        _download_target(host, target)
++        return host, target, grant
+ 
+ 
+ def _parse_curl(argv):
+--- v17-r3/src/agentporter/server.py
++++ v19/src/agentporter/server.py
+@@ -186,6 +186,10 @@
+     )
+     scoped_https = ScopedPublicHTTPS(https_policy)
+     scoped_https.resources = job_manager.resources
++    from agentporter.https_download import create_https_download_tool
++    from agentporter.admission import synchronous_slot
++    _https_download = create_https_download_tool(registry, https_policy, config.state_dir,
++        resources=job_manager.resources, slot=lambda: synchronous_slot(job_manager))
+     _exec_run, _exec_start = create_execution_tools(
+         registry, sandbox, job_manager, scoped_https=scoped_https
+     )
+@@ -429,6 +433,8 @@
+             "generic_shell_network": False,
+             "authorization": "owner-installed 0600 allowlist; no caller boolean grants access",
+         }
++        if "cranary" in scopes and "downloads" in scopes["cranary"]:
++            result["scoped_public_https"]["downloads"] = dict(scopes["cranary"]["downloads"])
+         return result
+ 
+     @mcp.tool()
+@@ -490,6 +496,14 @@
+     def trash_path(workspace_id: str, path: str) -> dict:
+         """Move a file to the recoverable .trash folder rather than permanently deleting it."""
+         return _trash_path(workspace_id, path)
++
++    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
++    @monitored_tool("https_download")
++    def https_download(workspace_id: str, url: str, filename: str,
++                       expected_sha256: Optional[str] = None, max_bytes: int = 16777216,
++                       timeout_seconds: int = 60) -> dict:
++        """Download approved historical source bytes into owner-scoped receipts; never overwrite or execute."""
++        return _https_download(workspace_id, url, filename, expected_sha256, max_bytes, timeout_seconds)
+ 
+     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
+     @monitored_tool("exec_run")
+@@ -665,6 +679,7 @@
+             "move_path": move_path,
+             "trash_path": trash_path,
+             "exec_run": exec_run,
++            "https_download": https_download,
+             "exec_start": exec_start,
+             "job_status": job_status,
+             "job_output": job_output,

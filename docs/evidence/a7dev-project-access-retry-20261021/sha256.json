@@ -1,0 +1,14 @@
+{
+  "owner-reported-acceptance-classification.json": "d1e09e29f4d788bcba074c1423c25445b878f4db829a31d658753f7d0228f8e3",
+  "focused-tests.json": "a3bae6db972353308b2c8bf923719ff87aac6a275a584fbd4eb2d186478416d6",
+  "live-closeout.json": "d200f8a361dac9358c176b6a606719827b323e8c9011d04c8ea748070cb8b04a",
+  "resume-a7dev-project-access.sh": "0bc6336986aac04ab5a745395f166f1da8df03daf899a6458050d7524ba8d2dd",
+  "installed-payload-verification.json": "0a86ed3180e49633acaecf1779833e22895d451d9d0c672b8be01671faa238d8",
+  "independent-recovery-review.json": "f37b46d05fd51d75bed1618d7b68720eac6cf4e7d0b07f7a40c50b0da88921be",
+  "read-only-live-closeout-verifier.py": "dbedb22b4a096ec47e6b965a26a3c20792de07600c0570325aba7bcfd8e669a5",
+  "retry-preflight.py": "b4e11649a4f2275b2d1dc9ed14bac514629b5ff17bdf5f4e8ffdcfab170ba709",
+  "corrected-external-validator.py": "0c85c0548797076ef71faba9a8c276abefcb6c659c9d1d693be69fa79c49c39b",
+  "retry-preflight.md": "240bafeeb520c2fec76e177c6c84bba3ebcee2aea2f37feb392e162974b75ace",
+  "validator-fix.md": "30bb70440832188fc22b6b264945349701d0eb63b13ac3011889498c7ae1e06b",
+  "installed-payload-verifier.py": "0f71edb8aae7c5c3ffbd207f3ccfb44e3bab679dfda598ddad267e6b9071fbeb"
+}

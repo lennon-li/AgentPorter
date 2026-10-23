@@ -1,0 +1,36 @@
+[
+  {
+    "agent": "jax",
+    "interactive_and_frozen_cli_match": true,
+    "frozen_sha256": "399ff69c431c066e40de318fba45c2b07f45a76b19939d247ee4828fc70c4215",
+    "frozen_path": "/tmp/agentporter-development-candidate-v15-extracted/release/cli/jax/codex",
+    "bundled_helper_matches": true
+  },
+  {
+    "agent": "liz",
+    "interactive_and_frozen_cli_match": true,
+    "frozen_sha256": "399ff69c431c066e40de318fba45c2b07f45a76b19939d247ee4828fc70c4215",
+    "frozen_path": "/tmp/agentporter-development-candidate-v15-extracted/release/cli/liz/codex",
+    "bundled_helper_matches": true
+  },
+  {
+    "agent": "prof",
+    "interactive_and_frozen_cli_match": true,
+    "frozen_sha256": "399ff69c431c066e40de318fba45c2b07f45a76b19939d247ee4828fc70c4215",
+    "frozen_path": "/tmp/agentporter-development-candidate-v15-extracted/release/cli/prof/codex",
+    "bundled_helper_matches": true
+  },
+  {
+    "agent": "ming",
+    "interactive_and_frozen_cli_match": false,
+    "frozen_sha256": "ea0f135784631619a7a409d07322ecec964f9cc4fd377508ed1ba3f141f27912",
+    "frozen_path": "/tmp/agentporter-development-candidate-v15-extracted/release/cli/ming/claude.exe"
+  },
+  {
+    "agent": "wei",
+    "interactive_and_frozen_cli_match": false,
+    "frozen_sha256": "4595933989548a452e920c971d5931898d7d64e73e039f777ed62c84a18916c9",
+    "frozen_path": "/tmp/agentporter-development-candidate-v15-extracted/release/cli/wei/opencode.exe",
+    "tested_installed_cli_matches_frozen": true
+  }
+]

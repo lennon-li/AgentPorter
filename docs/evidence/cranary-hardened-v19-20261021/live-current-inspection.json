@@ -1,0 +1,170 @@
+[
+  {
+    "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+    "tool": "get_capabilities",
+    "arguments": {},
+    "is_error": false,
+    "data": {
+      "gateway_version": "0.1.0.dev0",
+      "transport": "mcp_streamable_http",
+      "auth": "header_api_key",
+      "sandbox": {
+        "backend": "bubblewrap",
+        "available": true,
+        "version": "bubblewrap 0.9.0",
+        "network": "disabled"
+      },
+      "supported_tools": [
+        "get_capabilities",
+        "list_workspaces",
+        "workspace_info",
+        "list_files",
+        "search_text",
+        "read_file",
+        "write_file",
+        "apply_patch",
+        "mkdir",
+        "move_path",
+        "trash_path",
+        "exec_run",
+        "exec_start",
+        "job_status",
+        "job_output",
+        "job_result",
+        "job_cancel",
+        "git_status",
+        "git_diff",
+        "git_log",
+        "git_show",
+        "local_http_request",
+        "list_artifacts",
+        "read_artifact",
+        "list_agents",
+        "dispatch_agent"
+      ],
+      "scoped_public_https": {
+        "enabled": true,
+        "workspaces": [
+          "cranary"
+        ],
+        "methods": [
+          "GET",
+          "HEAD"
+        ],
+        "hosts": [
+          "api.github.com",
+          "bioconductor.org",
+          "cran-archive.r-project.org",
+          "cran.r-project.org"
+        ],
+        "generic_shell_network": false,
+        "authorization": "owner-installed 0600 allowlist; no caller boolean grants access"
+      }
+    }
+  },
+  {
+    "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+    "tool": "server_deploy_info",
+    "arguments": {},
+    "is_error": false,
+    "data": {
+      "version": "0.1.0.dev0",
+      "pid": 4102155,
+      "started_at": "2026-10-21T12:36:46-0400",
+      "package_path": "/opt/agentporter-development/versions/20261021T132836.936455Z/src/agentporter",
+      "python": "/opt/agentporter-development/current/venv/bin/python",
+      "loaded_fingerprint": "04a978d2746a88afe79c56af673e6d19850ef24aca9b382becc14426fa8a4fcd",
+      "disk_fingerprint": "04a978d2746a88afe79c56af673e6d19850ef24aca9b382becc14426fa8a4fcd",
+      "stale": false,
+      "modules": {
+        "agentporter": "/opt/agentporter-development/versions/20261021T132836.936455Z/src/agentporter/__init__.py",
+        "agentporter.server": "/opt/agentporter-development/versions/20261021T132836.936455Z/src/agentporter/server.py",
+        "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T132836.936455Z/src/agentporter/tools/scinet_training.py"
+      }
+    }
+  },
+  {
+    "endpoint": "http://127.0.0.1:8876/mcp",
+    "tool": "get_capabilities",
+    "arguments": {},
+    "is_error": false,
+    "data": {
+      "gateway_version": "0.1.0.dev0",
+      "transport": "mcp_streamable_http",
+      "auth": "header_api_key",
+      "sandbox": {
+        "backend": "bubblewrap",
+        "available": true,
+        "version": "bubblewrap 0.9.0",
+        "network": "disabled"
+      },
+      "supported_tools": [
+        "get_capabilities",
+        "list_workspaces",
+        "workspace_info",
+        "list_files",
+        "search_text",
+        "read_file",
+        "write_file",
+        "apply_patch",
+        "mkdir",
+        "move_path",
+        "trash_path",
+        "exec_run",
+        "exec_start",
+        "job_status",
+        "job_output",
+        "job_result",
+        "job_cancel",
+        "git_status",
+        "git_diff",
+        "git_log",
+        "git_show",
+        "local_http_request",
+        "list_artifacts",
+        "read_artifact",
+        "list_agents",
+        "dispatch_agent"
+      ],
+      "scoped_public_https": {
+        "enabled": true,
+        "workspaces": [
+          "cranary"
+        ],
+        "methods": [
+          "GET",
+          "HEAD"
+        ],
+        "hosts": [
+          "api.github.com",
+          "bioconductor.org",
+          "cran-archive.r-project.org",
+          "cran.r-project.org"
+        ],
+        "generic_shell_network": false,
+        "authorization": "owner-installed 0600 allowlist; no caller boolean grants access"
+      }
+    }
+  },
+  {
+    "endpoint": "http://127.0.0.1:8876/mcp",
+    "tool": "server_deploy_info",
+    "arguments": {},
+    "is_error": false,
+    "data": {
+      "version": "0.1.0.dev0",
+      "pid": 4102155,
+      "started_at": "2026-10-21T12:36:46-0400",
+      "package_path": "/opt/agentporter-development/versions/20261021T132836.936455Z/src/agentporter",
+      "python": "/opt/agentporter-development/current/venv/bin/python",
+      "loaded_fingerprint": "04a978d2746a88afe79c56af673e6d19850ef24aca9b382becc14426fa8a4fcd",
+      "disk_fingerprint": "04a978d2746a88afe79c56af673e6d19850ef24aca9b382becc14426fa8a4fcd",
+      "stale": false,
+      "modules": {
+        "agentporter": "/opt/agentporter-development/versions/20261021T132836.936455Z/src/agentporter/__init__.py",
+        "agentporter.server": "/opt/agentporter-development/versions/20261021T132836.936455Z/src/agentporter/server.py",
+        "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T132836.936455Z/src/agentporter/tools/scinet_training.py"
+      }
+    }
+  }
+]

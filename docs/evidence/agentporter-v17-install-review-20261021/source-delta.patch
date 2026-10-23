@@ -1,0 +1,349 @@
+--- original-v17/src/agentporter/resources.py
++++ v17-install-r3/src/agentporter/resources.py
+@@ -7,6 +7,7 @@
+ from pathlib import Path
+ import re
+ import sys
++import threading
+ import time
+ import uuid
+ 
+@@ -76,20 +77,47 @@
+ class ResourceLease:
+     def __init__(self, path):
+         self.path = Path(path)
++        self._lock = threading.Lock()
++        self._closed = False
+ 
+     def command(self, command):
+         return [sys.executable, '-I', '-m', 'agentporter.resource_runner',
+                 '--cgroup', str(self.path), '--', *command]
+ 
++    def terminate(self):
++        """Kill the entire owned envelope now, including setsid descendants.
++
++        This requests termination, not successful cleanup. Only close() proves
++        populated=0 and removes the envelope. Serialize with monitor cleanup.
++        """
++        with self._lock:
++            if not self._closed:
++                try:
++                    (self.path / 'cgroup.kill').write_text('1')
++                except Exception as error:
++                    raise ResourceCleanupError('Job tree termination remains unverified') from error
++
+     def close(self):
++        with self._lock:
++            try:
++                self._close_locked()
++            except ResourceCleanupError:
++                raise
++            except Exception as error:
++                raise ResourceCleanupError('Job envelope cleanup remains unverified') from error
++
++    def _close_locked(self):
++        if self._closed:
++            return
+         if not self.path.exists():
+-            return
++            raise ResourceCleanupError('Owned job cgroup disappeared before cleanup proof')
+         (self.path / 'cgroup.kill').write_text('1')
+         deadline = time.monotonic() + 2
+         while time.monotonic() < deadline:
+             events = dict(line.split() for line in (self.path / 'cgroup.events').read_text().splitlines())
+             if events.get('populated') == '0':
+                 self.path.rmdir()
++                self._closed = True
+                 return
+             time.sleep(0.02)
+         raise ResourceCleanupError('Job cgroup did not drain; admission must remain held')
+--- original-v17/src/agentporter/sandbox/bubblewrap.py
++++ v17-install-r3/src/agentporter/sandbox/bubblewrap.py
+@@ -11,6 +11,8 @@
+ from pathlib import Path
+ from agentporter.sandbox.base import SandboxBackend
+ from agentporter.tooling import add_tooling_mounts
++from agentporter.process_handles import open_handle, signal_handle
++from agentporter.resources import ResourceCleanupError
+ 
+ logger = logging.getLogger("agentporter.sandbox.bwrap")
+ 
+@@ -201,23 +203,25 @@
+         timed_out = False
+         selector = None
+         lease = None
++        pidfd = None
+ 
+         def stop_group() -> None:
+             if proc is None:
+                 return
+             try:
+-                # Popen(process_group=0) makes a dedicated group for this job.
+-                os.killpg(proc.pid, signal.SIGKILL)
+-            except ProcessLookupError:
+-                pass
+-            except OSError:
+-                if proc.poll() is None:
+-                    proc.kill()
++                if lease is not None:
++                    lease.terminate()
++            finally:
++                if pidfd is None:
++                    raise ResourceCleanupError('Missing owned sandbox process handle')
++                try:
++                    signal_handle(pidfd, signal.SIGKILL)
++                except ProcessLookupError:
++                    pass
+             try:
+                 proc.wait(timeout=2)
+-            except subprocess.TimeoutExpired:
+-                proc.kill()
+-                proc.wait(timeout=2)
++            except subprocess.TimeoutExpired as error:
++                raise ResourceCleanupError('Sandbox leader termination remains unverified') from error
+ 
+         try:
+             if self.resources is not None:
+@@ -230,6 +234,7 @@
+                 stderr=subprocess.PIPE,
+                 process_group=0,
+             )
++            pidfd = open_handle(proc.pid)
+             selector = selectors.DefaultSelector()
+             for name in ("stdout", "stderr"):
+                 pipe = getattr(proc, name)
+@@ -292,15 +297,21 @@
+         finally:
+             if selector is not None:
+                 selector.close()
+-            if proc is not None:
+-                for name in ("stdout", "stderr"):
+-                    pipe = getattr(proc, name)
+-                    if pipe is not None and not pipe.closed:
+-                        pipe.close()
+-                if proc.poll() is None:
+-                    stop_group()
+-            if lease is not None:
+-                lease.close()
++            try:
++                if proc is not None:
++                    for name in ("stdout", "stderr"):
++                        pipe = getattr(proc, name)
++                        if pipe is not None and not pipe.closed:
++                            pipe.close()
++                    if proc.poll() is None:
++                        stop_group()
++            finally:
++                try:
++                    if lease is not None:
++                        lease.close()
++                finally:
++                    if pidfd is not None:
++                        os.close(pidfd)
+ 
+         stdout = streams["stdout"].decode("utf-8", errors="replace")
+         stderr = streams["stderr"].decode("utf-8", errors="replace")
+--- original-v17/src/agentporter/tools/jobs.py
++++ v17-install-r3/src/agentporter/tools/jobs.py
+@@ -151,6 +151,7 @@
+         lease = self.resources.create() if self.resources is not None else None
+         try:
+             proc = subprocess.Popen(lease.command(command) if lease else command, **kwargs)
++            proc._agentporter_stop = threading.Event()
+             try:
+                 proc._agentporter_pidfd = open_handle(proc.pid)
+             except BaseException:
+@@ -162,7 +163,7 @@
+             raise
+         if lease:
+             with self.lock:
+-                self._resource_leases[proc.pid] = lease
++                self._resource_leases[proc] = lease
+         return proc
+ 
+     def _close_pidfd(self, proc):
+@@ -174,7 +175,7 @@
+ 
+     def _drop_lease(self, proc):
+         with self.lock:
+-            lease = self._resource_leases.pop(proc.pid, None)
++            lease = self._resource_leases.pop(proc, None)
+         if lease:
+             try:
+                 lease.close()
+@@ -214,7 +215,7 @@
+             return job_id
+         except BaseException:
+             if proc is not None:
+-                self._kill_process_group(proc)
++                self._terminate_process_tree(proc)
+                 proc.wait(timeout=2)
+                 for pipe in (proc.stdout, proc.stderr):
+                     if pipe: pipe.close()
+@@ -343,7 +344,7 @@
+             return job_id
+         except BaseException:
+             if proc is not None:
+-                self._kill_process_group(proc)
++                self._terminate_process_tree(proc)
+                 proc.wait()
+                 for pipe in (proc.stdout, proc.stderr):
+                     if pipe is not None:
+@@ -446,17 +447,30 @@
+             'url_sha256_prefix':url_hash,'timeout_seconds':timeout_seconds}))
+         return job_id
+ 
+-    @staticmethod
+-    def _kill_process_group(proc: subprocess.Popen) -> None:
+-        try:
+-            # Never signal a recycled PID/PGID. Bubblewrap's die-with-parent
+-            # kills the PID namespace; required cgroups drain all descendants.
++    def _terminate_process_tree(self, proc: subprocess.Popen) -> None:
++        """Terminate an owned job tree, never a numeric process group.
++
++        A pidfd identifies only the launcher. Kill its cgroup before waiting on
++        output EOF: descendants can hold pipes or start new sessions. Offline
++        legacy test profiles without resources rely on Bubblewrap's PID namespace.
++        """
++        with self.lock:
+             fd = getattr(proc, '_agentporter_pidfd', None)
+-            if fd is None:
+-                raise PermissionError('Missing owned process handle')
+-            signal_handle(fd, signal.SIGKILL)
+-        except ProcessLookupError:
+-            pass
++            owned_fd = os.dup(fd) if fd is not None else None
++            lease = self._resource_leases.get(proc)
++        if owned_fd is None:
++            raise PermissionError('Missing owned process handle')
++        try:
++            try:
++                if lease is not None:
++                    lease.terminate()
++            finally:
++                try:
++                    signal_handle(owned_fd, signal.SIGKILL)
++                except ProcessLookupError:
++                    pass
++        finally:
++            os.close(owned_fd)
+ 
+     def _monitor_proc(
+         self,
+@@ -484,6 +498,7 @@
+         deadline = time.monotonic() + remaining
+         selector = selectors.DefaultSelector()
+         usage = {"stdout": 0, "stderr": 0}
++        leader_reaped = False
+ 
+         try:
+             for name, pipe, log in (
+@@ -496,6 +511,9 @@
+                 selector.register(pipe, selectors.EVENT_READ, (name, log))
+ 
+             while selector.get_map():
++                if proc._agentporter_stop.is_set():
++                    status, exit_code = 'cancelled', 130
++                    break
+                 remaining = deadline - time.monotonic()
+                 if remaining <= 0:
+                     status = "timed_out"
+@@ -530,22 +548,23 @@
+                     break
+ 
+             if exit_code is not None:
+-                # Group includes ordinary child processes that inherited the
+-                # file descriptors, even if the original leader already exited.
+-                self._kill_process_group(proc)
+-                try:
+-                    proc.wait(timeout=2)
+-                except subprocess.TimeoutExpired:
+-                    proc.kill()
+-                    proc.wait(timeout=2)
++                # Kill the owned cgroup even if the launcher has already exited.
++                self._terminate_process_tree(proc)
++                proc.wait(timeout=2)
+             else:
+-                try:
+-                    proc.wait(timeout=max(0.01, deadline - time.monotonic()))
+-                except subprocess.TimeoutExpired:
+-                    status = "timed_out"
+-                    exit_code = 124
+-                    self._kill_process_group(proc)
+-                    proc.wait(timeout=2)
++                # Pipe EOF does not establish process exit. Keep cancellation
++                # responsive even for a process that closes both output streams.
++                while proc.poll() is None:
++                    if proc._agentporter_stop.is_set() or time.monotonic() >= deadline:
++                        status, exit_code = ('cancelled', 130) if proc._agentporter_stop.is_set() else ('timed_out', 124)
++                        self._terminate_process_tree(proc)
++                        proc.wait(timeout=2)
++                        break
++                    try:
++                        proc.wait(timeout=min(.2, max(.01, deadline-time.monotonic())))
++                    except subprocess.TimeoutExpired:
++                        pass
++            leader_reaped = True
+ 
+             if exit_code is None:
+                 exit_code = proc.returncode
+@@ -555,12 +574,12 @@
+             status = "failed"
+             exit_code = 1
+             logger.error("Job %s monitor error: %s", job_id, e)
+-            self._kill_process_group(proc)
+-            try:
++            try:
++                self._terminate_process_tree(proc)
+                 proc.wait(timeout=2)
+-            except subprocess.TimeoutExpired:
+-                proc.kill()
+-                proc.wait(timeout=2)
++                leader_reaped = True
++            except Exception:
++                logger.exception('Job %s termination remains unverified', job_id)
+         finally:
+             selector.close()
+             self._close_pidfd(proc)
+@@ -572,9 +591,11 @@
+                     log.close()
+                 except Exception:
+                     pass
+-            cleanup_ok = True
++            cleanup_ok = leader_reaped
++            if not cleanup_ok:
++                status, exit_code = 'cleanup_failed', 1
+             with self.lock:
+-                lease = self._resource_leases.pop(proc.pid, None)
++                lease = self._resource_leases.pop(proc, None)
+             if lease is not None:
+                 try:
+                     lease.close()
+@@ -733,6 +754,7 @@
+             proc = self.active_processes.get(job_id)
+             fd = getattr(proc, '_agentporter_pidfd', None) if proc is not None else None
+             owned_fd = os.dup(fd) if fd is not None else None
++            lease = self._resource_leases.get(proc) if proc is not None else None
+         if proc is None or proc.pid != row['pid'] or owned_fd is None:
+             if owned_fd is not None: os.close(owned_fd)
+             conn.close()
+@@ -740,9 +762,17 @@
+ 
+         try:
+             with conn:
+-                conn.execute("""UPDATE jobs SET status='cancelling',exit_code=NULL
++                changed = conn.execute("""UPDATE jobs SET status='cancelling',exit_code=NULL
+                     WHERE job_id=? AND status='running'""", (job_id,))
+-            signal_handle(owned_fd, signal.SIGKILL)
++            if changed.rowcount == 0:
++                return {"job_id": job_id, "status": self.get_status(job_id)['status'],
++                        "message": "Job finished while cancellation was requested"}
++            proc._agentporter_stop.set()
++            try:
++                if lease is not None:
++                    lease.terminate()
++            finally:
++                signal_handle(owned_fd, signal.SIGKILL)
+         except ProcessLookupError:
+             pass
+         except Exception as e:

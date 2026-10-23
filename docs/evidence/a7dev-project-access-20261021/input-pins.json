@@ -1,0 +1,10 @@
+{
+  "src/agentporter/client_policy.py": "7a783d7cf215d3e4421c35514519ae50eea821c23ad1c6756ca983d81e5c7781",
+  "src/agentporter/server.py": "6750dcb135c8044a5fe5758af9eadafbd19f12dec0c584fe85238e9706bfea96",
+  "src/agentporter/rest/routers/agents.py": "f690f0c788dff92737f41c7623849f7d96d98695dfa41361a1ef3ffca681ecea",
+  "src/agentporter/rest/schemas.py": "e617a95522186a30d84bc75e3c8812bc27610d24cb9b9cd8e0f78514abd01559",
+  "src/agentporter/agents/development.py": "89730afb5bb1fe10b0f96b1334a58f067e9b966f1bb0dcf6a0b4b73fb392d5d4",
+  "src/agentporter/workspaces/bounded.py": "cc9f9b5188376328a33e0a2c7d9a83e47c37f3c0ef5aa59932c2bb5a4e49448f",
+  "scripts/authorize-a7dev-project-delegation.py": "b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b",
+  "scripts/verify-a7dev-project-access.py": "f6f416c1b85b230a80008bc3f1a9d9429ebe719a3fae68c2673c5eb052e3b935"
+}

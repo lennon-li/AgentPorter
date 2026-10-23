@@ -1,5 +1,50 @@
 # A7Dev automatic discovery (live 2026-10-22)
 
+## Writable delegation update — prepared, not installed
+
+The reviewed update makes newly discovered ordinary projects writable for
+delegated agents: public scope includes `dispatch_write`, and the exact runtime
+root uses `writable: true`. It also accepts existing explicit `dispatch_write`
+grants rather than rejecting the entire policy. No protected root, overlapping
+root, HTTPS capability, Git publication permission or credential is added.
+
+Generated managed records now carry `profile_version: 2`. The helper recognizes
+the exact older unversioned read-only profile as version 1 and upgrades it only
+when registry, public scope, runtime row and directory identity all still match.
+Any operator edit, including an explicit write grant or removal of permissions,
+relinquishes automatic authority. A persistent `overridden: true` tombstone
+prevents later scans from re-enrolling a deleted row and skips all ACL refresh
+for that project. Unknown versions, mixed profiles and malformed tombstones fail
+closed. Existing descriptor, owner/device/mount, secret-name, overlap, admission
+guard, backup and exact-byte rollback checks remain enforced.
+
+Ordinary human-owned directories also receive an explicitly named human default
+ACL, so future service-created ordinary files retain human edit access. The
+service default remains denied, and unrelated masked rights remain masked.
+Private and Git directories receive no new human grant. This automatic scan does
+not repair existing service-owned directories or explicit project trees. Native
+programs creating mode `0600` files can mask inherited named ACLs under POSIX
+rules; file tools separately apply their explicit collaborator ACL before atomic
+publication. Effective native write accessibility still requires live acceptance.
+
+Install the reviewed update as yeli using the command below after independently
+checking the pinned helper/unit/installer bytes. The installer admits only its
+listed release versions (including `20261022T165047.488565Z`); an unlisted newer
+release requires reviewed pin maintenance. It stops the discovery timer before
+replacing immutable helper bytes and preserves existing private recovery state.
+Unverified source bytes are copied through yeli-opened input into root-private
+staging and hashed there before publication, preventing swapped source contents
+from becoming a public helper or unit even if verification fails.
+The first reconciliation upgrades untouched legacy projects; it defers while
+jobs or unresolved admissions exist and restarts A7Dev only if configuration
+changes. Inspect the resulting helper plan and journal, public writable workspace
+inventory, one newly enrolled ordinary project, and a known private/protected
+denial. Source tests do not prove the operator installation happened.
+
+The remaining sections describe the original live read-only-delegation
+enrollment. Their default policy is superseded only after this update is
+installed; prior runtime and secret protections still apply.
+
 This change installs a separate root reconciler and 30-second timer. It does not
 modify gateway packages, production, existing explicit workspace permissions,
 models, credentials or network configuration. The operator installed the reviewed
@@ -50,8 +95,10 @@ removed. The scan reports affected IDs under `revoked`. Operator-edited auto row
 are instead relinquished without changes. Non-Git directories
 are eligible and are never initialized as repositories.
 
-New projects receive read/write, offline execution, Git inspection, artifacts
-and read-only delegation. Worker allowlist entries use `writable: false`.
+The original installed helper gives new projects read/write, offline execution,
+Git inspection, artifacts and read-only delegation, with runtime
+`writable: false`. The prepared version 2 update above replaces that delegation
+default with scoped writable delegation.
 No new HTTPS, Git publication, SSH, SciNet, local HTTP ports, or remote access is
 granted. Worker roots retain the existing capacity of **64**; overflow names
 appear in the scan's `pending` list. Overlap exclusions appear under `overlaps`.

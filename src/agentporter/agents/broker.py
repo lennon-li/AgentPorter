@@ -7,6 +7,8 @@ import logging
 import re
 import sys
 import yaml
+import copy
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Dict
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.adapters.codex import CodexAdapter
@@ -53,15 +55,69 @@ class AgentBroker:
             "opencode": OpenCodeAdapter(),
             "wei": WeiAdapter(),
             "agy": AgyAdapter(),
+            "ming": ClaudeAdapter(),
+            "argie": AgyAdapter(),
         }
+        self.adapters["ming"].alias = "Ming"
+        self.adapters["argie"].alias = "Argie"
+        self.development_runtime = None
+        if self.job_manager is not None:
+            self.job_manager.development_runtime = None
+        runtime_config = Path(self.config_dir or os.environ.get("AGENTPORTER_CONFIG_DIR") or (
+            Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "agentporter"
+        ))
+        if self.job_manager is not None and (runtime_config / "development-runtime.yaml").is_file():
+            from agentporter.agents.development import DevelopmentRuntime
+            self.development_runtime = DevelopmentRuntime(
+                runtime_config, job_manager.state_dir, workspace_registry
+            )
+            self.job_manager.development_runtime = self.development_runtime
+
+    def _runtime_adapter(self, agent: str, adapter: AgentAdapter) -> AgentAdapter:
+        if self.development_runtime is not None:
+            executable = self.development_runtime.executable_for(agent)
+            if executable:
+                adapter = copy.copy(adapter)
+                adapter.executable_override = executable
+        return adapter
+
+    def _detection(self, agent: str, adapter: AgentAdapter, *, runtime_status: dict | None = None) -> dict:
+        if self.development_runtime is None:
+            return adapter.detect()
+        # Never execute even --version on the host when confinement failed.
+        status = self._runtime_status(agent, adapter, None) if runtime_status is None else runtime_status
+        return {
+            "executable": status.get("worker_executable"),
+            "is_installed": bool(status.get("worker_executable") or status.get("delegatable")),
+            "cli_version": status.get("cli_version", "unknown"),
+            "provider": status.get("provider") or adapter.provider,
+            "configured_model": status.get("configured_model", "unknown"),
+            "reasoning_effort": status.get("reasoning_effort", "unknown"),
+        }
+
+    def _runtime_status(self, agent: str, adapter: AgentAdapter, detection: dict | None) -> dict:
+        if self.development_runtime is None:
+            return {
+                "delegatable": False,
+                "confinement_status": "blocked_pending_os_confinement",
+                "availability_reason": "No development confinement runtime configured",
+            }
+        try:
+            return self.development_runtime.status(agent, adapter, detection)
+        except Exception as exc:
+            logger.warning("Development runtime check failed for %s: %s", agent, exc)
+            return {
+                "delegatable": False,
+                "confinement_status": "blocked_runtime_verification_failed",
+                "availability_reason": str(exc),
+            }
 
     def register_adapter(self, adapter: AgentAdapter) -> None:
         self.adapters[adapter.name.lower()] = adapter
 
     def _configured_workers(self) -> tuple[dict, dict]:
         """Apply private identity metadata to existing adapters, without new controls."""
-        # Explicit private identities retain precedence; do not claim "argie"
-        # by default because existing profiles may map it to another runtime.
+        # Explicit private identities retain precedence over built-in aliases.
         adapters, identities = dict(self.adapters), {}
         config_dir = self.config_dir or os.environ.get("AGENTPORTER_CONFIG_DIR") or os.path.join(
             os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "agentporter"
@@ -85,7 +141,7 @@ class AgentBroker:
             if not isinstance(runtime, str) or runtime not in self.adapters:
                 raise ValueError("agent identity runtime must name an existing adapter")
             adapter = self.adapters[runtime]
-            if name in adapters and adapters[name] is not adapter:
+            if name in adapters and adapters[name] is not adapter and name not in {"ming", "argie"}:
                 # Older installations defined Wei/Prof before they became
                 # built-ins. Accept their old metadata, but NEVER replace
                 # the built-in adapters' account or model restrictions.
@@ -125,11 +181,16 @@ class AgentBroker:
         results = []
         adapters, identities = self._configured_workers()
         for key, adapter in adapters.items():
+            adapter = self._runtime_adapter(key, adapter)
             runtime, alias, role, _ = identities.get(
-                key, ("codex" if isinstance(adapter, CodexAdapter) else "opencode" if isinstance(adapter, OpenCodeAdapter) else key,
+                key, ("codex" if isinstance(adapter, CodexAdapter) else "opencode" if isinstance(adapter, OpenCodeAdapter) else
+                "claude" if isinstance(adapter, ClaudeAdapter) else
+                "agy" if isinstance(adapter, AgyAdapter) else key,
                       adapter.alias or key, adapter.description, "")
             )
-            detection = adapter.detect()
+            runtime_status = (self._runtime_status(key, adapter, None)
+                              if self.development_runtime is not None else None)
+            detection = self._detection(key, adapter, runtime_status=runtime_status)
             configured_model = detection.get("configured_model") or "unknown"
             reasoning = detection.get("reasoning_effort") or "unknown"
             provider = detection.get("provider") or adapter.provider or "unknown"
@@ -145,10 +206,15 @@ class AgentBroker:
                 if effective_model != configured_model:
                     routing_note = f" (policy override from {configured_model})"
             route_target = effective_model or "BLOCKED"
+            if runtime_status is None:
+                runtime_status = self._runtime_status(key, adapter, detection)
+            delegatable = bool(runtime_status.get("delegatable") and not routing_blocked)
+            if routing_blocked:
+                runtime_status["availability_reason"] = routing_note.strip()
             results.append({
                 # CLI discovery is not an authorization to launch the worker.
-                "delegatable": False,
-                "confinement_status": "blocked_pending_os_confinement",
+                **runtime_status,
+                "delegatable": delegatable,
                 "agent": key,
                 "worker_cli": runtime,
                 "alias": alias,
@@ -158,11 +224,14 @@ class AgentBroker:
                 "actual_model_used": "unknown (resolved only from trusted runtime metadata)",
                 "reasoning_level": reasoning,
                 "cli_version": detection.get("cli_version", "unknown"),
-                "available": bool(detection.get("is_installed") and not routing_blocked),
+                "available": bool(detection.get("is_installed") and not routing_blocked and (
+                    self.development_runtime is None or delegatable
+                )),
                 "capabilities": adapter.capabilities(),
                 "description": role,
-                "isolation_note": "Runs with host user credentials; not kernel-isolated by AgentPorter.",
-                "supports_read_only": adapter.supports_read_only,
+                "isolation_note": ("Verified development OS confinement with separate worker credentials"
+                                   if delegatable else "Delegation blocked: OS confinement unavailable"),
+                "supports_read_only": bool(adapter.supports_read_only or delegatable),
                 "supports_model_override": adapter.supports_model_override,
                 "supports_reasoning_override": adapter.supports_reasoning_override,
                 "effective_model": effective_model,
@@ -190,14 +259,18 @@ class AgentBroker:
                 f"Unknown agent: '{agent}'. Authorized agents: {list(adapters.keys())}"
             )
 
-        adapter = adapters[agent_key]
-        detection = adapter.detect()
-        if not detection.get("is_installed"):
-            raise RuntimeError(f"Agent '{agent_key}' is not installed or available on host")
+        adapter = self._runtime_adapter(agent_key, adapters[agent_key])
+        detection = self._detection(agent_key, adapter)
 
         ws = self.workspace_registry.get(workspace_id)
         if not ws.allow_agent_dispatch:
             raise PermissionError(f"Workspace '{workspace_id}' does not allow agent dispatch")
+        runtime_status = self._runtime_status(agent_key, adapter, detection)
+        confined = bool(runtime_status.get("delegatable"))
+        if self.development_runtime is not None and not confined:
+            raise PermissionError(runtime_status.get("availability_reason") or "Development confinement unavailable")
+        if not detection.get("is_installed"):
+            raise RuntimeError(f"Agent '{agent_key}' is not installed or available on host")
         # The host-user Popen path has no kernel-enforced boundary; CLI flags
         # and prompt policy cannot prevent publication or reading host secrets.
         # Re-enable only via a verified, broker-owned confined launch method.
@@ -210,7 +283,7 @@ class AgentBroker:
         effective_read_only = read_only or not ws.writable
         if (allow_commit or allow_push) and effective_read_only:
             raise PermissionError("Commit/push cannot be authorized for a read-only dispatch")
-        if effective_read_only and not adapter.supports_read_only:
+        if effective_read_only and not adapter.supports_read_only and not confined:
             raise PermissionError(
                 f"Agent '{agent_key}' cannot be dispatched read-only in workspace "
                 f"'{workspace_id}' because this adapter cannot enforce read-only execution"
@@ -251,7 +324,9 @@ class AgentBroker:
         git_clean = None
 
         runtime, alias, role, persona = identities.get(
-            agent_key, ("codex" if isinstance(adapter, CodexAdapter) else "opencode" if isinstance(adapter, OpenCodeAdapter) else agent_key,
+            agent_key, ("codex" if isinstance(adapter, CodexAdapter) else "opencode" if isinstance(adapter, OpenCodeAdapter) else
+            "claude" if isinstance(adapter, ClaudeAdapter) else
+            "agy" if isinstance(adapter, AgyAdapter) else agent_key,
                         adapter.alias or agent_key, adapter.description, "")
         )
         identity = ""
@@ -268,11 +343,20 @@ class AgentBroker:
             "Interaction Mode: AUTONOMOUS\n"
             f"Authorization: {'MAY MODIFY FILES WITHIN SCOPE' if policy.workspace_write else 'READ-ONLY'}\n"
             "Step budget: 30\n"
-            f"Project Root: {ws.path}\n"
+            f"Project Root: {'/workspace' if confined else ws.path}\n"
             f"{policy.packet_text()}"
             f"Purpose: {purpose or 'Worker delegation via AgentPorter'}\n"
             f"Task:\n{task}\n"
         )
+
+        if confined and runtime_status.get("shared_obsidian_path"):
+            # Documentation is optional task context, never an authority upgrade.
+            packet += ("\nApproved read-only shared Obsidian skill index: "
+                       "/opt/agentporter/shared/obsidian/AgentSystem/agent-memory/skills/INDEX.md\n"
+                       "Read only the skill needed for the task. The tool inventory is "
+                       "/opt/agentporter/shared/obsidian/tools/agent-tool-policy.json. "
+                       "Inventory membership does not grant executable availability or "
+                       "permission to install or run privileged tools.\n")
 
         # Only explicit caller overrides are passed as overrides. Local CLI defaults/config
         # remain "configured", not misreported as a request made by AgentPorter.
@@ -283,6 +367,10 @@ class AgentBroker:
             if isinstance(adapter, (CodexAdapter, CopilotAdapter, ClaudeAdapter, OpenCodeAdapter))
             else {"writable": policy.workspace_write}
         )
+        if confined and not adapter.supports_read_only:
+            # The read-only mount is enforced by the OS; these CLI adapters
+            # only know how to request an edit-capable interaction mode.
+            controls = {"writable": True}
         search_enabled = self.parallel_search_enabled and (
             agent_key in {"jax", "liz", "prof"} and isinstance(adapter, CodexAdapter)
             or agent_key == "phil" and isinstance(adapter, PhilAdapter)
@@ -290,13 +378,24 @@ class AgentBroker:
         )
         if isinstance(adapter, CopilotAdapter):
             controls["parallel_search_enabled"] = search_enabled
-        cmd = adapter.build_argv(
-            workspace_path=ws.path,
-            packet=packet,
-            model=requested_model,
-            reasoning_effort=requested_reasoning,
-            **controls,
-        )
+        if confined and isinstance(adapter, OpenCodeAdapter):
+            # Legacy profile construction probes host --version and reads host
+            # credentials. The development runtime owns the isolated profile.
+            executable = runtime_status.get("worker_executable")
+            if not executable:
+                raise PermissionError("Development runtime did not verify the OpenCode executable")
+            cmd = [executable, "run", "--agent", "dispatch"]
+            if requested_model:
+                cmd.extend(["-m", requested_model])
+            cmd.append(packet)
+        else:
+            cmd = adapter.build_argv(
+                workspace_path=ws.path,
+                packet=packet,
+                model=requested_model,
+                reasoning_effort=requested_reasoning,
+                **controls,
+            )
         if isinstance(adapter, CodexAdapter):
             # Import lazily to prevent duplicate sys.modules entry on -m launch.
             from agentporter.agents.isolated_codex import safe_launcher_environment
@@ -318,7 +417,7 @@ class AgentBroker:
                 "--", *cmd,
             ]
             launch_env = safe_launcher_environment(source_home)
-        elif isinstance(adapter, OpenCodeAdapter):
+        elif isinstance(adapter, OpenCodeAdapter) and not confined:
             # Preserve upstream's dedicated Wei/OpenCode ephemeral permissions
             # and credential handling without allowing them to inherit defaults.
             launch_env = adapter.runtime_env(
@@ -368,4 +467,6 @@ class AgentBroker:
             "workspace_id": workspace_id,
             "read_only": not policy.workspace_write,
             "git_clean_at_dispatch": git_clean,
+            "confinement_status": runtime_status["confinement_status"],
+            "runtime_profile": runtime_status.get("runtime_profile"),
         }

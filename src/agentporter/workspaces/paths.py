@@ -12,6 +12,18 @@ SENSITIVE_NAMES_LOWER = {
     "id_rsa",
     "id_ed25519",
     "secrets.env",
+    "auth.json",
+    "credentials.json",
+    ".credentials.json",
+    ".aws",
+    ".codex",
+    ".claude",
+    ".copilot",
+    ".copilot-phil",
+    ".opencode",
+    ".github-copilot",
+    ".antigravitycli",
+    ".gemini",
     ".bashrc",
     ".bash_profile",
     ".profile",
@@ -23,12 +35,18 @@ SENSITIVE_NAMES_LOWER = {
 def _check_sensitive_components(path_str: str, original_ref: str) -> None:
     """Check every path component case-insensitively for sensitive names."""
     parts = path_str.replace("\\", "/").split("/")
+    lowered = '/'.join(parts).lower()
+    for private in ('.config/github-copilot', '.config/agy', '.config/antigravity',
+                    '.config/opencode', '.local/share/opencode'):
+        if f'/{private}/' in f'/{lowered}/':
+            raise ValueError(f"Access to sensitive or internal path blocked: '{original_ref}'")
     for p in parts:
         p_lower = p.lower()
         if (
             p_lower in SENSITIVE_NAMES_LOWER
             or p_lower.startswith(".env")
-            or p_lower.endswith((".pem", ".key"))
+            or p_lower.startswith(".codex-")
+            or p_lower.endswith((".env", ".pem", ".key"))
         ):
             raise ValueError(f"Access to sensitive or internal path blocked: '{original_ref}'")
 

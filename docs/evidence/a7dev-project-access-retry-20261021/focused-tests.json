@@ -1,0 +1,5 @@
+{
+  "command": ".venv/bin/python -m pytest -q tests/security/test_project_access_acceptance.py tests/security/test_project_access_retry_preflight.py tests/security/test_project_delegation_authorization.py",
+  "result": "65 passed in 2.84s",
+  "live_mutations": 0
+}

@@ -1,0 +1,10 @@
+MainPID=4102155
+NRestarts=0
+ControlGroup=/system.slice/agentporter-development.service
+Delegate=no
+DelegateSubgroup=
+CPUQuotaPerSecUSec=infinity
+MemoryMax=infinity
+TasksMax=107647
+ActiveState=active
+DropInPaths=

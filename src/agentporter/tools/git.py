@@ -18,6 +18,7 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         # Run Git inside the sandbox and override common executable helper mechanisms.
         argv = [
             "git",
+            "-c", "safe.directory=/workspace",
             "-c", "core.fsmonitor=false",
             # No hooks from .git/hooks, core.hooksPath, or inherited config.
             # The dedicated Git-metadata writable mode must never run a
@@ -52,7 +53,9 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
 
     def git_diff(workspace_id: str, staged: bool = False) -> str:
         ws = _workspace(workspace_id)
-        args = ["diff", "--staged"] if staged else ["diff"]
+        args = ["diff", "--no-ext-diff", "--no-textconv"]
+        if staged:
+            args.append("--staged")
         out = _run_git(ws.path, args)
         return out if out.strip() else "No diff."
 
@@ -66,7 +69,7 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         clean_ref = ref.strip()
         if not clean_ref or clean_ref.startswith("-") or len(clean_ref) > 256:
             raise ValueError("Invalid ref")
-        return _run_git(ws.path, ["show", "--stat", "-p", clean_ref])
+        return _run_git(ws.path, ["show", "--no-ext-diff", "--no-textconv", "--stat", "-p", clean_ref])
 
     def git_fetch(workspace_id: str, remote: str = "origin") -> str:
         ws = _workspace(workspace_id)

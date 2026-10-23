@@ -1,0 +1,8 @@
+{
+  "src/agentporter/tools/system.py": "217dd18662ab116936d380f7a26f3e0a32518fa4c69df560d9616bd8fffc4d75",
+  "src/agentporter/server.py": "67c10ae0f888d8a148b2ada1d4c7671f38a2c4382d3ef6b9a186061729e94c0a",
+  "src/agentporter/sandbox/bubblewrap.py": "0d2a11ae519f8d0e0682c1b8194043f66bbf17699450809faa010b1ab6566085",
+  "src/agentporter/tools/git.py": "fb413b070bd42308eff965b09af5c016931639fde813e83660eeec4ab9de17e9",
+  "src/agentporter/https_download.py": "98d4627474987acbafc55bbd859474ba74215811d38f49a56e3c4e01993bfa38",
+  "scripts/verify-a7dev-acquisition-repair.py": "c823968f1f973feefdd824c6ccebb65252175ff77ed3a391313fea3ab6f32829"
+}

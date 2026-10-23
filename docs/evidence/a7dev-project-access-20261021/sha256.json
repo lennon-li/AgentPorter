@@ -1,0 +1,15 @@
+{
+  "build.json": "cda281adf0624432e9565d10c5bb8fff90eb9e4d3937de5f76d5239143cc3613",
+  "install-a7dev-project-access.sh": "97d9ed36e674c965a22c4cfd08e30e0f0e4bb28d306b179f8d524c665e2d8e87",
+  "independent-native.log": "b70125093922cc0e0e3f4d1e5723aa8508f62e00fdebbc3e81ecff8751c887a2",
+  "native-workspace-review.md": "fe50fbc3355e16e3c23618dadc0463f6dc2160c69481733aa951f411fbd03229",
+  "input-pins.json": "aa1cfe9f78a423acad85820e912c7f27ad09662af17b8aba574390c7be6b9142",
+  "post-test-payload-verification.json": "d6716cbdd94126a60db2caaf9de67ede4c377e60beec6b88098a6b203612689b",
+  "artifact-harness.json": "fdb2e2559edd83b9acd0efb9fb89f5db6e4984183bc158f0a2aa32f8a1e151b8",
+  "independent-review.json": "0f0bec73c611957e539c612bef13c1572b7350c9053b2cb4588a8bcfba81a268",
+  "independent-artifact.log": "daf5b5499905d8fba456829edb4971a17e34b3839217d01c3961e8d4096aebf4",
+  "source-gate.log": "ab45947ddfd1941cbada805c2dca151b3f813c9fc03f05226ef949996d1c0fd4",
+  "artifact-gate.log": "c675d9e99a3b1606547d0412d03f29e8ac67bca4c8c3196f20d2eeb6a83a656b",
+  "policy-worker-result.md": "6927421691b94a480c51182b98ebc5f2d4f5b8ecf2dea47f87fcd8643ce1201c",
+  "public-access-before.json": "afd6f243ea2f583fc1626ee4e290a9364dd7b3199b6ea2bdadfd1d4a2fd7e117"
+}

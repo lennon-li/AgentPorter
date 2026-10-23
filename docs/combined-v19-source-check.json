@@ -1,0 +1,19 @@
+{
+  "approved_paths": 2,
+  "artifact_built": false,
+  "denied_paths": 5,
+  "frozen_resource_and_cancellation_modules_preserved": true,
+  "full_suite_executed": false,
+  "operator_policy_sha256": "e036dbeb156f05e6ad061cabe2aea646e255a4f95b0efbd08f648bfa901d6fcf",
+  "privileged_install": false,
+  "source_delta_paths": [
+    "src/agentporter/action_policy.py",
+    "src/agentporter/client_policy.py",
+    "src/agentporter/https_download.py",
+    "src/agentporter/rest/routers/exec.py",
+    "src/agentporter/rest/schemas.py",
+    "src/agentporter/scoped_https.py",
+    "src/agentporter/server.py"
+  ],
+  "status": "SOURCE_INTEGRATION_CHECKS_PASSED"
+}

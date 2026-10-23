@@ -1,0 +1,2 @@
+Private evidence: /tmp/a7dev-cranary-acquisition-verification-krn_8el6
+{"public_local_same_process": true, "after": false, "scope": {"enabled": true, "workspaces": ["cranary"], "methods": ["GET", "HEAD"], "hosts": ["api.github.com", "bioconductor.org", "cran-archive.r-project.org", "cran.r-project.org"], "generic_shell_network": false, "authorization": "owner-installed 0600 allowlist; no caller boolean grants access"}, "loaded_fingerprint": "04a978d2746a88afe79c56af673e6d19850ef24aca9b382becc14426fa8a4fcd", "installed_acceptance": "not attempted; inspection only"}

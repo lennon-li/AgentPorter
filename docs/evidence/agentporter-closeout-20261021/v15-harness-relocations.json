@@ -1,0 +1,16 @@
+{
+  "harness": "/tmp/agentporter-closeout-v15-harness-20261021",
+  "package_source": "/tmp/agentporter-development-candidate-v15-extracted/release/src",
+  "allowed_local_relocations": {
+    "venv/pyvenv.cfg": {
+      "before": "c00efdfc6d0bf73047f5f44c16af1724e5dd05bb1b42974473f21662627b6098",
+      "after": "a8feea8556b73b522ddea3b95063916ded8b2fa078bd300812e86524901026f0"
+    },
+    "venv/lib/python3.13/site-packages/agentporter_development.pth": {
+      "before": "3dfe1334794dd3dd18062682b6b5571060025888edcd303739b044119d309608",
+      "after": "345aa1b3fbe922bb5068f1a69c23f4e0df8de77905aa9a2fcbdb1c7436f4fc79"
+    }
+  },
+  "installed": false,
+  "pytest_addopts": "-o pythonpath=/tmp/agentporter-development-candidate-v15-extracted/release/src"
+}

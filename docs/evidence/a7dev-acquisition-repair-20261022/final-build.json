@@ -1,0 +1,34 @@
+{
+  "artifact": "/tmp/a7dev-acquisition-repair-final.tgz",
+  "sha256": "e0c709af0251d5725057c6d24f960ed1b58e262a2efa923b4b9bec9dd99126f5",
+  "version": "20261022T015212.581522Z",
+  "base_sha256": "c2924acec4e2a5bb15b36c41891929179f614c211a79a5a57f5b53e258d28566",
+  "fingerprint": "3f5b472115d7ac1ee147c29279b532bf175bc63891846a8b17ec94429a3ed099",
+  "changed_release_files": [
+    "operator-plan/verify-a7dev-acquisition-repair.py",
+    "src/agentporter/https_download.py",
+    "src/agentporter/sandbox/bubblewrap.py",
+    "src/agentporter/server.py",
+    "src/agentporter/tools/git.py",
+    "src/agentporter/tools/system.py",
+    "venv/lib/python3.13/site-packages/agentporter_development.pth",
+    "venv/pyvenv.cfg"
+  ],
+  "manifest_entries": 26360,
+  "source_pins": {
+    "src/agentporter/tools/system.py": "217dd18662ab116936d380f7a26f3e0a32518fa4c69df560d9616bd8fffc4d75",
+    "src/agentporter/server.py": "67c10ae0f888d8a148b2ada1d4c7671f38a2c4382d3ef6b9a186061729e94c0a",
+    "src/agentporter/sandbox/bubblewrap.py": "0d2a11ae519f8d0e0682c1b8194043f66bbf17699450809faa010b1ab6566085",
+    "src/agentporter/tools/git.py": "fb413b070bd42308eff965b09af5c016931639fde813e83660eeec4ab9de17e9",
+    "src/agentporter/https_download.py": "e7ed9655d82e592d632cb969c30b975bce50cffe558f608a2194767f6b20502d",
+    "scripts/verify-a7dev-acquisition-repair.py": "c823968f1f973feefdd824c6ccebb65252175ff77ed3a391313fea3ab6f32829"
+  },
+  "old_runtime_sha256": "1ead69fa8d365fe9e1a062ce1906180a6b8caec1d124cf01282efc8253a96ae7",
+  "installed_runtime_sha256": "9c9de5be87be8159e85c0b7dfd1165c8c17ae4045a8bfcfa371649d533798b3e",
+  "runtime_delta": "Active reviewed runtime, release paths relocated only",
+  "installed": false,
+  "independently_reviewed": false,
+  "production_changed": false,
+  "docstring_only_amendment_of": "4846f09e33d51c6686bd7bccbf9b93db77eb32468a74b721471b689b6cc05593",
+  "executable_ast_unchanged": true
+}

@@ -1,0 +1,101 @@
+{
+  "reviewer": "Jax independent bounded acquisition repair review",
+  "timestamp_utc": "2026-10-22T02:03:03.109609+00:00",
+  "baseline": "/opt/agentporter-development/versions/20261021T232414.837654Z",
+  "verdict": "PASS: no Critical or Important findings in reviewed bounded source and finalized runner",
+  "findings": [],
+  "scope": [
+    "src/agentporter/tools/system.py",
+    "src/agentporter/server.py",
+    "src/agentporter/sandbox/bubblewrap.py",
+    "src/agentporter/tools/git.py",
+    "src/agentporter/https_download.py",
+    "scripts/verify-a7dev-acquisition-repair.py",
+    "scripts/prepare-a7dev-acquisition-repair.py",
+    "scripts/install-a7dev-acquisition-repair.sh",
+    "tests/security/test_acquisition_receipts.py"
+  ],
+  "source_sha256": {
+    "src/agentporter/tools/system.py": "217dd18662ab116936d380f7a26f3e0a32518fa4c69df560d9616bd8fffc4d75",
+    "src/agentporter/server.py": "67c10ae0f888d8a148b2ada1d4c7671f38a2c4382d3ef6b9a186061729e94c0a",
+    "src/agentporter/sandbox/bubblewrap.py": "0d2a11ae519f8d0e0682c1b8194043f66bbf17699450809faa010b1ab6566085",
+    "src/agentporter/tools/git.py": "fb413b070bd42308eff965b09af5c016931639fde813e83660eeec4ab9de17e9",
+    "src/agentporter/https_download.py": "e7ed9655d82e592d632cb969c30b975bce50cffe558f608a2194767f6b20502d",
+    "scripts/verify-a7dev-acquisition-repair.py": "c823968f1f973feefdd824c6ccebb65252175ff77ed3a391313fea3ab6f32829",
+    "scripts/prepare-a7dev-acquisition-repair.py": "4f5fa89aa37737faf5d8a12670b213cef8f25ccf0641b0fe54cd8c9ef36a2cdb",
+    "scripts/install-a7dev-acquisition-repair.sh": "c877cfe7a3f3e82567c1fec5f4f8e395d12a3f936d978e38ef96f8171b4c6614",
+    "tests/security/test_acquisition_receipts.py": "60e05972117c1cfb570a75422ac725e6ca12141fdbb1167888e40ac41499b346"
+  },
+  "artifact": {
+    "path": "/tmp/a7dev-acquisition-repair-final.tgz",
+    "version": "20261022T015212.581522Z",
+    "sha256": "e0c709af0251d5725057c6d24f960ed1b58e262a2efa923b4b9bec9dd99126f5",
+    "archive_sha256_independently_verified": true,
+    "full_manifest_reverified_by_this_reviewer": false,
+    "selected_payload_verified": [
+      "release/src/agentporter/tools/system.py",
+      "release/src/agentporter/server.py",
+      "release/src/agentporter/sandbox/bubblewrap.py",
+      "release/src/agentporter/tools/git.py",
+      "release/src/agentporter/https_download.py",
+      "release/operator-plan/verify-a7dev-acquisition-repair.py"
+    ],
+    "fingerprint": "3f5b472115d7ac1ee147c29279b532bf175bc63891846a8b17ec94429a3ed099",
+    "docstring_only_amendment_of": "4846f09e33d51c6686bd7bccbf9b93db77eb32468a74b721471b689b6cc05593"
+  },
+  "verified_prior_evidence": {
+    "/tmp/a7dev-capability-independent-review.json": "All candidate source/test hashes and installed baseline hashes match",
+    "/tmp/a7dev-git-owner-independent-review.json": "All candidate source/test hashes and installed baseline hashes match",
+    "/tmp/jax-acquisition-repair-build.json": "All six source pins match; exact archive SHA matches",
+    "/tmp/jax-acquisition-repair-final-build.json": "All six final source pins and six final extracted payload hashes independently match; runner archive/fingerprint/runtime/version/path pins match"
+  },
+  "tests_run": [
+    {
+      "command": ".venv/bin/python -m pytest -q tests/security/test_acquisition_receipts.py",
+      "result": "49 passed in 1.99s",
+      "execution": "sandboxed, unprivileged; no network"
+    },
+    {
+      "command": "bash -n scripts/install-a7dev-acquisition-repair.sh",
+      "result": "passed after final pins filled"
+    },
+    {
+      "command": "ast.parse for prepare-a7dev-acquisition-repair.py and verify-a7dev-acquisition-repair.py",
+      "result": "passed"
+    },
+    {
+      "command": "installed-v-source scoped_https.py diff",
+      "result": "unchanged"
+    },
+    {
+      "command": "bash -n scripts/install-a7dev-acquisition-repair.sh",
+      "result": "passed after final docstring-amended artifact repins"
+    }
+  ],
+  "conclusions": [
+    "Registry callback reports actual registered tool identities and does not modify authorization.",
+    "Git trust added only for exact /workspace in sandbox protected environment/dedicated Git commands; no wildcard or host/global configuration write.",
+    "New tool acquisitions validate bounded strict receipt metadata and spool size/SHA256, persist explicit historical_identity_verified=false and training_eligible=false, then return receipt path/hash.",
+    "O_TMPFILE staging and atomic no-overwrite links avoid named-stage cleanup races; receipt is linked before artifact; publication failure preserves all public links and reports failure, avoiding deletion of concurrent owner replacement.",
+    "Unsupported anonymous-file/link capabilities fail closed. Existing host allowlist, pinned HTTPS transport, no redirects, 16 MiB limit and timeout remain unchanged.",
+    "Finalized installer pins match build report; runner checks quiet/stopped service, reviewed policies and exact runtime; rollback refuses unknown state and preserves evidence. Preparation admits exactly five module changes, inert verifier and two Python path relocations relative to pinned active archive.",
+    "Final docstring correction resolves earlier nonblocking documentation observation; final executable AST remains unchanged from tested repair."
+  ],
+  "reviewed_but_not_independently_executed": [
+    "12-case recovery results inspected; reviewer did not rerun recovery harness",
+    "Earlier native Git/policy tests accepted only after matching input hashes",
+    "Public/local acceptance verifier inspected but not executed: would contact live endpoints and write approved research acquisition",
+    "Full artifact test gate is parent-owned and still underway at review time",
+    "No installation, activation, service changes, credentials access, network requests, deployment or historical package identity judgment performed"
+  ],
+  "nonblocking_observations": [],
+  "authorization": "Read/execute review only; this report does not authorize deployment.",
+  "docstring_amendment": {
+    "prior_source_sha256": "98d4627474987acbafc55bbd859474ba74215811d38f49a56e3c4e01993bfa38",
+    "final_source_sha256": "e7ed9655d82e592d632cb969c30b975bce50cffe558f608a2194767f6b20502d",
+    "independent_verification": "Reconstructed prior docstring yields exact prior source SHA; AST with docstrings removed equals final source AST",
+    "executable_ast_unchanged": true,
+    "only_changed_source_pin": "src/agentporter/https_download.py",
+    "finalizer_review": "Inspected finalizer: restores two local Python path relocations, verifies prior manifest, permits only docstring AST delta, repacks canonically, extracts with real installer and verifies full manifest."
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "manifest_entries": 26353,
+  "allowed_local_relocations": [
+    "venv/pyvenv.cfg",
+    "venv/lib/python3.13/site-packages/agentporter_development.pth"
+  ],
+  "source_pins_still_match": 73,
+  "installed": false,
+  "verification": "Full extracted payload rechecked after tests; no unlisted files or other byte changes"
+}

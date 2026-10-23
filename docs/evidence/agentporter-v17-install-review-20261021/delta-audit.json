@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "changed_payload_files": [
+    "src/agentporter/resources.py",
+    "src/agentporter/sandbox/bubblewrap.py",
+    "src/agentporter/tools/jobs.py",
+    "venv/lib/python3.13/site-packages/agentporter_development.pth",
+    "venv/pyvenv.cfg"
+  ],
+  "runtime_delta": "version relocation only",
+  "independently_reviewed": false
+}

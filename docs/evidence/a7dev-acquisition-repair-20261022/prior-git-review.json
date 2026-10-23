@@ -1,0 +1,51 @@
+{
+  "review": "bounded Git mounted-root ownership repair",
+  "reviewer": "Liz independent worker review",
+  "status": "approved_source_and_native_tests",
+  "installed": false,
+  "deployed": false,
+  "baseline_release": "/opt/agentporter-development/versions/20261021T232414.837654Z",
+  "candidate_sha256": {
+    "src/agentporter/sandbox/bubblewrap.py": "0d2a11ae519f8d0e0682c1b8194043f66bbf17699450809faa010b1ab6566085",
+    "src/agentporter/tools/git.py": "fb413b070bd42308eff965b09af5c016931639fde813e83660eeec4ab9de17e9",
+    "tests/security/test_git_workspace_ownership.py": "047d08d720e0810526c9b3ab3aa334274b886f92fec5abab1387e46708662061"
+  },
+  "baseline_sha256": {
+    "src/agentporter/sandbox/bubblewrap.py": "b17e7d519c3697f3bc2b85bd2bf27fc1025dce3ad387bcd4dd6ee7620f822f53",
+    "src/agentporter/tools/git.py": "1258e31018aac1d5e27acef96ca09251db17fcfa826ba685e7948f507b4fafb2"
+  },
+  "changes_reviewed": [
+    "Bubblewrap adds only protected Git environment GIT_CONFIG_COUNT=1, KEY_0=safe.directory, VALUE_0=/workspace after clearenv; no wildcard or host/global Git configuration inheritance.",
+    "Dedicated Git tools add exact -c safe.directory=/workspace and disable external diff/textconv for diff and show while retaining fsmonitor/hooks/pager overrides.",
+    "Existing offline unshare-net, read-only Git metadata mount, tool authorization, publication gates and scope checks remain unchanged."
+  ],
+  "security_findings": [],
+  "nonblocking_observations": [
+    "Explicitly trusting the selected mounted repository allows Git to read its local configuration. Generic exec already authorizes arbitrary offline sandbox commands; this change does not grant host/network access. Dedicated inspection retains helper restrictions.",
+    "The environment only trusts the exact mounted root; the native child-repository owner-mismatch negative test still returns dubious ownership.",
+    "Capability inventory repair in other modules reviewed separately; this record covers only the two Git/sandbox modules and focused tests."
+  ],
+  "validation": {
+    "execution": "native unprivileged yeli; synthetic temporary repositories and state only",
+    "command": ".venv/bin/python -m pytest -q tests/security/test_git_workspace_ownership.py tests/security/test_scoped_git_metadata.py tests/security/test_sandbox_isolation.py tests/unit/test_offline_execution_defaults.py tests/unit/test_sandbox_identity.py tests/unit/test_git_fetch_permissions.py tests/unit/test_git_publication_gate.py tests/unit/test_execution_policy.py",
+    "passed": 69,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 1.56,
+    "verified_behaviors": [
+      "Native Git own ownership rejection reproduced without scoped environment and repaired for /workspace plus its nonrepository subdirectories.",
+      "Distinct nested repository remains untrusted under assumed owner mismatch.",
+      "No inherited wildcard/host config and no external-diff/textconv execution in dedicated diff.",
+      "Read-only metadata, offline networking, host identity isolation and Git publishing/fetch permission regressions pass."
+    ]
+  },
+  "constraints": {
+    "service_changes": false,
+    "installation": false,
+    "root_commands": false,
+    "credentials_read": false,
+    "research_changes": false,
+    "project_commits_or_pushes": false,
+    "source_edits_by_reviewer": false
+  }
+}

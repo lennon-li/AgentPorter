@@ -11,6 +11,8 @@ from agentporter.workspaces.registry import WorkspaceRegistry
 def isolate_agent_identities(tmp_path, monkeypatch):
     """Source tests must never consume the host's private identity registry."""
     monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(tmp_path / "agent-config"))
+    monkeypatch.setenv("AGENTPORTER_STATE_DIR", str(tmp_path / "agent-state"))
+    monkeypatch.setenv("AGENTPORTER_CACHE_DIR", str(tmp_path / "agent-cache"))
 
 
 @pytest.fixture

@@ -1,0 +1,22 @@
+{
+  "status": "live repair verified",
+  "source_and_frozen_package_verified": true,
+  "final_gate": {
+    "passed": 1664,
+    "failed": 0,
+    "subtests_passed": 24,
+    "offline_security_checks": "all passed",
+    "existing_deprecation_warnings": 1
+  },
+  "manifest_entries_verified": 26360,
+  "independent_review": "PASS; no Critical or Important findings",
+  "recovery_scenarios_passed": 12,
+  "historical_identity_verified": false,
+  "training_eligible": false,
+  "installed": true,
+  "live_acceptance": "Capability advertisement, Git ownership and saved receipt byte/SHA256/gzip integrity verified via connected public tools",
+  "committed": false,
+  "pushed": false,
+  "activation_command": "bash scripts/install-a7dev-acquisition-repair.sh",
+  "activated_by_this_agent": false
+}

@@ -38,6 +38,10 @@ state/
 logs/
 artifacts/
 
+# Local release bundles; retain source manifests and review evidence in Git.
+/review-artifacts/*.tgz
+/.agentporter-integration-source-20261020.tgz
+
 # System / editor files
 .DS_Store
 .idea/

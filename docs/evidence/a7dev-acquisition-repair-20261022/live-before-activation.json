@@ -1,0 +1,14 @@
+{
+  "development": {
+    "MainPID": "886920",
+    "NRestarts": "0",
+    "ActiveState": "active"
+  },
+  "production": {
+    "MainPID": "664960",
+    "NRestarts": "0",
+    "ActiveState": "active"
+  },
+  "development_release": "/opt/agentporter-development/versions/20261021T232414.837654Z",
+  "new_release_activated": false
+}

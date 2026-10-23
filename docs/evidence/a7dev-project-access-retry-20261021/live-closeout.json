@@ -1,0 +1,223 @@
+{
+  "passed": true,
+  "timestamp": "2026-10-22T01:09:35.623505+00:00",
+  "endpoints": [
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "deployment": {
+        "version": "0.1.0.dev0",
+        "pid": 886920,
+        "started_at": "2026-10-21T21:00:58-0400",
+        "package_path": "/opt/agentporter-development/versions/20261021T232414.837654Z/src/agentporter",
+        "python": "/opt/agentporter-development/current/venv/bin/python",
+        "loaded_fingerprint": "099b88c95f0fb23e33554e85a426e1b25b9fbba9ca3fe4fffd1ab4869b5da315",
+        "disk_fingerprint": "099b88c95f0fb23e33554e85a426e1b25b9fbba9ca3fe4fffd1ab4869b5da315",
+        "stale": false,
+        "modules": {
+          "agentporter": "/opt/agentporter-development/versions/20261021T232414.837654Z/src/agentporter/__init__.py",
+          "agentporter.server": "/opt/agentporter-development/versions/20261021T232414.837654Z/src/agentporter/server.py",
+          "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T232414.837654Z/src/agentporter/tools/scinet_training.py"
+        }
+      }
+    },
+    {
+      "endpoint": "http://127.0.0.1:8876/mcp",
+      "deployment": {
+        "version": "0.1.0.dev0",
+        "pid": 886920,
+        "started_at": "2026-10-21T21:00:58-0400",
+        "package_path": "/opt/agentporter-development/versions/20261021T232414.837654Z/src/agentporter",
+        "python": "/opt/agentporter-development/current/venv/bin/python",
+        "loaded_fingerprint": "099b88c95f0fb23e33554e85a426e1b25b9fbba9ca3fe4fffd1ab4869b5da315",
+        "disk_fingerprint": "099b88c95f0fb23e33554e85a426e1b25b9fbba9ca3fe4fffd1ab4869b5da315",
+        "stale": false,
+        "modules": {
+          "agentporter": "/opt/agentporter-development/versions/20261021T232414.837654Z/src/agentporter/__init__.py",
+          "agentporter.server": "/opt/agentporter-development/versions/20261021T232414.837654Z/src/agentporter/server.py",
+          "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T232414.837654Z/src/agentporter/tools/scinet_training.py"
+        }
+      }
+    }
+  ],
+  "provider_jobs": [
+    {
+      "workspace_id": "Qman",
+      "job_id": "job_2dbdd2acf75f44ea9c1d5421",
+      "status": "completed",
+      "exit_code": 0,
+      "native_trace_events": 0,
+      "native_digest_matches_final_answer": null,
+      "provider": "unknown",
+      "configured_model": "unknown",
+      "native_trace_verification": "NOT separately available in persisted job result; owner-run pinned validator reported successful checksum acceptance"
+    },
+    {
+      "workspace_id": "m3-poc",
+      "job_id": "job_2a4b547ecaa04191aebcbda3",
+      "status": "completed",
+      "exit_code": 0,
+      "native_trace_events": 0,
+      "native_digest_matches_final_answer": null,
+      "provider": "unknown",
+      "configured_model": "unknown",
+      "native_trace_verification": "NOT separately available in persisted job result; owner-run pinned validator reported successful checksum acceptance"
+    }
+  ],
+  "scoped_https": {
+    "enabled": true,
+    "workspaces": [
+      "cranary"
+    ],
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "hosts": [
+      "api.github.com",
+      "bioconductor.org",
+      "cran-archive.r-project.org",
+      "cran.r-project.org",
+      "packagemanager.posit.co"
+    ],
+    "generic_shell_network": false,
+    "authorization": "owner-installed 0600 allowlist; no caller boolean grants access",
+    "downloads": {
+      "hosts": [
+        "cran.r-project.org",
+        "packagemanager.posit.co"
+      ],
+      "directory": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads",
+      "max_response_bytes": 16777216,
+      "timeout_seconds": 60
+    }
+  },
+  "https_download_discoverable": true,
+  "jax": {
+    "agent": "jax",
+    "delegatable": true,
+    "default_model": "unknown",
+    "provider": "unknown",
+    "public_dispatch_workspaces": [
+      "ALL",
+      "CTLOD",
+      "CTLOD.Rcheck",
+      "CUSUM",
+      "EasyMap2.1",
+      "EasyMaps",
+      "HMA",
+      "IPD",
+      "IRVRI",
+      "IRVRI.Rcheck",
+      "ONgeoR",
+      "ONgeoRapp",
+      "PAGe",
+      "Qman",
+      "RangeAhead",
+      "agent-web-search",
+      "agentporter-dev",
+      "biostats.ai",
+      "careDX",
+      "clientAgent",
+      "compliance",
+      "courieR",
+      "covid-positivity-forecasting",
+      "cranary",
+      "cranary-jax-wt",
+      "dataganger",
+      "dogfooding",
+      "epiweave",
+      "gambling",
+      "hermes-jev-acceptance-20261018",
+      "hermes-jev-bcc-package-20261018",
+      "insider",
+      "legionella",
+      "m3",
+      "m3-poc",
+      "node-which",
+      "opcc",
+      "preview-jqtrwy87",
+      "scinet-home",
+      "shiny",
+      "which"
+    ],
+    "readiness_note": "Runtime checks do not verify provider quota or successful execution; public dispatch requires an admitted workspace."
+  },
+  "wei": {
+    "agent": "wei",
+    "delegatable": true,
+    "default_model": "opencode/glm-5.3-flash-free",
+    "provider": "opencode",
+    "public_dispatch_workspaces": [
+      "ALL",
+      "CTLOD",
+      "CTLOD.Rcheck",
+      "CUSUM",
+      "EasyMap2.1",
+      "EasyMaps",
+      "HMA",
+      "IPD",
+      "IRVRI",
+      "IRVRI.Rcheck",
+      "ONgeoR",
+      "ONgeoRapp",
+      "PAGe",
+      "Qman",
+      "RangeAhead",
+      "agent-web-search",
+      "agentporter-dev",
+      "biostats.ai",
+      "careDX",
+      "clientAgent",
+      "compliance",
+      "courieR",
+      "covid-positivity-forecasting",
+      "cranary",
+      "cranary-jax-wt",
+      "dataganger",
+      "dogfooding",
+      "epiweave",
+      "gambling",
+      "hermes-jev-acceptance-20261018",
+      "hermes-jev-bcc-package-20261018",
+      "insider",
+      "legionella",
+      "m3",
+      "m3-poc",
+      "node-which",
+      "opcc",
+      "preview-jqtrwy87",
+      "scinet-home",
+      "shiny",
+      "which"
+    ],
+    "readiness_note": "Runtime checks do not verify provider quota or successful execution; public dispatch requires an admitted workspace."
+  },
+  "ordinary_project_count": 41,
+  "registered_workspace_count": 46,
+  "existing_binary_receipt_reverified": {
+    "sha256": "d2cd86e52af94510adf4e9aed96d4cc7b4172a5a93c3ba0e0094569bf93e4c52",
+    "bytes": 776874,
+    "expanded_sha256": "71d1c54a6c2e636732227fa2501c9d25b665ab66a6becd5b1f55dd20be2ce077",
+    "gzip_integrity_verified": true
+  },
+  "services": {
+    "development": {
+      "active": true,
+      "pid": 886920,
+      "restarts": 0,
+      "release": "20261021T232414.837654Z"
+    },
+    "production": {
+      "active": true,
+      "pid": 664960,
+      "restarts": 0,
+      "changed_by_task": false
+    },
+    "owner_evidence_directories": [
+      "/tmp/a7dev-project-access-verification-0hyk9xi2",
+      "/tmp/a7dev-project-access-verification-f2jy3sbx"
+    ],
+    "owner_evidence_directly_readable_by_yeli": false,
+    "private_file_permissions_changed": false
+  }
+}

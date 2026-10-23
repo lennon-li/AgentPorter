@@ -1,0 +1,8 @@
+version: 1
+workspaces:
+  cranary:
+    path: /home/yeli/repos/cranary
+    operations: [read, https, dispatch]
+  agentporter-dev:
+    path: /home/yeli/agent-work/agentporter-dev
+    operations: [read, dispatch]

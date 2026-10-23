@@ -4,12 +4,13 @@ import os
 import time
 import shutil
 import hashlib
-import tempfile
 import subprocess
 import logging
 from typing import Optional
 from agentporter.workspaces.registry import WorkspaceRegistry
 from agentporter.workspaces.paths import validate_workspace_path
+from agentporter.workspaces.bounded import read_regular, walk_files, capture_bounded
+from agentporter.workspaces.shared_access import atomic_write
 
 logger = logging.getLogger("agentporter.tools.files")
 
@@ -18,6 +19,7 @@ MAX_WRITE_BYTES = 5 * 1024 * 1024
 MAX_PATCH_BYTES = 2 * 1024 * 1024
 MAX_RANGE_LINES = 5000
 MAX_SEARCH_RESULTS = 200
+MAX_HASH_READ_BYTES = 8 * 1024 * 1024
 
 RG_SENSITIVE_EXCLUDES = [
     "!.git/**",
@@ -38,34 +40,7 @@ def create_file_tools(registry: WorkspaceRegistry):
     def list_files(workspace_id: str, path: str = "", depth: Optional[int] = 1) -> list[str]:
         """List non-hidden files at the requested depth (default: one level)."""
         ws = registry.get(workspace_id)
-        root = validate_workspace_path(ws.path, path, allow_root=True)
-
-        rel_files = []
-        root_depth = root.rstrip(os.sep).count(os.sep)
-        for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [
-                d for d in dirnames
-                if not d.startswith(".")
-                and d not in ["__pycache__", "node_modules", "venv", ".venv"]
-            ]
-
-            cur_depth = dirpath.count(os.sep) - root_depth
-            if depth is not None and cur_depth >= max(0, depth):
-                dirnames[:] = []
-
-            for fn in filenames:
-                if fn.startswith("."):
-                    continue
-                full_p = os.path.join(dirpath, fn)
-                rel_p = os.path.relpath(full_p, ws.path)
-                try:
-                    validate_workspace_path(ws.path, rel_p)
-                except ValueError:
-                    continue
-                rel_files.append(rel_p)
-
-        rel_files.sort()
-        return rel_files
+        return sorted(walk_files(ws.path, path, depth))
 
     def search_text(workspace_id: str, query: str, glob: str = "*", max_results: int = 50) -> list[dict]:
         """Search text without exposing paths that normal file reads would block."""
@@ -80,6 +55,7 @@ def create_file_tools(registry: WorkspaceRegistry):
             "never",
             "--max-count",
             str(max_results),
+            '--max-filesize', str(MAX_FULL_READ_BYTES), '--max-depth', '16',
         ]
         for excluded in RG_SENSITIVE_EXCLUDES:
             cmd.extend(["--glob", excluded])
@@ -88,12 +64,12 @@ def create_file_tools(registry: WorkspaceRegistry):
         cmd.extend(["--", query, ws_root])
 
         try:
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if res.returncode not in (0, 1):
-                raise RuntimeError(res.stderr.strip() or f"ripgrep failed with exit {res.returncode}")
+            code, stdout, stderr = capture_bounded(cmd)
+            if code not in (0, 1):
+                raise RuntimeError(stderr.strip() or f"ripgrep failed with exit {code}")
 
             results = []
-            for line in res.stdout.splitlines():
+            for line in stdout.splitlines():
                 parts = line.split(":", 2)
                 if len(parts) != 3:
                     continue
@@ -127,12 +103,11 @@ def create_file_tools(registry: WorkspaceRegistry):
         if not os.path.isfile(full_path):
             raise FileNotFoundError(f"File not found: '{path}'")
 
-        size = os.path.getsize(full_path)
-        digest = hashlib.sha256()
-        with open(full_path, "rb") as f:
-            for chunk in iter(lambda: f.read(1024 * 1024), b""):
-                digest.update(chunk)
-        full_sha256 = digest.hexdigest()
+        ranged = start_line is not None or end_line is not None
+        data = read_regular(ws.path, path, MAX_HASH_READ_BYTES if ranged else MAX_FULL_READ_BYTES)
+        size = len(data)
+        full_sha256 = hashlib.sha256(data).hexdigest()
+        text = data.decode('utf-8', errors='replace')
 
         if start_line is None and end_line is None:
             if size > MAX_FULL_READ_BYTES:
@@ -140,8 +115,9 @@ def create_file_tools(registry: WorkspaceRegistry):
                     f"File is {size} bytes; full reads are limited to {MAX_FULL_READ_BYTES}. "
                     "Use start_line/end_line."
                 )
-            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-                content = f.read(MAX_FULL_READ_BYTES + 1)
+            content = text
+            if len(content.encode('utf-8')) > MAX_FULL_READ_BYTES:
+                raise ValueError('Decoded full read exceeds output budget')
             total_lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
             return {
                 "path": path,
@@ -161,11 +137,12 @@ def create_file_tools(registry: WorkspaceRegistry):
 
         selected = []
         total_lines = 0
-        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-            for number, line in enumerate(f, start=1):
+        for number, line in enumerate(text.splitlines(keepends=True), start=1):
                 total_lines = number
                 if start <= number <= end:
                     selected.append(line)
+        if len(''.join(selected).encode('utf-8')) > MAX_FULL_READ_BYTES:
+            raise ValueError('Selected lines exceed output budget')
         actual_end = min(end, total_lines)
         return {
             "path": path,
@@ -191,23 +168,7 @@ def create_file_tools(registry: WorkspaceRegistry):
         if len(content_bytes) > MAX_WRITE_BYTES:
             raise ValueError(f"write_file content exceeds {MAX_WRITE_BYTES} bytes")
 
-        full_path = validate_workspace_path(ws.path, path)
-        parent_dir = os.path.dirname(full_path)
-        os.makedirs(parent_dir, exist_ok=True)
-
-        if os.path.exists(full_path):
-            with open(full_path, "rb") as f:
-                existing_sha256 = hashlib.sha256(f.read()).hexdigest()
-            if expected_sha256 and existing_sha256.lower() != expected_sha256.lower():
-                raise ValueError(
-                    f"Stale file protection: current sha256 ({existing_sha256}) "
-                    f"does not match expected ({expected_sha256})"
-                )
-
-        with tempfile.NamedTemporaryFile("wb", dir=parent_dir, delete=False) as tmp:
-            tmp.write(content_bytes)
-            tmp_name = tmp.name
-        os.replace(tmp_name, full_path)
+        atomic_write(ws.path, path, content_bytes, expected_sha256)
 
         return {
             "path": path,
@@ -224,34 +185,11 @@ def create_file_tools(registry: WorkspaceRegistry):
         if len(patch.encode("utf-8")) > MAX_PATCH_BYTES:
             raise ValueError(f"Patch exceeds {MAX_PATCH_BYTES} bytes")
 
-        has_ab_prefix = False
-        for line in patch.splitlines():
-            if line.startswith(("--- ", "+++ ")):
-                target_token = line[4:].strip().split("\t", 1)[0]
-                if target_token.startswith(("a/", "b/")):
-                    clean_target = target_token[2:]
-                    has_ab_prefix = True
-                else:
-                    clean_target = target_token
-                if clean_target and clean_target != "/dev/null":
-                    validate_workspace_path(ws.path, clean_target)
-
-        patch_flag = "-p1" if has_ab_prefix else "-p0"
-        proc = subprocess.run(
-            ["patch", patch_flag],
-            input=patch,
-            cwd=ws.path,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
+        from agentporter.workspaces.patching import apply_workspace_patch
+        proc = apply_workspace_patch(ws.path, patch, MAX_WRITE_BYTES)
         if proc.returncode != 0:
-            return {
-                "status": "failed",
-                "exit_code": proc.returncode,
-                "stdout": proc.stdout[:100000],
-                "stderr": proc.stderr[:100000],
-            }
+            return {"status": "failed", "exit_code": proc.returncode,
+                    "stdout": proc.stdout[:100000], "stderr": proc.stderr[:100000]}
         return {
             "status": "applied",
             "exit_code": 0,

@@ -201,9 +201,29 @@ def profile(path):
             'allow_scinet_diagnostic': False, 'allow_scinet_training': False}
 
 
-def generated(path):
-    return {'registry': profile(path), 'policy': {'path': path, 'operations': ['read', 'write', 'git_read', 'exec', 'dispatch']},
-            'runtime': {'path': path, 'writable': False}}
+def generated(path, version=2):
+    require(type(version) is int and version in (1, 2), 'Unknown managed profile version')
+    operations = ['read', 'write', 'git_read', 'exec', 'dispatch']
+    if version == 2:
+        operations.append('dispatch_write')
+    return {'registry': profile(path), 'policy': {'path': path, 'operations': operations},
+            'runtime': {'path': path, 'writable': version == 2}}
+
+
+def managed_profile(name, old):
+    require(isinstance(old, dict) and set(old) in (
+        {'identity', 'rows'}, {'identity', 'rows', 'profile_version'},
+        {'identity', 'rows', 'profile_version', 'overridden'}), 'Invalid managed state')
+    identity = old['identity']
+    require(isinstance(identity, dict) and set(identity) == {'path', 'dev', 'ino'}
+            and isinstance(identity['path'], str) and os.path.isabs(identity['path'])
+            and os.path.normpath(identity['path']) == identity['path']
+            and all(type(identity[key]) is int and identity[key] >= 0 for key in ('dev', 'ino')),
+            'Invalid managed identity')
+    version = old.get('profile_version', 1)
+    require(canonical(old['rows']) == canonical(generated(identity['path'], version)) and name not in PROTECTED
+            and ('overridden' not in old or old['overridden'] is True), 'Invalid generated managed row')
+    return version
 
 
 def plan(documents, managed, candidates):
@@ -219,33 +239,37 @@ def plan(documents, managed, candidates):
     for name, row in policy.items():
         require(set(row) == {'path', 'operations'} and name in registry and row['path'] == registry[name]['path']
                 and isinstance(row['operations'], list) and all(isinstance(op, str) and op in
-                {'read', 'write', 'exec', 'https', 'git_read', 'git_write', 'dispatch'} for op in row['operations'])
+                {'read', 'write', 'exec', 'https', 'git_read', 'git_write', 'dispatch', 'dispatch_write'} for op in row['operations'])
                 and len(set(row['operations'])) == len(row['operations']), 'Invalid public policy row')
     require(all(isinstance(r, dict) and set(r) == {'path', 'writable'} and isinstance(r['path'], str)
                 and type(r['writable']) is bool for r in runtime), 'Invalid runtime row')
     require(len({r['path'] for r in runtime}) == len(runtime), 'Duplicate runtime roots')
     state = copy.deepcopy(managed)
-    report = {'added': [], 'removed': [], 'pending': [], 'overridden': [], 'overlaps': [], 'revoked': []}
+    report = {'added': [], 'removed': [], 'pending': [], 'overridden': [], 'overlaps': [], 'revoked': [], 'upgraded': []}
     matched = set()
     for name, old in state.items():
-        require(isinstance(old, dict) and set(old) == {'identity', 'rows'}, 'Invalid managed state')
+        managed_profile(name, old)
         expected = old['rows']
-        require(expected == generated(old['identity']['path']) and name not in PROTECTED, 'Invalid generated managed row')
-        if (registry.get(name) == expected['registry'] and policy.get(name) == expected['policy']
+        if (not old.get('overridden') and registry.get(name) == expected['registry'] and policy.get(name) == expected['policy']
                 and expected['runtime'] in runtime):
             matched.add(name)
     authoritative = {row['path'] for rows in (registry, policy) for name, row in rows.items() if name not in matched}
     auto_runtime = [state[name]['rows']['runtime'] for name in matched]
     authoritative.update(row['path'] for row in runtime if row not in auto_runtime)
     for name, old in list(state.items()):
-        require(isinstance(old, dict) and set(old) == {'identity', 'rows'}, 'Invalid managed state')
+        version = managed_profile(name, old)
         expected = old['rows']
-        require(expected == generated(old['identity']['path']) and name not in PROTECTED, 'Invalid generated managed row')
+        if old.get('overridden'):
+            report['overridden'].append(name)
+            continue
         # A single explicit edit relinquishes all authority over this managed row.
         matches = (registry.get(name) == expected['registry'] and policy.get(name) == expected['policy']
                    and expected['runtime'] in runtime)
         if not matches:
-            del state[name]
+            # Keep a persistent tombstone: deleting every row must not allow a
+            # later scan to silently re-enroll an operator-restricted project.
+            state[name]['profile_version'] = version
+            state[name]['overridden'] = True
             report['overridden'].append(name)
         elif any(p != REPOS and (Path(expected['registry']['path']).is_relative_to(p)
                 or Path(p).is_relative_to(expected['registry']['path'])) for p in authoritative):
@@ -262,10 +286,18 @@ def plan(documents, managed, candidates):
             runtime.remove(expected['runtime'])
             del state[name]
             report['removed'].append(name)
+        elif version == 1:
+            rows = generated(old['identity']['path'])
+            registry[name] = rows['registry']
+            policy[name] = rows['policy']
+            runtime[runtime.index(expected['runtime'])] = rows['runtime']
+            state[name] = {'identity': copy.deepcopy(old['identity']), 'rows': copy.deepcopy(rows),
+                           'profile_version': 2}
+            report['upgraded'].append(name)
     paths = {r['path'] for r in registry.values()} | {r['path'] for r in policy.values()} | {r['path'] for r in runtime}
     for name, identity in sorted(candidates.items()):
         path = identity['path']
-        if name in PROTECTED or name in registry or name in policy or path in paths:
+        if name in PROTECTED or name in state or name in registry or name in policy or path in paths:
             continue
         overlaps = [p for p in paths if p != REPOS and (Path(path).is_relative_to(p) or Path(p).is_relative_to(path))]
         if overlaps:
@@ -278,7 +310,7 @@ def plan(documents, managed, candidates):
         registry[name] = rows['registry']
         policy[name] = rows['policy']
         runtime.append(rows['runtime'])
-        state[name] = {'identity': copy.deepcopy(identity), 'rows': copy.deepcopy(rows)}
+        state[name] = {'identity': copy.deepcopy(identity), 'rows': copy.deepcopy(rows), 'profile_version': 2}
         paths.add(path)
         report['added'].append(name)
     require(1 <= len(runtime) <= 64, 'Reconciliation would invalidate runtime capacity')
@@ -297,7 +329,7 @@ def acl_entries(fd):
     return entries
 
 
-def set_acl(fd, recipient, access, default=False):
+def set_acl(fd, recipient, access, default=False, collaborator=None):
     entries = acl_entries(fd)
     changes = []
     # Expanding the mask must not restore permissions previously masked from
@@ -316,6 +348,11 @@ def set_acl(fd, recipient, access, default=False):
     if default:
         # Newly created private files must not inherit a permissive service ACL.
         changes.append(f'd:u:{recipient}:---')
+        if collaborator is not None:
+            require(collaborator != recipient, 'Collaborator and service must differ')
+            # The owning user:: entry follows the future creator, so explicitly
+            # retain the human when a service worker creates ordinary children.
+            changes.append(f'd:u:{collaborator}:rwx')
     subprocess.run(['/usr/bin/setfacl', '-m', ','.join(changes), '--', f'/proc/self/fd/{fd}'],
                    pass_fds=(fd,), check=True, timeout=15, stdout=subprocess.DEVNULL)
 
@@ -327,7 +364,8 @@ def grant_tree(root_fd, owner, recipient, git=False, budget=None, depth=0):
     require(depth <= 128, 'ACL traversal depth exceeded; candidate deferred')
     root = os.fstat(root_fd)
     require(root.st_uid == owner and stat.S_ISDIR(root.st_mode), 'Unsafe ACL root')
-    set_acl(root_fd, recipient, 'r-x' if git else 'rwx', default=True)
+    set_acl(root_fd, recipient, 'r-x' if git else 'rwx', default=True,
+            collaborator=None if git else owner)
     for name in bounded_names(root_fd, 100000):
         budget[0] -= 1
         require(budget[0] >= 0 and time.monotonic() < budget[1], 'ACL traversal bound exceeded; candidate deferred')
@@ -723,6 +761,8 @@ def run(apply):
                 verify_barrier(child)
             budget = [100000, time.monotonic() + 120]
             for name, row in next_managed.items():
+                if row.get('overridden'):
+                    continue
                 check()
                 try:
                     fd = pin_candidate(rfd, name, row['identity'], owner)

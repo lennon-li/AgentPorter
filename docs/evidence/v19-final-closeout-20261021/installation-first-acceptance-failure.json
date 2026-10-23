@@ -1,0 +1,64 @@
+{
+  "v19_service": {
+    "argv": [
+      "systemctl",
+      "show",
+      "agentporter-development.service",
+      "-p",
+      "ActiveState",
+      "-p",
+      "MainPID",
+      "-p",
+      "Result",
+      "-p",
+      "Delegate",
+      "-p",
+      "DelegateSubgroup",
+      "-p",
+      "MemoryMax",
+      "-p",
+      "DropInPaths"
+    ],
+    "exit_code": 0,
+    "stdout": "MainPID=0\nResult=success\nDelegate=yes\nDelegateSubgroup=supervisor\nMemoryMax=17179869184\nActiveState=inactive\nDropInPaths=/etc/systemd/system/agentporter-development.service.d/job-resources.conf\n",
+    "stderr": ""
+  },
+  "v19_first_start_log": {
+    "argv": [
+      "journalctl",
+      "_PID=499799",
+      "--no-pager",
+      "-o",
+      "short-iso"
+    ],
+    "exit_code": 0,
+    "stdout": "2026-10-21T18:27:55-04:00 asgard python[499799]: Starting AgentPorter Development v0.1.0.dev0 on 127.0.0.1:8876\n2026-10-21T18:27:55-04:00 asgard python[499799]: Config Directory: /var/lib/agentporter-dev/config\n2026-10-21T18:27:55-04:00 asgard python[499799]: State Directory:  /var/lib/agentporter-dev/state\n2026-10-21T18:27:55-04:00 asgard python[499799]: Auth Header:      X-AgentPorter-Key (legacy: )\n",
+    "stderr": ""
+  },
+  "production_service": {
+    "argv": [
+      "systemctl",
+      "--user",
+      "show",
+      "agentporter.service",
+      "-p",
+      "MainPID",
+      "-p",
+      "ActiveState",
+      "-p",
+      "NRestarts"
+    ],
+    "exit_code": 0,
+    "stdout": "MainPID=664960\nNRestarts=0\nActiveState=active\n",
+    "stderr": ""
+  },
+  "current": {
+    "argv": [
+      "readlink",
+      "/opt/agentporter-development/current"
+    ],
+    "exit_code": 0,
+    "stdout": "/opt/agentporter-development/versions/20261021T212000.000019Z\n",
+    "stderr": ""
+  }
+}

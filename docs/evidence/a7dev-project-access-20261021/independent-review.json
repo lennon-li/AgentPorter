@@ -1,0 +1,128 @@
+{
+  "reviewer": "independent access_release_audit agent; separate from authors",
+  "timestamp": "2026-10-21T23:25:00.071852+00:00",
+  "scope": "Owner-approved A7Dev ordinary project access and read-only delegation; production unchanged; Cranary-only acquisition unchanged",
+  "source_review_passed": true,
+  "artifact_review_passed": true,
+  "artifact_review_status": "PASS independently streamed full base and candidate payloads, metadata and archive hashes; no extraction or execution",
+  "blocking_findings": [],
+  "source_sha256": {
+    "src/agentporter/client_policy.py": "7a783d7cf215d3e4421c35514519ae50eea821c23ad1c6756ca983d81e5c7781",
+    "src/agentporter/server.py": "6750dcb135c8044a5fe5758af9eadafbd19f12dec0c584fe85238e9706bfea96",
+    "src/agentporter/rest/routers/agents.py": "f690f0c788dff92737f41c7623849f7d96d98695dfa41361a1ef3ffca681ecea",
+    "src/agentporter/rest/schemas.py": "e617a95522186a30d84bc75e3c8812bc27610d24cb9b9cd8e0f78514abd01559",
+    "src/agentporter/agents/development.py": "89730afb5bb1fe10b0f96b1334a58f067e9b966f1bb0dcf6a0b4b73fb392d5d4",
+    "src/agentporter/workspaces/bounded.py": "cc9f9b5188376328a33e0a2c7d9a83e47c37f3c0ef5aa59932c2bb5a4e49448f",
+    "scripts/authorize-a7dev-project-delegation.py": "b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b",
+    "scripts/verify-a7dev-project-access.py": "f6f416c1b85b230a80008bc3f1a9d9429ebe719a3fae68c2673c5eb052e3b935",
+    "scripts/prepare-project-access-candidate.py": "1046118bb95c653f2aa797ed30ae1949066056afc7ed46f31f03bc59fd824d2e"
+  },
+  "checks": [
+    "Compared exact six source module deltas with installed immutable v19; server change only optional workspace_id in readiness inventory; REST schemas retain public readiness fields.",
+    "Public dispatch authorization intersects public policy, registry execute/dispatch flags and authoritative runtime launcher admitted roots. Runtime-only hidden workspace names are removed from public inventory.",
+    "Nested approved parent exception is read-only for the complete allowed subtree; writable parent/child/grandchild remains denied.",
+    "Unreadable descendants can become opaque mode000 read-only mounts only for read-only launch; scan-root failures, outside/traversal paths, symlink replacements, other I/O failures and writable launches remain denied. No host ACL/mode relaxation.",
+    "Read-only external worktree .git control file is masked empty without reading external metadata; external writable worktree remains denied.",
+    "Bounded public listings omit unreadable descendants without relaxing explicit-root authorization, size/depth limits, symlink rules or file guards.",
+    "Authorization helper pins46workspace roots,5protectedpublicscopes, exact current policy hash and normalized frozen-v19 runtime hash; preserves worker/provider/model/credential data including freeWei. Only41ordinary roots gain dispatch/execute, shiny allowed subtree becomes runtime-readonly; Cranary HTTPS policy is byte-preserved.",
+    "Authorization helper refuses root execution, requires private service ownership/no aliases, reviewed plan hash, stopped/absent service cgroup and zero jobs/admissions; backs up3files durably; rollback refuses newer state/HTTPS changes/corrupt backups.",
+    "Candidate prep pins frozen v19archive and all8payload input files; checks exact6source+2inertoperatorscripts+2releasepathrelocations changed; preserves complete remaining manifest. Exact final artifact and base were subsequently independently streamed and verified in full."
+  ],
+  "test_command": ".venv/bin/python -m pytest -q --basetemp=/tmp/ar-4f2 tests/security/test_project_delegation_authorization.py tests/security/test_public_delegation_readiness.py tests/security/test_closeout_file_bounds.py tests/security/test_development_runtime.py --junitxml=/tmp/a7dev-project-access-independent-native-final.xml",
+  "test_result": "143 passed,1 upstreamStarletteDeprecationWarning,in11.85s",
+  "test_log": "/tmp/a7dev-project-access-independent-native-final.log",
+  "test_junit": "/tmp/a7dev-project-access-independent-native-final.xml",
+  "test_execution": "Unprivileged yeli native execution outside outer sandbox; synthetic credentials and temporary fixtures only; no real providers/config changes/sudo",
+  "earlier_environment_failures": [
+    "Outer sandbox blocks native bwrap NETLINK_ROUTE and loopback socket creation; default shared pytest ancestors rejected by strict policy.",
+    "First native attempt used temp path too long for Unix-domain socket;142passed/1environmentfailure. Short private basetemp resolved."
+  ],
+  "not_verified": [
+    "Installation/live public readiness and actual provider dispatch after owner action",
+    "Live full rollback demonstration"
+  ],
+  "production_modified": false,
+  "credentials_read": false,
+  "real_provider_calls": 0,
+  "owner_runner_review": {
+    "path": "scripts/install-a7dev-project-access.sh",
+    "sha256": "97d9ed36e674c965a22c4cfd08e30e0f0e4bb28d306b179f8d524c665e2d8e87",
+    "status": "PASS final pinned runner",
+    "syntax_check": "bash -n passed",
+    "recovery_behavior_tests": [
+      {
+        "scenario": "partial_runtime",
+        "passed": true,
+        "exit_code": 1,
+        "calls": [
+          "/usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml"
+        ]
+      },
+      {
+        "scenario": "stop_failed",
+        "passed": true,
+        "exit_code": 1,
+        "calls": [
+          "/usr/bin/systemctl stop agentporter-development.service"
+        ]
+      },
+      {
+        "scenario": "untouched_old",
+        "passed": true,
+        "exit_code": 1,
+        "calls": [
+          "/usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+          "/usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+          "/usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+          "/usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+          "/usr/bin/systemctl start agentporter-development.service"
+        ]
+      },
+      {
+        "scenario": "applied_rollback",
+        "passed": true,
+        "exit_code": 1,
+        "calls": [
+          "/usr/bin/systemctl stop agentporter-development.service",
+          "/usr/bin/python3 -I /installer --rollback .candidate-synthetic",
+          "/usr/bin/systemctl start agentporter-development.service"
+        ]
+      }
+    ],
+    "finding_resolved": true,
+    "resolved_finding": "If immutable installer writes runtime then fails before swapping current, installed=0/current=old branch currently restarts old release despite changed runtime. Before restarting old service require exact backup/current config equality; otherwise keep stopped and report partial installation. No guessed rollback.",
+    "resolution": "Both guards corrected and independently behavior-tested: stop failure cannot roll back; pre-receipt partial runtime/config changes keep service stopped."
+  },
+  "approved_policy_proposal": {
+    "path": "docs/examples/a7dev-all-project-delegation-policy.yaml",
+    "sha256": "b7fe90d3872896f114944affbce5a4c84ddcadf82c32e37b7b0f9f07e6121c0b",
+    "checks": "46 roots;41ordinary dispatch;5protectedread-only;Cranary-only HTTPS"
+  },
+  "artifact": {
+    "path": "/tmp/a7dev-project-access.tgz",
+    "sha256": "c2924acec4e2a5bb15b36c41891929179f614c211a79a5a57f5b53e258d28566",
+    "version": "20261021T232414.837654Z",
+    "fingerprint": "099b88c95f0fb23e33554e85a426e1b25b9fbba9ca3fe4fffd1ab4869b5da315",
+    "base_entries": 26357,
+    "candidate_entries": 26359,
+    "changed_release_files": [
+      "operator-plan/authorize-a7dev-project-delegation.py",
+      "operator-plan/verify-a7dev-project-access.py",
+      "src/agentporter/agents/development.py",
+      "src/agentporter/client_policy.py",
+      "src/agentporter/rest/routers/agents.py",
+      "src/agentporter/rest/schemas.py",
+      "src/agentporter/server.py",
+      "src/agentporter/workspaces/bounded.py",
+      "venv/lib/python3.13/site-packages/agentporter_development.pth",
+      "venv/pyvenv.cfg"
+    ],
+    "source_pins_match_review": true,
+    "runtime_only_release_relocation": true,
+    "whole_payloads_hashed": true,
+    "duration_seconds": 87.8,
+    "timestamp": "2026-10-21T23:30:34.381687+00:00"
+  },
+  "final_timestamp": "2026-10-21T23:31:12.649064+00:00",
+  "verdict": "PASS for exact source/artifact and owner-run A7Dev-only installation proposal; installation and live post-install acceptance remain separate gates"
+}

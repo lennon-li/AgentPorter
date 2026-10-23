@@ -109,7 +109,15 @@ class AgentInfo(BaseModel):
     agent: Optional[str] = Field(None, description="Named agent: jax, liz, prof, phil, wei, ming, or argie.")
     registered: Optional[bool] = Field(None, description="Whether this named identity is registered on the host.")
     delegatable: Optional[bool] = Field(None, description="Whether AgentPorter currently permits executing this named worker, distinct from installed/available.")
+    runtime_delegatable: Optional[bool] = Field(None, description="Runtime launch checks before public workspace authorization; provider quota is not verified.")
+    public_dispatch_workspaces: Optional[List[str]] = Field(None, description="Workspaces admitted by public policy and registry for read-only delegation; runtime restrictions still apply.")
+    public_writable_dispatch_workspaces: Optional[List[str]] = Field(None, description="Workspaces admitted for local edits by public policy, registry, and development runtime; commit and push remain denied.")
+    public_dispatch_read_only: Optional[bool] = None
+    workspace_dispatch_authorized: Optional[bool] = Field(None, description="Public workspace authorization for a workspace-specific inventory request.")
+    readiness_note: Optional[str] = None
     confinement_status: Optional[str] = Field(None, description="Reason delegation is blocked or description of verified confinement backend.")
+    availability_reason: Optional[str] = Field(None, description="Verified runtime availability or reason launch is blocked.")
+    runtime_profile: Optional[str] = Field(None, description="Verified development confinement profile, if configured.")
     routing_error: Optional[str] = Field(None, description="Unavailable identity or worker-CLI mismatch; no fallback.")
     name: Optional[str] = Field(None, description="Agent name.")
     worker_cli: Optional[str] = Field(None, description="Worker CLI binary name.")
@@ -185,21 +193,27 @@ class MovePathRequest(BaseModel):
 class TrashPathRequest(BaseModel):
     path: str = Field(description="Relative path to move to the .trash folder.")
 
+class HTTPSDownloadRequest(BaseModel):
+    url: str
+    filename: str
+    expected_sha256: Optional[str] = None
+    max_bytes: int = 16777216
+    timeout_seconds: int = 60
+
+
 class ExecRunRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=30, description="Timeout in seconds for execution.")
-    # A client flag cannot authenticate permission for outbound traffic.
-    # Until trusted receipts and destination-scoped egress exist, true is rejected.
-    network_access: bool = Field(default=False, description="Generic execution is offline; true is rejected pending scoped network approval.")
+    # This flag alone does not authenticate network access; requires private owner policy.
+    network_access: bool = Field(default=False, description="Commands stay offline. True permits only owner-approved cranary curl -fsS GET or curl -sSI HEAD HTTPS metadata through a fixed broker; otherwise denied.")
 
 class ExecStartRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=300, description="Timeout in seconds for the background job.")
-    # A client flag cannot authenticate permission for outbound traffic.
-    # Until trusted receipts and destination-scoped egress exist, true is rejected.
-    network_access: bool = Field(default=False, description="Generic execution is offline; true is rejected pending scoped network approval.")
+    # This flag alone does not authenticate network access; requires private owner policy.
+    network_access: bool = Field(default=False, description="Commands stay offline. True permits only owner-approved cranary curl -fsS GET or curl -sSI HEAD HTTPS metadata through a fixed broker; otherwise denied.")
 
 class JobOutputRequest(BaseModel):
     cursor: int = Field(default=0, description="Byte offset to start reading from.")

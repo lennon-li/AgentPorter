@@ -1,0 +1,1520 @@
+{
+  "passed": true,
+  "calls": [
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "server_deploy_info",
+      "arguments": {},
+      "is_error": false,
+      "data": {
+        "version": "0.1.0.dev0",
+        "pid": 530299,
+        "started_at": "2026-10-21T18:58:39-0400",
+        "package_path": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter",
+        "python": "/opt/agentporter-development/current/venv/bin/python",
+        "loaded_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "disk_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "stale": false,
+        "modules": {
+          "agentporter": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/__init__.py",
+          "agentporter.server": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/server.py",
+          "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/tools/scinet_training.py"
+        }
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "list_workspaces",
+      "arguments": {},
+      "is_error": false,
+      "data": [
+        {
+          "workspace_id": "m3-poc",
+          "path": "/home/yeli/m3-agent-poc",
+          "exists": true,
+          "writable": true,
+          "description": "Disposable R and Python acceptance test workspace",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "insider",
+          "path": "/home/yeli/repos/insider",
+          "exists": true,
+          "writable": true,
+          "description": "insideR: Make R Package Calls Transparent, Replayable, and Editable",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "PAGe",
+          "path": "/home/yeli/repos/PAGe",
+          "exists": true,
+          "writable": true,
+          "description": "PAGe repository",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "m3",
+          "path": "/home/yeli/repos/m3",
+          "exists": true,
+          "writable": true,
+          "description": "M3 & AsgardGPT Agent Gateway repo",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "obsidian",
+          "path": "/home/yeli/repos/obsidian",
+          "exists": true,
+          "writable": true,
+          "description": "Central Obsidian vault and agent shared memory repository",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "shiny",
+          "path": "/home/yeli/repos/shiny",
+          "exists": true,
+          "writable": true,
+          "description": "Shiny applications directory",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "cranary",
+          "path": "/home/yeli/repos/cranary",
+          "exists": true,
+          "writable": true,
+          "description": "CRAN package canary and archival validation repository",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "agentporter-dev",
+          "path": "/home/yeli/agent-work/agentporter-dev",
+          "exists": true,
+          "writable": true,
+          "description": "AgentPorter development checkout; production excluded",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "agentporter",
+          "path": "/home/yeli/repos/AgentPorter",
+          "exists": true,
+          "writable": true,
+          "description": "AgentPorter: Generic local development gateway",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "repos",
+          "path": "/home/yeli/repos",
+          "exists": true,
+          "writable": true,
+          "description": "Umbrella workspace containing all development repositories",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "asgard-hermes-review",
+          "path": "/home/yeli/repos/AgentPorter/runtime/asgard-hermes-exposure",
+          "exists": true,
+          "writable": false,
+          "description": "",
+          "permissions": {
+            "execute": false,
+            "git": false,
+            "artifacts": false,
+            "agent_dispatch": false,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "opcc",
+          "path": "/home/yeli/repos/opcc",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "RangeAhead",
+          "path": "/home/yeli/repos/RangeAhead",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "HMA",
+          "path": "/home/yeli/repos/HMA",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "dataganger",
+          "path": "/home/yeli/repos/dataganger",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "epiweave",
+          "path": "/home/yeli/repos/epiweave",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "ALL",
+          "path": "/home/yeli/repos/ALL",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "careDX",
+          "path": "/home/yeli/repos/careDX",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "cranary-jax-wt",
+          "path": "/home/yeli/repos/cranary-jax-wt",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "scinet-home",
+          "path": "/home/yeli/repos/scinet-home",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "clientAgent",
+          "path": "/home/yeli/repos/clientAgent",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "courieR",
+          "path": "/home/yeli/repos/courieR",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "hermes-jev-acceptance-20261018",
+          "path": "/home/yeli/repos/hermes-jev-acceptance-20261018",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "node-which",
+          "path": "/home/yeli/repos/node-which",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "IRVRI",
+          "path": "/home/yeli/repos/IRVRI",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "dogfooding",
+          "path": "/home/yeli/repos/dogfooding",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "ONgeoR",
+          "path": "/home/yeli/repos/ONgeoR",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "covid-positivity-forecasting",
+          "path": "/home/yeli/repos/covid-positivity-forecasting",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "gambling",
+          "path": "/home/yeli/repos/gambling",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "which",
+          "path": "/home/yeli/repos/which",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "legionella",
+          "path": "/home/yeli/repos/legionella",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "IPD",
+          "path": "/home/yeli/repos/IPD",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "hermes-jev-bcc-package-20261018",
+          "path": "/home/yeli/repos/hermes-jev-bcc-package-20261018",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "Qman",
+          "path": "/home/yeli/repos/Qman",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "biostats.ai",
+          "path": "/home/yeli/repos/biostats.ai",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "preview-jqtrwy87",
+          "path": "/home/yeli/repos/preview-jqtrwy87",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "ONgeoRapp",
+          "path": "/home/yeli/repos/ONgeoRapp",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "AgentPorter",
+          "path": "/home/yeli/repos/AgentPorter",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "agent-web-search",
+          "path": "/home/yeli/repos/agent-web-search",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in repos",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "IRVRI.Rcheck",
+          "path": "/home/yeli/repos/shiny/IRVRI.Rcheck",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in shiny",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "compliance",
+          "path": "/home/yeli/repos/shiny/compliance",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in shiny",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "EasyMaps",
+          "path": "/home/yeli/repos/shiny/EasyMaps",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in shiny",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "EasyMap2.1",
+          "path": "/home/yeli/repos/shiny/EasyMap2.1",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in shiny",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "CTLOD.Rcheck",
+          "path": "/home/yeli/repos/shiny/CTLOD.Rcheck",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in shiny",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "CTLOD",
+          "path": "/home/yeli/repos/shiny/CTLOD",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in shiny",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "CUSUM",
+          "path": "/home/yeli/repos/shiny/CUSUM",
+          "exists": true,
+          "writable": true,
+          "description": "Auto-discovered project in shiny",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        }
+      ]
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "workspace_info",
+      "arguments": {
+        "workspace_id": "Qman"
+      },
+      "is_error": false,
+      "data": {
+        "workspace_id": "Qman",
+        "path": "/home/yeli/repos/Qman",
+        "exists": true,
+        "description": "Auto-discovered project in repos",
+        "writable": true,
+        "permissions": {
+          "execute": true,
+          "git": true,
+          "artifacts": true,
+          "agent_dispatch": true,
+          "local_http_ports": []
+        },
+        "git": {
+          "is_repo": true,
+          "branch": "",
+          "dirty": false
+        },
+        "languages": [
+          "Python"
+        ],
+        "marker_files": [
+          "pyproject.toml"
+        ],
+        "r_version": "Rscript (R) version 4.6.1 (2026-06-24)",
+        "python_version": "Python 3.12.3"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "Qman",
+        "argv": [
+          "pwd"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "/workspace\n",
+        "stderr": "",
+        "duration": 0.14838433265686035,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "Qman",
+        "argv": [
+          "python3",
+          "-V"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "Python 3.12.3\n",
+        "stderr": "",
+        "duration": 0.14670753479003906,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "Qman",
+        "argv": [
+          "git",
+          "-c",
+          "safe.directory=/workspace",
+          "status",
+          "--short"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": " M docs/PLAN.md\n M src/qman/adapters.py\n M src/qman/models.py\n M src/qman/selection.py\n?? .serena/\n?? docs/PROVIDER_EVIDENCE.md\n?? src/qman/codex.py\n?? tests/test_clock_error_regressions.py\n?? tests/test_codex_normalizer.py\n",
+        "stderr": "",
+        "duration": 0.149461030960083,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "workspace_info",
+      "arguments": {
+        "workspace_id": "IRVRI"
+      },
+      "is_error": false,
+      "data": {
+        "workspace_id": "IRVRI",
+        "path": "/home/yeli/repos/IRVRI",
+        "exists": true,
+        "description": "Auto-discovered project in repos",
+        "writable": true,
+        "permissions": {
+          "execute": true,
+          "git": true,
+          "artifacts": true,
+          "agent_dispatch": true,
+          "local_http_ports": []
+        },
+        "git": {
+          "is_repo": true,
+          "branch": "",
+          "dirty": false
+        },
+        "languages": [
+          "R"
+        ],
+        "marker_files": [
+          "DESCRIPTION",
+          "NAMESPACE"
+        ],
+        "r_version": "Rscript (R) version 4.6.1 (2026-06-24)",
+        "python_version": "Python 3.12.3"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "IRVRI",
+        "argv": [
+          "pwd"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "/workspace\n",
+        "stderr": "",
+        "duration": 0.146759033203125,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "IRVRI",
+        "argv": [
+          "python3",
+          "-V"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "Python 3.12.3\n",
+        "stderr": "",
+        "duration": 0.1439530849456787,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "IRVRI",
+        "argv": [
+          "git",
+          "-c",
+          "safe.directory=/workspace",
+          "status",
+          "--short"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": " M DESCRIPTION\n M NAMESPACE\n M R/plot_forecast.R\n M R/wf_adapter_gam.R\n M R/wf_adapter_leading_indicator.R\n M R/wf_adapters.R\n M R/wf_api.R\n M R/wf_ensemble.R\n M R/wf_evaluate.R\n M R/wf_evaluate_grid.R\n M R/wf_forecast.R\n M R/wf_inla_forecast.R\n M R/wf_leading_indicator.R\n M R/wf_leading_indicator_ms.R\n M R/wf_loso.R\n M R/wf_loso_parallel.R\n M R/wf_metrics.R\n M R/wf_plots.R\n M R/wf_priors.R\n M R/wf_real_data.R\n M R/wf_report_api.R\n M R/wf_report_scores.R\n M R/wf_season.R\n M R/wf_train.R\n M R/wf_warm_start.R\n M inst/quarto/wf_asof_report.qmd\n M inst/quarto/wf_report.qmd\n M inst/reports/wf_report.qmd\n M man/irvri_adapter_mvgam.Rd\n M man/irvri_adapter_mvgam_leading_indicator.Rd\n M man/irvri_adapter_mvgam_li.Rd\n M man/irvri_forecast.Rd\n M man/irvri_forecast_report.Rd\n M man/irvri_forecast_save.Rd\n M man/irvri_forecast_season.Rd\n M man/irvri_mvgam_control.Rd\n M man/irvri_wf_evaluate.Rd\n M man/irvri_wf_evaluate_grid.Rd\n M man/irvri_wf_generate_asof_qmd.Rd\n M man/irvri_wf_report.Rd\n M man/irvri_wf_report_asof.Rd\n M man/irvri_wf_season.Rd\n M man/irvri_wf_train.Rd\n M man/irvri_wf_train_with_leading_indicator.Rd\n M reports/audits/irvri-current-implementation-audit-2026-10-21.md\n M reports/log_test_predictors_2026_10_01/smoke/protocol.txt\n M tests/testthat/test-wf-adapter-leading-indicator.R\n M tests/testthat/test-wf-api.R\n M tests/testthat/test-wf-ensemble.R\n M tests/testthat/test-wf-evaluate-grid.R\n M tests/testthat/test-wf-leading-indicator-ms.R\n M tests/testthat/test-wf-leading-indicator.R\n M tests/testthat/test-wf-loso-parallel.R\n M tests/testthat/test-wf-loso.R\n M tests/testthat/test-wf-metrics.R\n M tests/testthat/test-wf-report-scores.R\n M tests/testthat/test-wf-report-warm-cache.R\n M tests/testthat/test-wf-season.R\n M tests/testthat/test-wf-warm-start.R\n M vignettes/walkforward-guide.Rmd\n?? .serena/\n?? R/wf_benchmark.R\n?? R/wf_mcmc_diagnostics.R\n?? R/wf_mcmc_recovery.R\n?? R/wf_report_provenance.R\n?? R/wf_report_snapshot.R\n?? f11_grid_test.log\n?? f1_duplicate_test.log\n?? f1_f13_gates.log\n?? f1_f5_aligned_draws.log\n?? f1_f5_api_phase.log\n?? f1_f5_api_provenance.log\n?? f1_joint_identity.log\n?? f3_coverage.log\n?? f3_crps_chunked.log\n?? f3_crps_semantics.log\n?? f3_ensemble_consumer.log\n?? f3_exact_predictive_crps.log\n?? f3_metrics_test.log\n?? f5_complete_age.log\n?? f9_ensemble_aggregation_v2.log\n?? f9_ensemble_failclosed.log\n?? f9_ensemble_migrated.log\n?? f9_ensemble_migrated_v2.log\n?? f9_ensemble_migrated_v3.log\n?? f9_ensemble_targeted.log\n?? inst/scripts/__pycache__/\n?? inst/scripts/bcc_loso.R\n?? inst/scripts/build_loso_bcc_bundle.py\n?? inst/scripts/diagnose_inla_rw2_scaling.R\n?? inst/scripts/explore_testing_feedback_2026_10_01.py\n?? inst/scripts/export_testing_volume_blocked_draws.R\n?? inst/scripts/export_testing_volume_inla_audit.R\n?? inst/scripts/plot_log_test_predictors_2026_10_01.R\n?? inst/scripts/plot_testing_volume_blocked.R\n?? inst/scripts/plot_testing_volume_inla.R\n?? inst/scripts/reproduce_activity.R\n?? inst/scripts/reproduce_forecast.R\n?? inst/scripts/run_testing_volume_blocked.R\n?? inst/scripts/run_testing_volume_fast.R\n?? inst/scripts/run_testing_volume_information_shrinkage.R\n?? inst/scripts/run_testing_volume_inla.R\n?? inst/scripts/run_testing_volume_inla_focused.R\n?? inst/scripts/summarize_testing_volume_blocked.py\n?? inst/scripts/summarize_testing_volume_fast.py\n?? inst/scripts/summarize_testing_volume_inla.py\n?? inst/scripts/summarize_testing_volume_inla_focused.py\n?? inst/scripts/supervise_testing_volume_inla.py\n?? inst/scripts/testing_volume_blocked_lib.R\n?? inst/scripts/testing_volume_information_shrinkage_lib.R\n?? inst/scripts/testing_volume_inla_lib.R\n?? inst/scripts/verify_log_test_predictors_2026_10_01.py\n?? inst/scripts/verify_testing_volume_blocked_gates.R\n?? inst/scripts/verify_testing_volume_information_artifacts.R\n?? inst/scripts/verify_testing_volume_information_gates.R\n?? inst/scripts/verify_testing_volume_inla_gates.R\n?? inst/scripts/wf_assess_hybrid_repair.R\n?? inst/scripts/wf_diagnose_fluB_recovery_2026_10_02.R\n?? inst/scripts/wf_mvgam_collapse_stan_transform.R\n?? inst/scripts/wf_mvgam_collapsed_batch_hook.R\n?? inst/scripts/wf_mvgam_hybrid_stan_transform.R\n?? inst/scripts/wf_mvgam_recovery_pilot.R\n?? inst/scripts/wf_publish_dev_recovery_2026_10_02.R\n?? inst/scripts/wf_reproduce_dev_week12.R\n?? inst/scripts/wf_restart_fluB_2026_10_02.R\n?? inst/scripts/wf_resume_dev_week13.R\n?? inst/scripts/wf_run_collapsed_future_batch.R\n?? inst/scripts/wf_run_collapsed_future_pilot.R\n?? inst/scripts/wf_run_hybrid_ar2_repair.R\n?? inst/scripts/wf_supervise_collapsed_future_batch.py\n?? inst/scripts/wf_supervise_hybrid_recovery.py\n?? inst/scripts/wf_supervise_hybrid_target.py\n?? inst/scripts/wf_supervise_recovery_2026_10_02.py\n?? inst/scripts/wf_verify_hybrid_ar2_density.R\n?? inst/scripts/wf_watch_dev_recovery_2026_10_02.py\n?? inst/scripts/wf_watch_mvgam_recovery.R\n?? inst/scripts/write_testing_volume_blocked_report.py\n?? inst/scripts/write_testing_volume_inla_report.py\n?? irvri_full_tests_20261021.log\n?? man/irvri_adapter_mean2.Rd\n?? man/irvri_forecast_mean2.Rd\n?? man/irvri_mvgam_diagnostics.Rd\n?? man/irvri_mvgam_policy.Rd\n?? phase_a_f1_denominator.log\n?? phase_a_f1_missing.log\n?? phase_a_f1_targeted.log\n?? phase_a_f8_f12.log\n?? phase_a_f8_f9.log\n?? phase_a_f9_f11.log\n?? phase_a_f9_only.log\n?? phase_a_failfast_test.log\n?? phase_a_prediction_identity_test.log\n?? phase_a_provenance_test.log\n?? phase_a_regression_audit.log\n?? phase_a_support_role.log\n?? phase_a_triage_test.log\n?? reports/ARTIFACT_INDEX.md\n?? reports/artifact_cleanup_2026_10_02.json\n?? reports/audits/irvri-week13-fit-provenance-triage-2026-10-21.csv\n?? reports/dev/\n?? reports/log_test_predictor_investigation_2026_10_01.md\n?? reports/log_test_predictors_2026_10_01/by_season.csv\n?? reports/log_test_predictors_2026_10_01/descriptive_feedback_correlations.csv\n?? reports/log_test_predictors_2026_10_01/fluA/\n?? reports/log_test_predictors_2026_10_01/fluB/\n?? reports/log_test_predictors_2026_10_01/incremental_over_positivity.csv\n?? reports/log_test_predictors_2026_10_01/independent_validation.csv\n?? reports/log_test_predictors_2026_10_01/predictor_comparison.pdf\n?? reports/log_test_predictors_2026_10_01/predictor_comparison.png\n?? reports/log_test_predictors_2026_10_01/retrospective_selection_replay.csv\n?? reports/log_test_predictors_2026_10_01/rsv/\n?? reports/log_test_predictors_2026_10_01/season_summary.csv\n?? reports/log_test_predictors_2026_10_01/smoke/coefficients.csv\n?? reports/log_test_predictors_2026_10_01/smoke/draws.csv\n?? reports/log_test_predictors_2026_10_01/smoke/fits.csv\n?? reports/log_test_predictors_2026_10_01/smoke/scores.csv\n?? reports/log_test_predictors_2026_10_01/smoke/status.txt\n?? reports/log_test_predictors_2026_10_01/smoke/warnings.csv\n?? reports/log_test_predictors_2026_10_01/summary.csv\n?? reports/log_test_predictors_2026_10_01/week_map.csv\n?? reports/loso_six_models_design_2026_10_03/\n?? reports/pipeline_reproduction_audit_2026_10_02.json\n?? reports/pipeline_reproduction_audit_2026_10_02.md\n?? reports/rdata_html_test_2026_10_02/\n?? reports/testing_volume_blocked_2026_10_01/\n?? reports/testing_volume_fast_2026_10_01/\n?? reports/testing_volume_inla_2026_10_01/\n?? reports/testing_volume_inla_focused_2026_10_01/\n?? reports/wf_recovery_fluB_2026_10_02.md\n?? reports/wf_report_2026_27_week12_2026_10_01/\n?? tests/testthat/helper-mcmc-fixtures.R\n?? tests/testthat/test-phase-a-safety.R\n?? tests/testthat/test-wf-benchmark.R\n?? tests/testthat/test-wf-li-logit-transform.R\n?? tests/testthat/test-wf-mcmc-audit-repair.R\n?? tests/testthat/test-wf-mcmc-diagnostics.R\n?? tests/testthat/test-wf-mcmc-recovery.R\n?? tests/testthat/test-wf-mcmc-thinning.R\n?? tests/testthat/test-wf-mcmc-update-compat.R\n?? tests/testthat/test-wf-report-sampling-runtime.R\n?? tests/testthat/test-wf-report-snapshot-labels.R\n",
+        "stderr": "warning: could not open directory '.aws/': Permission denied\n",
+        "duration": 0.279620885848999,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "workspace_info",
+      "arguments": {
+        "workspace_id": "cranary"
+      },
+      "is_error": false,
+      "data": {
+        "workspace_id": "cranary",
+        "path": "/home/yeli/repos/cranary",
+        "exists": true,
+        "description": "CRAN package canary and archival validation repository",
+        "writable": true,
+        "permissions": {
+          "execute": true,
+          "git": true,
+          "artifacts": true,
+          "agent_dispatch": true,
+          "local_http_ports": []
+        },
+        "git": {
+          "is_repo": true,
+          "branch": "",
+          "dirty": false
+        },
+        "languages": [
+          "R"
+        ],
+        "marker_files": [
+          "DESCRIPTION",
+          "NAMESPACE"
+        ],
+        "r_version": "Rscript (R) version 4.6.1 (2026-06-24)",
+        "python_version": "Python 3.12.3"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "pwd"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "/workspace\n",
+        "stderr": "",
+        "duration": 0.14819121360778809,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "python3",
+          "-V"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "Python 3.12.3\n",
+        "stderr": "",
+        "duration": 0.1550590991973877,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "git",
+          "-c",
+          "safe.directory=/workspace",
+          "status",
+          "--short"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": " M .gitignore\n M NEWS.md\n M R/laya.R\n M R/rcmdcheck.R\n M data-raw/cran-history/README.md\n M data-raw/cran-history/mechanism-validation/retrospective-dispute-results-v3.csv\n M data-raw/cran-history/tests/test_69_render_sbatch.py\n M data-raw/cran-history/training/trillium/README.md\n M data-raw/cran-history/training/trillium/laya_expA.sbatch.template\n M data-raw/cran-history/training/trillium/laya_expB.sbatch.template\n M data-raw/cran-history/training/trillium/laya_smoke.sbatch.template\n M data-raw/cran-history/training/trillium/render_sbatch.py\n M data-raw/cran-history/training/trillium/requirements-laya.lock\n M inst/laya/laya-cranary-serve.py\n?? .agent-tmp/\n?? .cranary-suite.log\n?? AUDIT-LAYA-SEMANTIC-CORE-AND-TRAINING-LINEAGE-2026-10-11.md\n?? R/laya-issue-contract.R\n?? agent-tasks/phil-longitudinal-waiver-audit-2026-10-08.md\n?? agent-tasks/phil-postfix-6.1-sol-high-2026-10-09.md\n?? data-raw/cran-history/docs/\n?? data-raw/cran-history/issue-pilot-v1/\n?? data-raw/cran-history/reports/2026-10-08-benchmark-design/diverse-300/results.csv\n?? data-raw/cran-history/reports/2026-10-08-benchmark-design/diverse-300/score-json/\n?? data-raw/cran-history/reports/2026-10-08-benchmark-design/diverse-300/summary.json\n?? data-raw/cran-history/reports/2026-10-08-benchmark-design/longitudinal-waiver-v2/score-json/\n?? data-raw/cran-history/reports/2026-10-08-benchmark-design/longitudinal/\n?? data-raw/cran-history/reports/2026-10-08-benchmark-design/scores/\n?? data-raw/cran-history/reports/2026-10-08-benchmark-design/self-waiver-retest-v1/\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-deformula-0.1.3-v2/\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-deformula-0.1.3/\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-deformula-globals-v1/\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-batch-v1/\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v1/\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v2/ASMap_1.1-0/probe.stderr.log\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v2/GLMMcosinor_0.2.2/probe.stderr.log\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v2/HDBRR_1.1.5/probe.stderr.log\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v2/MorphSim_1.2.1/probe.stderr.log\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v2/binGroup2_1.3.4/probe.stderr.log\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v2/deformula_0.1.3/probe.stderr.log\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v2/isotracer_1.1.9/probe.stderr.log\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v2/mwcsr_0.1.13/probe.stderr.log\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v2/smer_0.0.3/probe.stderr.log\n?? data-raw/cran-history/reports/2026-10-08-cran-cohorts/isolated-globals-probe-v2/tinyVAST_1.6.3/probe.stderr.log\n?? data-raw/cran-history/reports/2026-10-09-diverse-300-frozen/scores/\n?? data-raw/cran-history/reports/2026-10-09-longitudinal-40/score-json/\n?? data-raw/cran-history/reports/2026-10-14-laya-chronological-cohort/\n?? data-raw/cran-history/reports/2026-10-14-laya-experiment-c/\n?? data-raw/cran-history/reports/2026-10-14-laya-model-quality-audit/\n?? data-raw/cran-history/reports/2026-10-14-standalone-laya-recheck/\n?? data-raw/cran-history/reports/2026-10-16-laya-input-integrity/\n?? data-raw/cran-history/reports/2026-10-17-laya-input-integrity/\n?? data-raw/cran-history/reports/2026-10-17-laya-issue-reconstruction/\n?? data-raw/cran-history/reports/2026-10-17-laya-phase2-cpu/\n?? data-raw/cran-history/reports/2026-10-17-laya-positive-discovery-liz/\n?? data-raw/cran-history/reports/2026-10-17-laya-prospective-pilot-v1/\n?? data-raw/cran-history/reports/2026-10-17-laya-source-discovery/\n?? data-raw/cran-history/reports/2026-10-18-laya-historical-source-feasibility/\n?? data-raw/cran-history/reports/2026-10-18-laya-prospective-historical-labels/\n?? data-raw/cran-history/reports/2026-10-18-laya-real-history-cpu-baseline/\n?? data-raw/cran-history/reports/2026-10-18-laya-real-history-pilot/\n?? data-raw/cran-history/reports/2026-10-18-laya-real-history-scaleup/\n?? data-raw/cran-history/reports/2026-10-19-deepseek-interface-jax/\n?? data-raw/cran-history/reports/2026-10-19-laya-dataset-source-research/\n?? data-raw/cran-history/reports/2026-10-19-laya-outcome-blind-temporal/\n?? data-raw/cran-history/reports/2026-10-21-authorized-acquisition/\n?? data-raw/cran-history/reports/LAYA-INPUT-INTEGRITY-DIAGNOSTIC-2026-10-17.md\n?? data-raw/cran-history/scripts/discover_deepseek_evidence.py\n?? data-raw/cran-history/tests/test_70_full_sbatch_cache.py\n?? data-raw/cran-history/tests/test_71_laya_input_diagnostic.py\n?? data-raw/cran-history/tests/test_71_laya_quality_audit.py\n?? data-raw/cran-history/tests/test_72_laya_experiment_c.py\n?? data-raw/cran-history/tests/test_73_laya_chronological_cohort.py\n?? data-raw/cran-history/tests/test_74_laya_issue_contract.py\n?? data-raw/cran-history/tests/test_75_laya_chronological_security.py\n?? data-raw/cran-history/tests/test_76_laya_handoff_denylist.py\n?? data-raw/cran-history/tests/test_77_laya_cohort_collector.py\n?? data-raw/cran-history/tests/test_78_standalone_laya_recheck.py\n?? data-raw/cran-history/tests/test_79_standalone_laya_resume.py\n?? data-raw/cran-history/tests/test_80_laya_scinet_inference.py\n?? data-raw/cran-history/tests/test_81_laya_inference_runtime_handoff.py\n?? data-raw/cran-history/tests/test_82_laya_tokenizer_integrity.py\n?? data-raw/cran-history/tests/test_83_laya_phase2_cpu.py\n?? data-raw/cran-history/tests/test_84_laya_issue_reconstruction.py\n?? data-raw/cran-history/tests/test_85_laya_prospective_pilot.py\n?? data-raw/cran-history/tests/test_85_laya_source_discovery.py\n?? data-raw/cran-history/tests/test_86_laya_historical_discovery.py\n?? data-raw/cran-history/tests/test_87_laya_source_feasibility.py\n?? data-raw/cran-history/tests/test_88_deepseek_discovery.py\n?? data-raw/cran-history/training/laya_input_diagnostic.py\n?? data-raw/cran-history/training/laya_issue_reconstruction.py\n?? data-raw/cran-history/training/laya_phase2_cpu.py\n?? data-raw/cran-history/training/laya_source_discovery.py\n?? data-raw/cran-history/training/laya_source_feasibility.py\n?? data-raw/cran-history/training/laya_tokenizer_integrity.py\n?? data-raw/cran-history/training/trillium/LAYA_SCINET_POSTMORTEM_2026-10-14.md\n?? data-raw/cran-history/training/trillium/handoff-out-before-hf-xet-20261012171719/\n?? data-raw/cran-history/training/trillium/handoff-out.before-fullrun-20261014T050841/\n?? data-raw/cran-history/training/trillium/handoff-out.before-jax-markupsafe-20261012T174629/\n?? data-raw/cran-history/training/trillium/handoff-out.before-markupsafe-20261012172523/\n?? data-raw/cran-history/training/trillium/handoff-out.before-markupsafe-cp312-20261012T202718/\n?? data-raw/cran-history/training/trillium/handoff-out.before-renderer-20261012T1830/\n?? data-raw/cran-history/training/trillium/handoff-out.before-scinet-binaries-20261012T175144/\n?? data-raw/cran-history/training/trillium/handoff-out.before-site-hashes-20261012T175625/\n?? data-raw/cran-history/training/trillium/handoff-out.before-standard-markupsafe-20261012T202332/\n?? data-raw/cran-history/training/trillium/handoff-out.before-standard-wheel-loop-20261012T204312/\n?? data-raw/cran-history/training/trillium/handoff-out.before-triton-home-20261013T2230/\n?? data-raw/cran-history/training/trillium/handoff-out.candidate-fullrun-20261014-maxsec/\n?? data-raw/cran-history/training/trillium/handoff-out.candidate-fullrun-20261014/\n?? data-raw/cran-history/training/trillium/standalone-inference/\n?? inst/laya/contracts/\n?? inst/laya/laya_issue_contract.py\n?? scratch-rdhang/\n?? test_write.tmp\n?? tests/testthat/_problems/\n?? tests/testthat/test-laya-issue-contract.R\n?? tests/testthat/testthat-problems.rds\n",
+        "stderr": "warning: could not open directory '.claude/': Permission denied\nwarning: could not open directory '.codex/': Permission denied\nwarning: could not open directory '.agents/': Permission denied\nwarning: could not open directory '.aws/': Permission denied\n",
+        "duration": 1.5281264781951904,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "curl",
+          "-fsS",
+          "https://api.github.com/repos/ropensci-archive/rrlite/commits/b390ba0afb5f1613572ba4ce3d5d733987edd0bd"
+        ],
+        "timeout_seconds": 15,
+        "network_access": true
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "{\"sha\":\"b390ba0afb5f1613572ba4ce3d5d733987edd0bd\",\"node_id\":\"MDY6Q29tbWl0MzE3MDc1OTg6YjM5MGJhMGFmYjVmMTYxMzU3MmJhNGNlM2Q1ZDczMzk4N2VkZDBiZA==\",\"commit\":{\"author\":{\"name\":\"Rich FitzJohn\",\"email\":\"rich.fitzjohn@gmail.com\",\"date\":\"2015-03-13T22:18:30Z\"},\"committer\":{\"name\":\"Rich FitzJohn\",\"email\":\"rich.fitzjohn@gmail.com\",\"date\":\"2015-03-13T22:18:30Z\"},\"message\":\"Upgrade rlite to version with lua\",\"tree\":{\"sha\":\"de71f67c4464bad2afba75949d9635c7a2c7c090\",\"url\":\"https://api.github.com/repos/ropensci-archive/rrlite/git/trees/de71f67c4464bad2afba75949d9635c7a2c7c090\"},\"url\":\"https://api.github.com/repos/ropensci-archive/rrlite/git/commits/b390ba0afb5f1613572ba4ce3d5d733987edd0bd\",\"comment_count\":0,\"verification\":{\"verified\":false,\"reason\":\"unsigned\",\"signature\":null,\"payload\":null,\"verified_at\":null}},\"url\":\"https://api.github.com/repos/ropensci-archive/rrlite/commits/b390ba0afb5f1613572ba4ce3d5d733987edd0bd\",\"html_url\":\"https://github.com/ropensci-archive/rrlite/commit/b390ba0afb5f1613572ba4ce3d5d733987edd0bd\",\"comments_url\":\"https://api.github.com/repos/ropensci-archive/rrlite/commits/b390ba0afb5f1613572ba4ce3d5d733987edd0bd/comments\",\"author\":{\"login\":\"richfitz\",\"id\":1558093,\"node_id\":\"MDQ6VXNlcjE1NTgwOTM=\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/1558093?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/richfitz\",\"html_url\":\"https://github.com/richfitz\",\"followers_url\":\"https://api.github.com/users/richfitz/followers\",\"following_url\":\"https://api.github.com/users/richfitz/following{/other_user}\",\"gists_url\":\"https://api.github.com/users/richfitz/gists{/gist_id}\",\"starred_url\":\"https://api.github.com/users/richfitz/starred{/owner}{/repo}\",\"subscriptions_url\":\"https://api.github.com/users/richfitz/subscriptions\",\"organizations_url\":\"https://api.github.com/users/richfitz/orgs\",\"repos_url\":\"https://api.github.com/users/richfitz/repos\",\"events_url\":\"https://api.github.com/users/richfitz/events{/privacy}\",\"received_events_url\":\"https://api.github.com/users/richfitz/received_events\",\"type\":\"User\",\"user_view_type\":\"public\",\"site_admin\":false},\"committer\":{\"login\":\"richfitz\",\"id\":1558093,\"node_id\":\"MDQ6VXNlcjE1NTgwOTM=\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/1558093?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/richfitz\",\"html_url\":\"https://github.com/richfitz\",\"followers_url\":\"https://api.github.com/users/richfitz/followers\",\"following_url\":\"https://api.github.com/users/richfitz/following{/other_user}\",\"gists_url\":\"https://api.github.com/users/richfitz/gists{/gist_id}\",\"starred_url\":\"https://api.github.com/users/richfitz/starred{/owner}{/repo}\",\"subscriptions_url\":\"https://api.github.com/users/richfitz/subscriptions\",\"organizations_url\":\"https://api.github.com/users/richfitz/orgs\",\"repos_url\":\"https://api.github.com/users/richfitz/repos\",\"events_url\":\"https://api.github.com/users/richfitz/events{/privacy}\",\"received_events_url\":\"https://api.github.com/users/richfitz/received_events\",\"type\":\"User\",\"user_view_type\":\"public\",\"site_admin\":false},\"parents\":[{\"sha\":\"f23ed55cc4e72ead342e5a034f0ad742c3732012\",\"url\":\"https://api.github.com/repos/ropensci-archive/rrlite/commits/f23ed55cc4e72ead342e5a034f0ad742c3732012\",\"html_url\":\"https://github.com/ropensci-archive/rrlite/commit/f23ed55cc4e72ead342e5a034f0ad742c3732012\"}],\"stats\":{\"total\":5,\"additions\":3,\"deletions\":2},\"files\":[{\"sha\":\"86315a4c9b30fdecf290e12bcddee9d56bec7239\",\"filename\":\"src/Makevars\",\"status\":\"modified\",\"additions\":2,\"deletions\":1,\"changes\":3,\"blob_url\":\"https://github.com/ropensci-archive/rrlite/blob/b390ba0afb5f1613572ba4ce3d5d733987edd0bd/src%2FMakevars\",\"raw_url\":\"https://github.com/ropensci-archive/rrlite/raw/b390ba0afb5f1613572ba4ce3d5d733987edd0bd/src%2FMakevars\",\"contents_url\":\"https://api.github.com/repos/ropensci-archive/rrlite/contents/src%2FMakevars?ref=b390ba0afb5f1613572ba4ce3d5d733987edd0bd\",\"patch\":\"@@ -8,14 +8,15 @@ RLITE_DIR = rlite/src\\n \\n # This is what we need.\\n LIBRLITE = $(RLITE_DIR)/libhirlite.a\\n+LIBLUA   = rlite/deps/lua/src/liblua.a\\n \\n # So that we can do #include <rlite.h>\\n PKG_CPPFLAGS += -I$(RLITE_DIR)\\n \\n # This forces the compilation to include the static library; no dynaic\\n # linking, which is needed as we're not installing this anywhere on\\n # the system.\\n-PKG_LIBS = $(LIBRLITE)\\n+PKG_LIBS = $(LIBRLITE) $(LIBLUA)\\n \\n # This is straight from R-exts and works really well - it does not\\n # recompile jq or run configure very often.  Sometimes reading the\"},{\"sha\":\"0cad7ef7a3418b3aea8d17e439511510cf6d91a5\",\"filename\":\"src/rlite\",\"status\":\"modified\",\"additions\":1,\"deletions\":1,\"changes\":2,\"blob_url\":null,\"raw_url\":null,\"contents_url\":\"https://api.github.com/repos/ropensci-archive/rrlite/contents/src%2Frlite?ref=b390ba0afb5f1613572ba4ce3d5d733987edd0bd\",\"patch\":\"@@ -1 +1 @@\\n-Subproject commit 535c1e81ba4d2af76bf244842e7b94d87afbc76d\\n+Subproject commit 0cad7ef7a3418b3aea8d17e439511510cf6d91a5\"}]}",
+        "stderr": "",
+        "timeout": false,
+        "workspace_id": "cranary"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "curl",
+          "-fsS",
+          "https://api.github.com/repos/ropensci-archive/rrlite/contents/src/rrlite.c?ref=b390ba0afb5f1613572ba4ce3d5d733987edd0bd"
+        ],
+        "timeout_seconds": 15,
+        "network_access": true
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "{\"name\":\"rrlite.c\",\"path\":\"src/rrlite.c\",\"sha\":\"bba6bf7f836a0ebdc52f2554ab32b8bd7410ed1d\",\"size\":4271,\"url\":\"https://api.github.com/repos/ropensci-archive/rrlite/contents/src/rrlite.c?ref=b390ba0afb5f1613572ba4ce3d5d733987edd0bd\",\"html_url\":\"https://github.com/ropensci-archive/rrlite/blob/b390ba0afb5f1613572ba4ce3d5d733987edd0bd/src/rrlite.c\",\"git_url\":\"https://api.github.com/repos/ropensci-archive/rrlite/git/blobs/bba6bf7f836a0ebdc52f2554ab32b8bd7410ed1d\",\"download_url\":\"https://raw.githubusercontent.com/ropensci-archive/rrlite/b390ba0afb5f1613572ba4ce3d5d733987edd0bd/src/rrlite.c\",\"type\":\"file\",\"content\":\"I2luY2x1ZGUgInJybGl0ZS5oIgoKI2RlZmluZSBQT1JUIDAKCi8vIFRPRE86\\nCi8vICAtIHJsaXRlX2dlbmVyaWNfY29ubmVjdAovLyAgLSBybGl0ZV9jb25u\\nZWN0Ci8vICAtIHJsaXRlX2Nvbm5lY3RfdW5peAovLyAgLSBybGl0ZV9pc19j\\nb25uZWN0ZWQKLy8gIC0gcmxpdGVfZGlzY29ubmVjdCAocmVxdWlyZXMgaGF2\\naW5nIGEgcmVhbCBvYmplY3QpCi8vICAtIHJsaXRlX3NldF90aW1lb3V0Ci8v\\nICAtIHJsaXRlX2ZpbGVubwoKc3RhdGljIHZvaWQgcnJsaXRlX2ZpbmFsaXpl\\nKFNFWFAgZXh0UHRyKTsKClNFWFAgaXNfbnVsbF9wb2ludGVyKFNFWFAgZXh0\\nUHRyKSB7CiAgcmV0dXJuIFNjYWxhckxvZ2ljYWwoUl9FeHRlcm5hbFB0ckFk\\nZHIoZXh0UHRyKSA9PSBOVUxMKTsKfQoKcmxpdGVDb250ZXh0KiBycmxpdGVf\\nZ2V0X2NvbnRleHQoU0VYUCBleHRQdHIsIGludCBjbG9zZWRfYWN0aW9uKSB7\\nCiAgdm9pZCAqY29udGV4dCA9IE5VTEw7CiAgaWYgKGV4dFB0ciAhPSBSX05p\\nbFZhbHVlKSB7CiAgICBjb250ZXh0ID0gKHJsaXRlQ29udGV4dCopUl9FeHRl\\ncm5hbFB0ckFkZHIoZXh0UHRyKTsKICB9CiAgaWYgKCFjb250ZXh0KSB7CiAg\\nICBpZiAoY2xvc2VkX2FjdGlvbiA9PSBDTE9TRURfV0FSTikgewogICAgICB3\\nYXJuaW5nKCJDb250ZXh0IGlzIG5vdCBjb25uZWN0ZWQiKTsKICAgIH0gZWxz\\nZSBpZiAoY2xvc2VkX2FjdGlvbiA9PSBDTE9TRURfRVJST1IpIHsKICAgICAg\\nZXJyb3IoIkNvbnRleHQgaXMgbm90IGNvbm5lY3RlZCIpOwogICAgfQogIH0K\\nICByZXR1cm4gY29udGV4dDsKfQoKU0VYUCBycmxpdGVfY29udGV4dChTRVhQ\\nIGZpbGVuYW1lKSB7CiAgY29uc3QgY2hhciAqIGZpbGVuYW1lX2MgPSBDSEFS\\nKFNUUklOR19FTFQoZmlsZW5hbWUsIDApKTsKICBybGl0ZUNvbnRleHQgKmNv\\nbnRleHQgPSBybGl0ZUNvbm5lY3QoZmlsZW5hbWVfYywgUE9SVCk7CiAgU0VY\\nUCBleHRQdHI7CiAgUFJPVEVDVChleHRQdHIgPSBSX01ha2VFeHRlcm5hbFB0\\ncihjb250ZXh0LCBmaWxlbmFtZSwgUl9OaWxWYWx1ZSkpOwogIFJfUmVnaXN0\\nZXJDRmluYWxpemVyKGV4dFB0ciwgcnJsaXRlX2ZpbmFsaXplKTsKICBVTlBS\\nT1RFQ1QoMSk7CiAgcmV0dXJuIGV4dFB0cjsKfQoKc3RhdGljIHZvaWQgcnJs\\naXRlX2ZpbmFsaXplKFNFWFAgZXh0UHRyKSB7CiAgcmxpdGVDb250ZXh0ICpj\\nb250ZXh0ID0gcnJsaXRlX2dldF9jb250ZXh0KGV4dFB0ciwgQ0xPU0VEX1BB\\nU1MpOwogIGlmIChjb250ZXh0KSB7CiAgICBybGl0ZUZyZWUoY29udGV4dCk7\\nCiAgfQp9CgpTRVhQIHJybGl0ZV9jbG9zZShTRVhQIGV4dFB0cikgewogIHJs\\naXRlQ29udGV4dCAqY29udGV4dCA9IHJybGl0ZV9nZXRfY29udGV4dChleHRQ\\ndHIsIENMT1NFRF9XQVJOKTsKICBpbnQgd2FzX29wZW4gPSAwOwogIGlmIChj\\nb250ZXh0KSB7CiAgICB3YXNfb3BlbiA9IDE7CiAgICBybGl0ZUZyZWUoY29u\\ndGV4dCk7CiAgICBSX0NsZWFyRXh0ZXJuYWxQdHIoZXh0UHRyKTsKICB9CiAg\\ncmV0dXJuIFNjYWxhckxvZ2ljYWwod2FzX29wZW4pOwp9CgpTRVhQIHJybGl0\\nZV93cml0ZShTRVhQIGV4dFB0ciwgU0VYUCBjb21tYW5kKSB7CiAgcmxpdGVD\\nb250ZXh0ICpjb250ZXh0ID0gcnJsaXRlX2dldF9jb250ZXh0KGV4dFB0ciwg\\nQ0xPU0VEX0VSUk9SKTsKICBpbnQgYXJnYyA9IExFTkdUSChjb21tYW5kKTsK\\nICAvLyBSLWV4dHM6IEFsbCBvZiB0aGVzZSBtZW1vcnkgYWxsb2NhdGlvbiBy\\nb3V0aW5lcyBkbyB0aGVpciBvd24KICAvLyBlcnJvci1jaGVja2luZywgc28g\\ndGhlIHByb2dyYW1tZXIgbWF5IGFzc3VtZSB0aGF0IHRoZXkgd2lsbCByYWlz\\nZQogIC8vIGFuIGVycm9yIGFuZCBub3QgcmV0dXJuIGlmIHRoZSBtZW1vcnkg\\nY2Fubm90IGJlIGFsbG9jYXRlZC4KICBjaGFyKiogYXJndiA9IChjaGFyKiop\\nUl9hbGxvYyhhcmdjLCBzaXplb2YoY2hhciopKTsKICBzaXplX3QqIGFyZ3Zs\\nZW4gPSAoc2l6ZV90KilSX2FsbG9jKGFyZ2MsIHNpemVvZihzaXplX3QpKTsK\\nICBpZiAoIWNvbnRleHQpIHsKICAgIGVycm9yKCJjb250ZXh0IGZhaWx1cmVc\\nbiIpOwogIH0KICBmb3IgKGludCBpID0gMDsgaSA8IGFyZ2M7ICsraSkgewog\\nICAgY29uc3QgY2hhciogY21kX3IgPSBDSEFSKFNUUklOR19FTFQoY29tbWFu\\nZCwgaSkpOwogICAgYXJndmxlbltpXSA9IHN0cmxlbihjbWRfcik7CiAgICBh\\ncmd2W2ldID0gKGNoYXIqKVJfYWxsb2MoYXJndmxlbltpXSArIDEsIHNpemVv\\nZihjaGFyKSk7CiAgICBzdHJjcHkoYXJndltpXSwgY21kX3IpOwogIH0KCiAg\\ncmxpdGVBcHBlbmRDb21tYW5kQXJndihjb250ZXh0LCBhcmdjLCBhcmd2LCBh\\ncmd2bGVuKTsKCiAgcmV0dXJuIFJfTmlsVmFsdWU7Cn0KClNFWFAgcnJsaXRl\\nX3JlYWQoU0VYUCBleHRQdHIpIHsKICByZXR1cm4gcnJsaXRlX2dldF9yZXBs\\neShycmxpdGVfZ2V0X2NvbnRleHQoZXh0UHRyLCBDTE9TRURfRVJST1IpKTsK\\nfQoKU0VYUCBycmxpdGVfZmlsZW5hbWUoU0VYUCBleHRQdHIpIHsKICByZXR1\\ncm4gUl9FeHRlcm5hbFB0clRhZyhleHRQdHIpOwp9CgovLyBUT0RPOiBJJ2Qg\\nbGlrZSB0byByZXR1cm4gYSBsaXN0IG9mIGxlbmd0aCAyOiB0aGUgZGF0YSBh\\nbmQgdGhlCi8vIGNvbnRleHQgSSB0aGluay4KU0VYUCBycmxpdGVfZ2V0X3Jl\\ncGx5KHJsaXRlQ29udGV4dCAqY29udGV4dCkgewogIHZvaWQgKnJlcGx5ID0g\\nTlVMTDsKICAvKiBUcnkgdG8gcmVhZCBwZW5kaW5nIHJlcGxpZXMgKi8KICBp\\nZiAocmxpdGVHZXRSZXBseShjb250ZXh0LCAmcmVwbHkpID09IFJMSVRFX0VS\\nUikgewogICAgLyogUHJvdG9jb2wgZXJyb3IgKi8KICAgIGVycm9yKCJlcnJv\\nciByZWFkaW5nIHJlcGx5Iik7CiAgICByZXR1cm4gUl9OaWxWYWx1ZTsKICB9\\nCgogIC8qIFNldCByZXBseSBvYmplY3QgKi8KICBpZiAocmVwbHkpIHsKICAg\\nIHJldHVybiBycmxpdGVfcmVwbHlfdG9fc2V4cChyZXBseSk7CiAgfSBlbHNl\\nIHsKICAgIHJldHVybiBSX05pbFZhbHVlOwogIH0KfQoKLy8gVGhpcyBpcyBk\\naXJlY3RseSBtb2RpZmllZCBmcm9tIHJsaXRlLmMKLy8gVE9ETzogSXMgaXQg\\nd29ydGggcmV0dXJuaW5nIHRoaXMgYXMgYSBsaXN0IG9mIGxlbmd0aCAyLCBz\\nbyB0aGF0IHRoZQovLyBjbGFzcyBpcyBhZGRlZCB0byB0aGUgb3V0cHV0PyAg\\nVGhpcyBuZWVkcyBkb2luZyBjYXJlZnVsbHkgZm9yIHRoZQovLyByZWN1cnNp\\ndmUgY2FzZS4KU0VYUCBycmxpdGVfcmVwbHlfdG9fc2V4cChybGl0ZVJlcGx5\\nICpyZXBseSkgewogIGlmIChyZXBseS0+dHlwZSA9PSBSTElURV9SRVBMWV9T\\nVEFUVVMgfHwgcmVwbHktPnR5cGUgPT0gUkxJVEVfUkVQTFlfU1RSSU5HKSB7\\nCiAgICByZXR1cm4gbWtTdHJpbmcocmVwbHktPnN0cik7CiAgfQogIGlmIChy\\nZXBseS0+dHlwZSA9PSBSTElURV9SRVBMWV9OSUwpIHsKICAgIHJldHVybiBS\\nX05pbFZhbHVlOwogIH0KICBpZiAocmVwbHktPnR5cGUgPT0gUkxJVEVfUkVQ\\nTFlfSU5URUdFUikgewogICAgLy8gVE9ETzogbWF5IG92ZXJmbG93OyBjb3Vs\\nZCB1c2UgZG91YmxlIGZvciBtb3JlIHNwYWNlPwogICAgcmV0dXJuIFNjYWxh\\nckludGVnZXIocmVwbHktPmludGVnZXIpOwogIH0KICBpZiAocmVwbHktPnR5\\ncGUgPT0gUkxJVEVfUkVQTFlfRVJST1IpIHsKICAgIC8vIFRPRE86IFRoaXMg\\naXMgZ29pbmcgdG8gbWFrZSB0aGluZ3MgdW5zYWZlIHRvIHVzZSBmcm9tIEMr\\nKywKICAgIC8vIGJlY2F1c2Ugb2YgdGhlIGxvbmdqbXAgcHJvYmxlbS4gIERl\\nZmVyIHdvcnJ5aW5nIGFib3V0IHRoYXQKICAgIC8vIHVudGlsIGl0IHR1cm5z\\nIG91dCB0aGF0J3MgYWN0dWFsbHkgaG93IHdlJ3JlIGdvaW5nIHRvIGRyaXZl\\nCiAgICAvLyB0aGluZ3MuCiAgICAvLwogICAgLy8gT3RoZXIgb3B0aW9ucyBh\\ncmUgdG8gcmV0dXJuIHNvbWV0aGluZyB0aGF0IGV2YWx1YXRlcyB0byBhbgog\\nICAgLy8gZXJyb3IgKGUuZy4gYW4gb2JqZWN0IHdpdGggYW4gZXJyb3IgY2xh\\nc3MpLgogICAgZXJyb3IocmVwbHktPnN0cik7CiAgICByZXR1cm4gUl9OaWxW\\nYWx1ZTsKICB9CiAgaWYgKHJlcGx5LT50eXBlID09IFJMSVRFX1JFUExZX0FS\\nUkFZKSB7CiAgICBTRVhQIHY7CiAgICBzaXplX3QgaTsKICAgIFBST1RFQ1Qo\\ndiA9IGFsbG9jVmVjdG9yKFZFQ1NYUCwgcmVwbHktPmVsZW1lbnRzKSk7CiAg\\nICBmb3IgKGkgPSAwOyBpIDwgcmVwbHktPmVsZW1lbnRzOyArK2kpIHsKICAg\\nICAgU0VUX1ZFQ1RPUl9FTFQodiwgaSwgcnJsaXRlX3JlcGx5X3RvX3NleHAo\\ncmVwbHktPmVsZW1lbnRbaV0pKTsKICAgIH0KICAgIFVOUFJPVEVDVCgxKTsK\\nICAgIHJldHVybiB2OwogIH0KICByZXR1cm4gUl9OaWxWYWx1ZTsKfQo=\\n\",\"encoding\":\"base64\",\"_links\":{\"self\":\"https://api.github.com/repos/ropensci-archive/rrlite/contents/src/rrlite.c?ref=b390ba0afb5f1613572ba4ce3d5d733987edd0bd\",\"git\":\"https://api.github.com/repos/ropensci-archive/rrlite/git/blobs/bba6bf7f836a0ebdc52f2554ab32b8bd7410ed1d\",\"html\":\"https://github.com/ropensci-archive/rrlite/blob/b390ba0afb5f1613572ba4ce3d5d733987edd0bd/src/rrlite.c\"}}",
+        "stderr": "",
+        "timeout": false,
+        "workspace_id": "cranary"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "curl",
+          "-sSI",
+          "https://api.github.com/repos/ropensci-archive/rrlite/commits/b390ba0afb5f1613572ba4ce3d5d733987edd0bd"
+        ],
+        "timeout_seconds": 15,
+        "network_access": true
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "HTTP/1.1 200\nContent-Type: application/json; charset=utf-8\nETag: W/\"732a3235531e550c784d2c99fcef8d6f95b6203e06abbfb9476aedad7792518e\"\nLast-Modified: Fri, 13 Mar 2015 22:18:30 GMT\nContent-Length: 4920\n\n",
+        "stderr": "",
+        "timeout": false,
+        "workspace_id": "cranary"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "https_download",
+      "arguments": {
+        "workspace_id": "cranary",
+        "url": "https://packagemanager.posit.co/cran/2021-06-30/src/contrib/PACKAGES.gz",
+        "filename": "PACKAGES-v19-acceptance-a167ea485e86b228.gz",
+        "max_bytes": 16777216,
+        "timeout_seconds": 60,
+        "expected_sha256": "a069c3138f2b49c339d5f500f8beff8872d95a125e61a01b8307a7a6eba214fd"
+      },
+      "is_error": false,
+      "data": {
+        "http_status": 200,
+        "bytes": 710490,
+        "sha256": "a069c3138f2b49c339d5f500f8beff8872d95a125e61a01b8307a7a6eba214fd",
+        "expected_sha256_verified": true,
+        "headers": {
+          "content-type": "application/x-gzip"
+        },
+        "retrieved_at": "2026-10-21T22:59:57.740972+00:00",
+        "workspace_id": "cranary",
+        "path": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/PACKAGES-v19-acceptance-a167ea485e86b228.gz",
+        "source_url": "https://packagemanager.posit.co/cran/2021-06-30/src/contrib/PACKAGES.gz",
+        "training_eligible": false,
+        "historical_identity_verified": false
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "python3",
+          "-I",
+          "-c",
+          "import gzip,hashlib,io,json; from pathlib import Path; p=Path('data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/PACKAGES-v19-acceptance-a167ea485e86b228.gz'); assert p.stat().st_size<=16777216; raw=p.read_bytes(); assert hashlib.sha256(raw).hexdigest()=='a069c3138f2b49c339d5f500f8beff8872d95a125e61a01b8307a7a6eba214fd'; z=gzip.GzipFile(fileobj=io.BytesIO(raw)); expanded=z.read(67108865); z.close(); assert len(expanded)<=67108864; assert hashlib.sha256(expanded).hexdigest()==\"2b70321658ff7c6bd3159b62ed8f28708d3544d1b6dce8aa7ce443dc17296280\"; print(json.dumps({\"sha256\":hashlib.sha256(raw).hexdigest(),\"expanded_sha256\":hashlib.sha256(expanded).hexdigest(),\"bytes\":len(raw),\"expanded_bytes\":len(expanded)}))"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "{\"sha256\": \"a069c3138f2b49c339d5f500f8beff8872d95a125e61a01b8307a7a6eba214fd\", \"expanded_sha256\": \"2b70321658ff7c6bd3159b62ed8f28708d3544d1b6dce8aa7ce443dc17296280\", \"bytes\": 710490, \"expanded_bytes\": 3255263}\n",
+        "stderr": "",
+        "duration": 0.23822569847106934,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "python3",
+          "-I",
+          "-c",
+          "import base64,hashlib,json; from pathlib import Path; b=base64.b64decode('eyJuYW1lIjoicnJsaXRlLmMiLCJwYXRoIjoic3JjL3JybGl0ZS5jIiwic2hhIjoiYmJhNmJmN2Y4MzZhMGViZGM1MmYyNTU0YWIzMmI4YmQ3NDEwZWQxZCIsInNpemUiOjQyNzEsInVybCI6Imh0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3Mvcm9wZW5zY2ktYXJjaGl2ZS9ycmxpdGUvY29udGVudHMvc3JjL3JybGl0ZS5jP3JlZj1iMzkwYmEwYWZiNWYxNjEzNTcyYmE0Y2UzZDVkNzMzOTg3ZWRkMGJkIiwiaHRtbF91cmwiOiJodHRwczovL2dpdGh1Yi5jb20vcm9wZW5zY2ktYXJjaGl2ZS9ycmxpdGUvYmxvYi9iMzkwYmEwYWZiNWYxNjEzNTcyYmE0Y2UzZDVkNzMzOTg3ZWRkMGJkL3NyYy9ycmxpdGUuYyIsImdpdF91cmwiOiJodHRwczovL2FwaS5naXRodWIuY29tL3JlcG9zL3JvcGVuc2NpLWFyY2hpdmUvcnJsaXRlL2dpdC9ibG9icy9iYmE2YmY3ZjgzNmEwZWJkYzUyZjI1NTRhYjMyYjhiZDc0MTBlZDFkIiwiZG93bmxvYWRfdXJsIjoiaHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL3JvcGVuc2NpLWFyY2hpdmUvcnJsaXRlL2IzOTBiYTBhZmI1ZjE2MTM1NzJiYTRjZTNkNWQ3MzM5ODdlZGQwYmQvc3JjL3JybGl0ZS5jIiwidHlwZSI6ImZpbGUiLCJjb250ZW50IjoiSTJsdVkyeDFaR1VnSW5KeWJHbDBaUzVvSWdvS0kyUmxabWx1WlNCUVQxSlVJREFLQ2k4dklGUlBSRTg2XG5DaTh2SUNBdElISnNhWFJsWDJkbGJtVnlhV05mWTI5dWJtVmpkQW92THlBZ0xTQnliR2wwWlY5amIyNXVcblpXTjBDaTh2SUNBdElISnNhWFJsWDJOdmJtNWxZM1JmZFc1cGVBb3ZMeUFnTFNCeWJHbDBaVjlwYzE5alxuYjI1dVpXTjBaV1FLTHk4Z0lDMGdjbXhwZEdWZlpHbHpZMjl1Ym1WamRDQW9jbVZ4ZFdseVpYTWdhR0YyXG5hVzVuSUdFZ2NtVmhiQ0J2WW1wbFkzUXBDaTh2SUNBdElISnNhWFJsWDNObGRGOTBhVzFsYjNWMENpOHZcbklDQXRJSEpzYVhSbFgyWnBiR1Z1YndvS2MzUmhkR2xqSUhadmFXUWdjbkpzYVhSbFgyWnBibUZzYVhwbFxuS0ZORldGQWdaWGgwVUhSeUtUc0tDbE5GV0ZBZ2FYTmZiblZzYkY5d2IybHVkR1Z5S0ZORldGQWdaWGgwXG5VSFJ5S1NCN0NpQWdjbVYwZFhKdUlGTmpZV3hoY2t4dloybGpZV3dvVWw5RmVIUmxjbTVoYkZCMGNrRmtcblpISW9aWGgwVUhSeUtTQTlQU0JPVlV4TUtUc0tmUW9LY214cGRHVkRiMjUwWlhoMEtpQnljbXhwZEdWZlxuWjJWMFgyTnZiblJsZUhRb1UwVllVQ0JsZUhSUWRISXNJR2x1ZENCamJHOXpaV1JmWVdOMGFXOXVLU0I3XG5DaUFnZG05cFpDQXFZMjl1ZEdWNGRDQTlJRTVWVEV3N0NpQWdhV1lnS0dWNGRGQjBjaUFoUFNCU1gwNXBcbmJGWmhiSFZsS1NCN0NpQWdJQ0JqYjI1MFpYaDBJRDBnS0hKc2FYUmxRMjl1ZEdWNGRDb3BVbDlGZUhSbFxuY201aGJGQjBja0ZrWkhJb1pYaDBVSFJ5S1RzS0lDQjlDaUFnYVdZZ0tDRmpiMjUwWlhoMEtTQjdDaUFnXG5JQ0JwWmlBb1kyeHZjMlZrWDJGamRHbHZiaUE5UFNCRFRFOVRSVVJmVjBGU1Rpa2dld29nSUNBZ0lDQjNcbllYSnVhVzVuS0NKRGIyNTBaWGgwSUdseklHNXZkQ0JqYjI1dVpXTjBaV1FpS1RzS0lDQWdJSDBnWld4elxuWlNCcFppQW9ZMnh2YzJWa1gyRmpkR2x2YmlBOVBTQkRURTlUUlVSZlJWSlNUMUlwSUhzS0lDQWdJQ0FnXG5aWEp5YjNJb0lrTnZiblJsZUhRZ2FYTWdibTkwSUdOdmJtNWxZM1JsWkNJcE93b2dJQ0FnZlFvZ0lIMEtcbklDQnlaWFIxY200Z1kyOXVkR1Y0ZERzS2ZRb0tVMFZZVUNCeWNteHBkR1ZmWTI5dWRHVjRkQ2hUUlZoUVxuSUdacGJHVnVZVzFsS1NCN0NpQWdZMjl1YzNRZ1kyaGhjaUFxSUdacGJHVnVZVzFsWDJNZ1BTQkRTRUZTXG5LRk5VVWtsT1IxOUZURlFvWm1sc1pXNWhiV1VzSURBcEtUc0tJQ0J5YkdsMFpVTnZiblJsZUhRZ0ttTnZcbmJuUmxlSFFnUFNCeWJHbDBaVU52Ym01bFkzUW9abWxzWlc1aGJXVmZZeXdnVUU5U1ZDazdDaUFnVTBWWVxuVUNCbGVIUlFkSEk3Q2lBZ1VGSlBWRVZEVkNobGVIUlFkSElnUFNCU1gwMWhhMlZGZUhSbGNtNWhiRkIwXG5jaWhqYjI1MFpYaDBMQ0JtYVd4bGJtRnRaU3dnVWw5T2FXeFdZV3gxWlNrcE93b2dJRkpmVW1WbmFYTjBcblpYSkRSbWx1WVd4cGVtVnlLR1Y0ZEZCMGNpd2djbkpzYVhSbFgyWnBibUZzYVhwbEtUc0tJQ0JWVGxCU1xuVDFSRlExUW9NU2s3Q2lBZ2NtVjBkWEp1SUdWNGRGQjBjanNLZlFvS2MzUmhkR2xqSUhadmFXUWdjbkpzXG5hWFJsWDJacGJtRnNhWHBsS0ZORldGQWdaWGgwVUhSeUtTQjdDaUFnY214cGRHVkRiMjUwWlhoMElDcGpcbmIyNTBaWGgwSUQwZ2NuSnNhWFJsWDJkbGRGOWpiMjUwWlhoMEtHVjRkRkIwY2l3Z1EweFBVMFZFWDFCQlxuVTFNcE93b2dJR2xtSUNoamIyNTBaWGgwS1NCN0NpQWdJQ0J5YkdsMFpVWnlaV1VvWTI5dWRHVjRkQ2s3XG5DaUFnZlFwOUNncFRSVmhRSUhKeWJHbDBaVjlqYkc5elpTaFRSVmhRSUdWNGRGQjBjaWtnZXdvZ0lISnNcbmFYUmxRMjl1ZEdWNGRDQXFZMjl1ZEdWNGRDQTlJSEp5YkdsMFpWOW5aWFJmWTI5dWRHVjRkQ2hsZUhSUVxuZEhJc0lFTk1UMU5GUkY5WFFWSk9LVHNLSUNCcGJuUWdkMkZ6WDI5d1pXNGdQU0F3T3dvZ0lHbG1JQ2hqXG5iMjUwWlhoMEtTQjdDaUFnSUNCM1lYTmZiM0JsYmlBOUlERTdDaUFnSUNCeWJHbDBaVVp5WldVb1kyOXVcbmRHVjRkQ2s3Q2lBZ0lDQlNYME5zWldGeVJYaDBaWEp1WVd4UWRISW9aWGgwVUhSeUtUc0tJQ0I5Q2lBZ1xuY21WMGRYSnVJRk5qWVd4aGNreHZaMmxqWVd3b2QyRnpYMjl3Wlc0cE93cDlDZ3BUUlZoUUlISnliR2wwXG5aVjkzY21sMFpTaFRSVmhRSUdWNGRGQjBjaXdnVTBWWVVDQmpiMjF0WVc1a0tTQjdDaUFnY214cGRHVkRcbmIyNTBaWGgwSUNwamIyNTBaWGgwSUQwZ2NuSnNhWFJsWDJkbGRGOWpiMjUwWlhoMEtHVjRkRkIwY2l3Z1xuUTB4UFUwVkVYMFZTVWs5U0tUc0tJQ0JwYm5RZ1lYSm5ZeUE5SUV4RlRrZFVTQ2hqYjIxdFlXNWtLVHNLXG5JQ0F2THlCU0xXVjRkSE02SUVGc2JDQnZaaUIwYUdWelpTQnRaVzF2Y25rZ1lXeHNiMk5oZEdsdmJpQnlcbmIzVjBhVzVsY3lCa2J5QjBhR1ZwY2lCdmQyNEtJQ0F2THlCbGNuSnZjaTFqYUdWamEybHVaeXdnYzI4Z1xuZEdobElIQnliMmR5WVcxdFpYSWdiV0Y1SUdGemMzVnRaU0IwYUdGMElIUm9aWGtnZDJsc2JDQnlZV2x6XG5aUW9nSUM4dklHRnVJR1Z5Y205eUlHRnVaQ0J1YjNRZ2NtVjBkWEp1SUdsbUlIUm9aU0J0WlcxdmNua2dcblkyRnVibTkwSUdKbElHRnNiRzlqWVhSbFpDNEtJQ0JqYUdGeUtpb2dZWEpuZGlBOUlDaGphR0Z5S2lvcFxuVWw5aGJHeHZZeWhoY21kakxDQnphWHBsYjJZb1kyaGhjaW9wS1RzS0lDQnphWHBsWDNRcUlHRnlaM1pzXG5aVzRnUFNBb2MybDZaVjkwS2lsU1gyRnNiRzlqS0dGeVoyTXNJSE5wZW1WdlppaHphWHBsWDNRcEtUc0tcbklDQnBaaUFvSVdOdmJuUmxlSFFwSUhzS0lDQWdJR1Z5Y205eUtDSmpiMjUwWlhoMElHWmhhV3gxY21WY1xuYmlJcE93b2dJSDBLSUNCbWIzSWdLR2x1ZENCcElEMGdNRHNnYVNBOElHRnlaMk03SUNzcmFTa2dld29nXG5JQ0FnWTI5dWMzUWdZMmhoY2lvZ1kyMWtYM0lnUFNCRFNFRlNLRk5VVWtsT1IxOUZURlFvWTI5dGJXRnVcblpDd2dhU2twT3dvZ0lDQWdZWEpuZG14bGJsdHBYU0E5SUhOMGNteGxiaWhqYldSZmNpazdDaUFnSUNCaFxuY21kMlcybGRJRDBnS0dOb1lYSXFLVkpmWVd4c2IyTW9ZWEpuZG14bGJsdHBYU0FySURFc0lITnBlbVZ2XG5aaWhqYUdGeUtTazdDaUFnSUNCemRISmpjSGtvWVhKbmRsdHBYU3dnWTIxa1gzSXBPd29nSUgwS0NpQWdcbmNteHBkR1ZCY0hCbGJtUkRiMjF0WVc1a1FYSm5kaWhqYjI1MFpYaDBMQ0JoY21kakxDQmhjbWQyTENCaFxuY21kMmJHVnVLVHNLQ2lBZ2NtVjBkWEp1SUZKZlRtbHNWbUZzZFdVN0NuMEtDbE5GV0ZBZ2NuSnNhWFJsXG5YM0psWVdRb1UwVllVQ0JsZUhSUWRISXBJSHNLSUNCeVpYUjFjbTRnY25Kc2FYUmxYMmRsZEY5eVpYQnNcbmVTaHljbXhwZEdWZloyVjBYMk52Ym5SbGVIUW9aWGgwVUhSeUxDQkRURTlUUlVSZlJWSlNUMUlwS1RzS1xuZlFvS1UwVllVQ0J5Y214cGRHVmZabWxzWlc1aGJXVW9VMFZZVUNCbGVIUlFkSElwSUhzS0lDQnlaWFIxXG5jbTRnVWw5RmVIUmxjbTVoYkZCMGNsUmhaeWhsZUhSUWRISXBPd3A5Q2dvdkx5QlVUMFJQT2lCSkoyUWdcbmJHbHJaU0IwYnlCeVpYUjFjbTRnWVNCc2FYTjBJRzltSUd4bGJtZDBhQ0F5T2lCMGFHVWdaR0YwWVNCaFxuYm1RZ2RHaGxDaTh2SUdOdmJuUmxlSFFnU1NCMGFHbHVheTRLVTBWWVVDQnljbXhwZEdWZloyVjBYM0psXG5jR3g1S0hKc2FYUmxRMjl1ZEdWNGRDQXFZMjl1ZEdWNGRDa2dld29nSUhadmFXUWdLbkpsY0d4NUlEMGdcblRsVk1URHNLSUNBdktpQlVjbmtnZEc4Z2NtVmhaQ0J3Wlc1a2FXNW5JSEpsY0d4cFpYTWdLaThLSUNCcFxuWmlBb2NteHBkR1ZIWlhSU1pYQnNlU2hqYjI1MFpYaDBMQ0FtY21Wd2JIa3BJRDA5SUZKTVNWUkZYMFZTXG5VaWtnZXdvZ0lDQWdMeW9nVUhKdmRHOWpiMndnWlhKeWIzSWdLaThLSUNBZ0lHVnljbTl5S0NKbGNuSnZcbmNpQnlaV0ZrYVc1bklISmxjR3g1SWlrN0NpQWdJQ0J5WlhSMWNtNGdVbDlPYVd4V1lXeDFaVHNLSUNCOVxuQ2dvZ0lDOHFJRk5sZENCeVpYQnNlU0J2WW1wbFkzUWdLaThLSUNCcFppQW9jbVZ3YkhrcElIc0tJQ0FnXG5JSEpsZEhWeWJpQnljbXhwZEdWZmNtVndiSGxmZEc5ZmMyVjRjQ2h5WlhCc2VTazdDaUFnZlNCbGJITmxcbklIc0tJQ0FnSUhKbGRIVnliaUJTWDA1cGJGWmhiSFZsT3dvZ0lIMEtmUW9LTHk4Z1ZHaHBjeUJwY3lCa1xuYVhKbFkzUnNlU0J0YjJScFptbGxaQ0JtY205dElISnNhWFJsTG1NS0x5OGdWRTlFVHpvZ1NYTWdhWFFnXG5kMjl5ZEdnZ2NtVjBkWEp1YVc1bklIUm9hWE1nWVhNZ1lTQnNhWE4wSUc5bUlHeGxibWQwYUNBeUxDQnpcbmJ5QjBhR0YwSUhSb1pRb3ZMeUJqYkdGemN5QnBjeUJoWkdSbFpDQjBieUIwYUdVZ2IzVjBjSFYwUHlBZ1xuVkdocGN5QnVaV1ZrY3lCa2IybHVaeUJqWVhKbFpuVnNiSGtnWm05eUlIUm9aUW92THlCeVpXTjFjbk5wXG5kbVVnWTJGelpTNEtVMFZZVUNCeWNteHBkR1ZmY21Wd2JIbGZkRzlmYzJWNGNDaHliR2wwWlZKbGNHeDVcbklDcHlaWEJzZVNrZ2V3b2dJR2xtSUNoeVpYQnNlUzArZEhsd1pTQTlQU0JTVEVsVVJWOVNSVkJNV1Y5VFxuVkVGVVZWTWdmSHdnY21Wd2JIa3RQblI1Y0dVZ1BUMGdVa3hKVkVWZlVrVlFURmxmVTFSU1NVNUhLU0I3XG5DaUFnSUNCeVpYUjFjbTRnYld0VGRISnBibWNvY21Wd2JIa3RQbk4wY2lrN0NpQWdmUW9nSUdsbUlDaHlcblpYQnNlUzArZEhsd1pTQTlQU0JTVEVsVVJWOVNSVkJNV1Y5T1NVd3BJSHNLSUNBZ0lISmxkSFZ5YmlCU1xuWDA1cGJGWmhiSFZsT3dvZ0lIMEtJQ0JwWmlBb2NtVndiSGt0UG5SNWNHVWdQVDBnVWt4SlZFVmZVa1ZRXG5URmxmU1U1VVJVZEZVaWtnZXdvZ0lDQWdMeThnVkU5RVR6b2diV0Y1SUc5MlpYSm1iRzkzT3lCamIzVnNcblpDQjFjMlVnWkc5MVlteGxJR1p2Y2lCdGIzSmxJSE53WVdObFB3b2dJQ0FnY21WMGRYSnVJRk5qWVd4aFxuY2tsdWRHVm5aWElvY21Wd2JIa3RQbWx1ZEdWblpYSXBPd29nSUgwS0lDQnBaaUFvY21Wd2JIa3RQblI1XG5jR1VnUFQwZ1VreEpWRVZmVWtWUVRGbGZSVkpTVDFJcElIc0tJQ0FnSUM4dklGUlBSRTg2SUZSb2FYTWdcbmFYTWdaMjlwYm1jZ2RHOGdiV0ZyWlNCMGFHbHVaM01nZFc1ellXWmxJSFJ2SUhWelpTQm1jbTl0SUVNclxuS3l3S0lDQWdJQzh2SUdKbFkyRjFjMlVnYjJZZ2RHaGxJR3h2Ym1kcWJYQWdjSEp2WW14bGJTNGdJRVJsXG5abVZ5SUhkdmNuSjVhVzVuSUdGaWIzVjBJSFJvWVhRS0lDQWdJQzh2SUhWdWRHbHNJR2wwSUhSMWNtNXpcbklHOTFkQ0IwYUdGMEozTWdZV04wZFdGc2JIa2dhRzkzSUhkbEozSmxJR2R2YVc1bklIUnZJR1J5YVhabFxuQ2lBZ0lDQXZMeUIwYUdsdVozTXVDaUFnSUNBdkx3b2dJQ0FnTHk4Z1QzUm9aWElnYjNCMGFXOXVjeUJoXG5jbVVnZEc4Z2NtVjBkWEp1SUhOdmJXVjBhR2x1WnlCMGFHRjBJR1YyWVd4MVlYUmxjeUIwYnlCaGJnb2dcbklDQWdMeThnWlhKeWIzSWdLR1V1Wnk0Z1lXNGdiMkpxWldOMElIZHBkR2dnWVc0Z1pYSnliM0lnWTJ4aFxuYzNNcExnb2dJQ0FnWlhKeWIzSW9jbVZ3YkhrdFBuTjBjaWs3Q2lBZ0lDQnlaWFIxY200Z1VsOU9hV3hXXG5ZV3gxWlRzS0lDQjlDaUFnYVdZZ0tISmxjR3g1TFQ1MGVYQmxJRDA5SUZKTVNWUkZYMUpGVUV4WlgwRlNcblVrRlpLU0I3Q2lBZ0lDQlRSVmhRSUhZN0NpQWdJQ0J6YVhwbFgzUWdhVHNLSUNBZ0lGQlNUMVJGUTFRb1xuZGlBOUlHRnNiRzlqVm1WamRHOXlLRlpGUTFOWVVDd2djbVZ3YkhrdFBtVnNaVzFsYm5SektTazdDaUFnXG5JQ0JtYjNJZ0tHa2dQU0F3T3lCcElEd2djbVZ3YkhrdFBtVnNaVzFsYm5Sek95QXJLMmtwSUhzS0lDQWdcbklDQWdVMFZVWDFaRlExUlBVbDlGVEZRb2Rpd2dhU3dnY25Kc2FYUmxYM0psY0d4NVgzUnZYM05sZUhBb1xuY21Wd2JIa3RQbVZzWlcxbGJuUmJhVjBwS1RzS0lDQWdJSDBLSUNBZ0lGVk9VRkpQVkVWRFZDZ3hLVHNLXG5JQ0FnSUhKbGRIVnliaUIyT3dvZ0lIMEtJQ0J5WlhSMWNtNGdVbDlPYVd4V1lXeDFaVHNLZlFvPVxuIiwiZW5jb2RpbmciOiJiYXNlNjQiLCJfbGlua3MiOnsic2VsZiI6Imh0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3Mvcm9wZW5zY2ktYXJjaGl2ZS9ycmxpdGUvY29udGVudHMvc3JjL3JybGl0ZS5jP3JlZj1iMzkwYmEwYWZiNWYxNjEzNTcyYmE0Y2UzZDVkNzMzOTg3ZWRkMGJkIiwiZ2l0IjoiaHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9yb3BlbnNjaS1hcmNoaXZlL3JybGl0ZS9naXQvYmxvYnMvYmJhNmJmN2Y4MzZhMGViZGM1MmYyNTU0YWIzMmI4YmQ3NDEwZWQxZCIsImh0bWwiOiJodHRwczovL2dpdGh1Yi5jb20vcm9wZW5zY2ktYXJjaGl2ZS9ycmxpdGUvYmxvYi9iMzkwYmEwYWZiNWYxNjEzNTcyYmE0Y2UzZDVkNzMzOTg3ZWRkMGJkL3NyYy9ycmxpdGUuYyJ9fQ=='); d=json.loads(b); source=base64.b64decode(d[\"content\"]); assert hashlib.sha256(source).hexdigest()==\"015761af6d0374967c6eb563b211eab208b3b9572673176e659c74fb1d107007\"; p=Path('data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/rrlite-a167ea485e86b228'); f=Path(str(p)+\"-source-api.json\").open(\"xb\"); f.write(b); f.close(); f=Path(str(p)+\".c\").open(\"xb\"); f.write(source); f.close(); print(json.dumps({\"api_path\":str(p)+\"-source-api.json\",\"api_sha256\":hashlib.sha256(b).hexdigest(),\"source_path\":str(p)+\".c\",\"source_sha256\":hashlib.sha256(source).hexdigest()}))"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "{\"api_path\": \"data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/rrlite-a167ea485e86b228-source-api.json\", \"api_sha256\": \"25337cf0a4334c020ff95073cd439d6bf885154eb8a8c33bc2c2b17f7fa90aaa\", \"source_path\": \"data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/rrlite-a167ea485e86b228.c\", \"source_sha256\": \"015761af6d0374967c6eb563b211eab208b3b9572673176e659c74fb1d107007\"}\n",
+        "stderr": "",
+        "duration": 0.2084822654724121,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "curl",
+          "-fsS",
+          "https://example.com/"
+        ],
+        "network_access": true
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool exec_run"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "curl",
+          "-X",
+          "POST",
+          "https://api.github.com/"
+        ],
+        "network_access": true
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool exec_run"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "curl",
+          "-L",
+          "https://api.github.com/"
+        ],
+        "network_access": true
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool exec_run"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "IRVRI",
+        "argv": [
+          "curl",
+          "-fsS",
+          "https://api.github.com/"
+        ],
+        "network_access": true
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool exec_run"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "obsidian",
+        "argv": [
+          "true"
+        ],
+        "network_access": false
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool exec_run"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "agentporter",
+        "argv": [
+          "true"
+        ],
+        "network_access": false
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool exec_run"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "read_file",
+      "arguments": {
+        "workspace_id": "cranary",
+        "path": "/var/lib/agentporter-dev/config/internal-client.key"
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool read_file"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "python3",
+          "-I",
+          "-c",
+          "import socket,json; s=socket.socket(); s.settimeout(2); error=s.connect_ex((\"1.1.1.1\",443)); s.close(); assert error!=0,\"Offline sandbox unexpectedly reached public network\"; print(json.dumps({\"offline_network_blocked\":True,\"connect_errno\":error}))"
+        ],
+        "timeout_seconds": 15,
+        "network_access": false
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "{\"offline_network_blocked\": true, \"connect_errno\": 101}\n",
+        "stderr": "",
+        "duration": 0.17886614799499512,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 15
+      }
+    },
+    {
+      "endpoint": "http://127.0.0.1:8876/mcp",
+      "tool": "server_deploy_info",
+      "arguments": {},
+      "is_error": false,
+      "data": {
+        "version": "0.1.0.dev0",
+        "pid": 530299,
+        "started_at": "2026-10-21T18:58:39-0400",
+        "package_path": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter",
+        "python": "/opt/agentporter-development/current/venv/bin/python",
+        "loaded_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "disk_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "stale": false,
+        "modules": {
+          "agentporter": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/__init__.py",
+          "agentporter.server": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/server.py",
+          "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/tools/scinet_training.py"
+        }
+      }
+    }
+  ],
+  "public_endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+  "workspace_count": 46,
+  "snapshot_receipt": {
+    "http_status": 200,
+    "bytes": 710490,
+    "sha256": "a069c3138f2b49c339d5f500f8beff8872d95a125e61a01b8307a7a6eba214fd",
+    "expected_sha256_verified": true,
+    "headers": {
+      "content-type": "application/x-gzip"
+    },
+    "retrieved_at": "2026-10-21T22:59:57.740972+00:00",
+    "workspace_id": "cranary",
+    "path": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/PACKAGES-v19-acceptance-a167ea485e86b228.gz",
+    "source_url": "https://packagemanager.posit.co/cran/2021-06-30/src/contrib/PACKAGES.gz",
+    "training_eligible": false,
+    "historical_identity_verified": false
+  },
+  "snapshot_offline_verification": {
+    "sha256": "a069c3138f2b49c339d5f500f8beff8872d95a125e61a01b8307a7a6eba214fd",
+    "expanded_sha256": "2b70321658ff7c6bd3159b62ed8f28708d3544d1b6dce8aa7ce443dc17296280",
+    "bytes": 710490,
+    "expanded_bytes": 3255263
+  },
+  "github_saved_receipt": {
+    "api_path": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/rrlite-a167ea485e86b228-source-api.json",
+    "api_sha256": "25337cf0a4334c020ff95073cd439d6bf885154eb8a8c33bc2c2b17f7fa90aaa",
+    "source_path": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/rrlite-a167ea485e86b228.c",
+    "source_sha256": "015761af6d0374967c6eb563b211eab208b3b9572673176e659c74fb1d107007"
+  },
+  "offline_network_test": {
+    "offline_network_blocked": true,
+    "connect_errno": 101
+  },
+  "denial_cases_passed": 7,
+  "public_local_same_process": true,
+  "pid": 530299,
+  "fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7"
+}

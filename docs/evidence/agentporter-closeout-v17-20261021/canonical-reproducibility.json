@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "synthetic_archive_sha256": "c04f21d82fa147882ee61dc2835f3feddd47f0f4d7d80af350f163df0f5127cd",
+  "source_delta_from_v14": [
+    "src/agentporter/client_policy.py"
+  ]
+}

@@ -51,7 +51,9 @@ class TransferTests(unittest.TestCase):
         self.assertEqual((self.destination / self.id / "synthetic-test.txt").read_bytes(), self.data)
 
     def test_atomic_publish_race_does_not_clobber(self):
-        self.destination.mkdir()
+        # open_directory intentionally rejects group-writable directories.
+        # Explicitly create a private destination regardless of the host umask.
+        self.destination.mkdir(mode=0o700)
         (self.destination / "stage").mkdir()
         (self.destination / "existing").mkdir()
         fd = p.open_directory(str(self.destination))

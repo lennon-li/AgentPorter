@@ -1,0 +1,18 @@
+{
+  "checked_at": "2026-10-21T18:27:17.065112+00:00",
+  "writes_or_restarts_performed": false,
+  "a7dev": {
+    "MainPID": "4102155",
+    "NRestarts": "0",
+    "Delegate": "no",
+    "CPUQuotaPerSecUSec": "infinity",
+    "MemoryMax": "infinity",
+    "TasksMax": "107647",
+    "ActiveState": "active"
+  },
+  "a7_production": {
+    "MainPID": "664960",
+    "NRestarts": "0",
+    "ActiveState": "active"
+  }
+}

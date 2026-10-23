@@ -1,0 +1,12 @@
+{
+  "manifest_entries": 26360,
+  "verified": true,
+  "allowed_harness_relocations": [
+    "venv/pyvenv.cfg",
+    "venv/lib/python3.13/site-packages/agentporter_development.pth"
+  ],
+  "unexpected_changes": [],
+  "fingerprint": "3f5b472115d7ac1ee147c29279b532bf175bc63891846a8b17ec94429a3ed099",
+  "runtime_sha256_verified": true,
+  "archive_sha256": "e0c709af0251d5725057c6d24f960ed1b58e262a2efa923b4b9bec9dd99126f5"
+}

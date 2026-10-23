@@ -1,0 +1,316 @@
+version: 1
+workspaces:
+  m3-poc:
+    path: /home/yeli/m3-agent-poc
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  insider:
+    path: /home/yeli/repos/insider
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  PAGe:
+    path: /home/yeli/repos/PAGe
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  m3:
+    path: /home/yeli/repos/m3
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  obsidian:
+    path: /home/yeli/repos/obsidian
+    operations:
+    - read
+    - git_read
+  shiny:
+    path: /home/yeli/repos/shiny
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  cranary:
+    path: /home/yeli/repos/cranary
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+    - dispatch
+    - https
+  agentporter-dev:
+    path: /home/yeli/agent-work/agentporter-dev
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+    - dispatch
+  agentporter:
+    path: /home/yeli/repos/AgentPorter
+    operations:
+    - read
+    - git_read
+  repos:
+    path: /home/yeli/repos
+    operations:
+    - read
+    - git_read
+  asgard-hermes-review:
+    path: /home/yeli/repos/AgentPorter/runtime/asgard-hermes-exposure
+    operations:
+    - read
+  opcc:
+    path: /home/yeli/repos/opcc
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  RangeAhead:
+    path: /home/yeli/repos/RangeAhead
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  HMA:
+    path: /home/yeli/repos/HMA
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  dataganger:
+    path: /home/yeli/repos/dataganger
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  epiweave:
+    path: /home/yeli/repos/epiweave
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  ALL:
+    path: /home/yeli/repos/ALL
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  careDX:
+    path: /home/yeli/repos/careDX
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  cranary-jax-wt:
+    path: /home/yeli/repos/cranary-jax-wt
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  scinet-home:
+    path: /home/yeli/repos/scinet-home
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  clientAgent:
+    path: /home/yeli/repos/clientAgent
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  courieR:
+    path: /home/yeli/repos/courieR
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  hermes-jev-acceptance-20261018:
+    path: /home/yeli/repos/hermes-jev-acceptance-20261018
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  node-which:
+    path: /home/yeli/repos/node-which
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  IRVRI:
+    path: /home/yeli/repos/IRVRI
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  dogfooding:
+    path: /home/yeli/repos/dogfooding
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  ONgeoR:
+    path: /home/yeli/repos/ONgeoR
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  covid-positivity-forecasting:
+    path: /home/yeli/repos/covid-positivity-forecasting
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  gambling:
+    path: /home/yeli/repos/gambling
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  which:
+    path: /home/yeli/repos/which
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  legionella:
+    path: /home/yeli/repos/legionella
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  IPD:
+    path: /home/yeli/repos/IPD
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  hermes-jev-bcc-package-20261018:
+    path: /home/yeli/repos/hermes-jev-bcc-package-20261018
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  Qman:
+    path: /home/yeli/repos/Qman
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  biostats.ai:
+    path: /home/yeli/repos/biostats.ai
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  preview-jqtrwy87:
+    path: /home/yeli/repos/preview-jqtrwy87
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  ONgeoRapp:
+    path: /home/yeli/repos/ONgeoRapp
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  AgentPorter:
+    path: /home/yeli/repos/AgentPorter
+    operations:
+    - read
+    - git_read
+  agent-web-search:
+    path: /home/yeli/repos/agent-web-search
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  IRVRI.Rcheck:
+    path: /home/yeli/repos/shiny/IRVRI.Rcheck
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  compliance:
+    path: /home/yeli/repos/shiny/compliance
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  EasyMaps:
+    path: /home/yeli/repos/shiny/EasyMaps
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  EasyMap2.1:
+    path: /home/yeli/repos/shiny/EasyMap2.1
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  CTLOD.Rcheck:
+    path: /home/yeli/repos/shiny/CTLOD.Rcheck
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  CTLOD:
+    path: /home/yeli/repos/shiny/CTLOD
+    operations:
+    - read
+    - git_read
+    - write
+    - exec
+  CUSUM:
+    path: /home/yeli/repos/shiny/CUSUM
+    operations:
+    - read
+    - git_read
+    - write
+    - exec

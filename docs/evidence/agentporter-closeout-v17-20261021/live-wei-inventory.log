@@ -1,0 +1,3 @@
+Private evidence: /tmp/a7dev-wei-free-public-6dnrse4n
+{"agent": "wei", "provider": "opencode", "configured_model": "opencode/glm-5.3-flash-free", "default_model": "opencode/glm-5.3-flash-free", "delegatable": true, "cli_version": "opencode v2.1.1"}
+Inspect only: no model calls, configuration changes or restarts.

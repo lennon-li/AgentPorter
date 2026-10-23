@@ -1,0 +1,4 @@
+{
+  "a7dev": "MainPID=530299\nDelegate=yes\nDelegateSubgroup=supervisor\nCPUQuotaPerSecUSec=6s\nMemoryMax=17179869184\nMemorySwapMax=0\nTasksMax=512\nActiveState=active\n",
+  "production": "MainPID=664960\nNRestarts=0\nActiveState=active\n"
+}

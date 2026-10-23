@@ -1,0 +1,43 @@
+--- v12/server.py
++++ acquisition/server.py
+@@ -169,6 +169,8 @@
+         workspace_roots=[row["path"] for row in registry.list_all()],
+     )
+     scoped_https = ScopedPublicHTTPS(https_policy)
++    from agentporter.https_download import create_https_download_tool
++    _https_download = create_https_download_tool(registry, https_policy, config.state_dir)
+     _exec_run, _exec_start = create_execution_tools(
+         registry, sandbox, job_manager, scoped_https=scoped_https
+     )
+@@ -412,6 +414,8 @@
+             "generic_shell_network": False,
+             "authorization": "owner-installed 0600 allowlist; no caller boolean grants access",
+         }
++        if "cranary" in scopes and "downloads" in scopes["cranary"]:
++            result["scoped_public_https"]["downloads"] = dict(scopes["cranary"]["downloads"])
+         return result
+ 
+     @mcp.tool()
+@@ -473,6 +477,14 @@
+     def trash_path(workspace_id: str, path: str) -> dict:
+         """Move a file to the recoverable .trash folder rather than permanently deleting it."""
+         return _trash_path(workspace_id, path)
++
++    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
++    @monitored_tool("https_download")
++    def https_download(workspace_id: str, url: str, filename: str,
++                       expected_sha256: Optional[str] = None, max_bytes: int = 16777216,
++                       timeout_seconds: int = 60) -> dict:
++        """Download approved historical source bytes into owner-scoped receipts; never overwrite or execute."""
++        return _https_download(workspace_id, url, filename, expected_sha256, max_bytes, timeout_seconds)
+ 
+     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
+     @monitored_tool("exec_run")
+@@ -647,6 +659,7 @@
+             "move_path": move_path,
+             "trash_path": trash_path,
+             "exec_run": exec_run,
++            "https_download": https_download,
+             "exec_start": exec_start,
+             "job_status": job_status,
+             "job_output": job_output,

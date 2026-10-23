@@ -1,0 +1,24 @@
+{
+  "is_error": false,
+  "data": {
+    "job_id": "job_494fce9fb61642529bcfa7d4",
+    "workspace_id": "agentporter-dev",
+    "worker_cli": "prof",
+    "agent": "prof",
+    "provider": "unknown",
+    "configured_model": "unknown",
+    "requested_model": "",
+    "actual_model": "unknown",
+    "reasoning_level": "unknown",
+    "runtime_profile": "development",
+    "cli_version": "codex-cli 0.163.0",
+    "status": "interrupted",
+    "exit_status": 130,
+    "exit_code": 130,
+    "created_at": 1792524991.8932388,
+    "started_at": 1792524991.8932388,
+    "finished_at": 1792621389.9459023,
+    "duration": 96398.05266356468,
+    "model": "unknown"
+  }
+}

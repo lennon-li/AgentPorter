@@ -1,0 +1,16 @@
+{
+  "harness": "/tmp/agentporter-v17-install-r3-harness",
+  "package_source": "/tmp/agentporter-v17-install-r3-extracted/release/src",
+  "allowed_local_relocations": {
+    "venv/pyvenv.cfg": {
+      "before": "557d560b9feea1b9337f246d4e9a621cff379409e145826d2e62716d7aeda444",
+      "after": "6d5612727a3a219c09f965a8d858cb12d86504d9c4f4d569a59fde1b7c70e52d"
+    },
+    "venv/lib/python3.13/site-packages/agentporter_development.pth": {
+      "before": "ec348344ec28fc09d5bd7d1fce11c91622dd3812d16b429146f5a321d758a4ff",
+      "after": "26d7f325c922748b79faf83d5cc80971e3c1ee29989eaa452d9ff461223a0e08"
+    }
+  },
+  "test_base": "original frozen v17 harness; only two cancellation test files updated",
+  "installed": false
+}

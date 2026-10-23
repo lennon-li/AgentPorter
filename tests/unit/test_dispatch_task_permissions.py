@@ -117,12 +117,13 @@ def test_private_argie_identity_remains_configurable(tmp_path, monkeypatch):
     # overwritten by an implicit built-in Antigravity alias.
 
 
-def test_missing_private_argie_does_not_invent_an_identity(tmp_path, monkeypatch):
+def test_missing_private_argie_uses_builtin_identity(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(tmp_path))
     gateway = AgentBroker(SimpleNamespace(get=lambda _: None), Mock())
     adapters, identities = gateway._configured_workers()
     assert "agy" in adapters
-    assert "argie" not in adapters
+    assert "argie" in adapters
+    assert adapters["argie"].name == "agy"
     assert "argie" not in identities
 
 

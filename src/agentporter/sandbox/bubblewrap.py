@@ -11,6 +11,8 @@ import tempfile
 from pathlib import Path
 from agentporter.sandbox.base import SandboxBackend
 from agentporter.tooling import add_tooling_mounts
+from agentporter.process_handles import open_handle, signal_handle
+from agentporter.resources import ResourceCleanupError
 
 logger = logging.getLogger("agentporter.sandbox.bwrap")
 
@@ -26,6 +28,7 @@ class BubblewrapSandbox(SandboxBackend):
         max_output_bytes: int = 100 * 1024,
     ):
         self.state_dir = state_dir
+        self.resources = None
         self.default_timeout_seconds = max(1, int(default_timeout_seconds))
         self.max_timeout_seconds = max(self.default_timeout_seconds, int(max_timeout_seconds))
         self.max_output_bytes = max(1024, int(max_output_bytes))
@@ -151,6 +154,14 @@ class BubblewrapSandbox(SandboxBackend):
             "--setenv", "LOGNAME", "sandbox",
             "--setenv", "LC_ALL", "C.UTF-8",
             "--setenv", "LANG", "C.UTF-8",
+            # The service UID may differ from the repository owner. Trust
+            # only this explicitly mounted root, including commands in its
+            # subdirectories; nested repositories remain independently gated.
+            # Environment config is protected Git configuration, unlike the
+            # repository-local config that cannot authorize its own owner.
+            "--setenv", "GIT_CONFIG_COUNT", "1",
+            "--setenv", "GIT_CONFIG_KEY_0", "safe.directory",
+            "--setenv", "GIT_CONFIG_VALUE_0", "/workspace",
         ])
         args.extend(["--chdir", target_cwd])
         return args
@@ -199,31 +210,39 @@ class BubblewrapSandbox(SandboxBackend):
         exceeded_stream = None
         timed_out = False
         selector = None
+        lease = None
+        pidfd = None
 
         def stop_group() -> None:
             if proc is None:
                 return
             try:
-                # Popen(process_group=0) makes a dedicated group for this job.
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            except OSError:
-                if proc.poll() is None:
-                    proc.kill()
+                if lease is not None:
+                    lease.terminate()
+            finally:
+                if pidfd is None:
+                    raise ResourceCleanupError('Missing owned sandbox process handle')
+                try:
+                    signal_handle(pidfd, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
             try:
                 proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired as error:
+                raise ResourceCleanupError('Sandbox leader termination remains unverified') from error
 
         try:
+            if self.resources is not None:
+                lease = self.resources.create()
+                full_cmd[0] = os.path.realpath(shutil.which('bwrap', path='/usr/bin:/bin'))
+                full_cmd = lease.command(full_cmd)
             proc = subprocess.Popen(
                 full_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 process_group=0,
             )
+            pidfd = open_handle(proc.pid)
             selector = selectors.DefaultSelector()
             for name in ("stdout", "stderr"):
                 pipe = getattr(proc, name)
@@ -286,13 +305,21 @@ class BubblewrapSandbox(SandboxBackend):
         finally:
             if selector is not None:
                 selector.close()
-            if proc is not None:
-                for name in ("stdout", "stderr"):
-                    pipe = getattr(proc, name)
-                    if pipe is not None and not pipe.closed:
-                        pipe.close()
-                if proc.poll() is None:
-                    stop_group()
+            try:
+                if proc is not None:
+                    for name in ("stdout", "stderr"):
+                        pipe = getattr(proc, name)
+                        if pipe is not None and not pipe.closed:
+                            pipe.close()
+                    if proc.poll() is None:
+                        stop_group()
+            finally:
+                try:
+                    if lease is not None:
+                        lease.close()
+                finally:
+                    if pidfd is not None:
+                        os.close(pidfd)
 
         stdout = streams["stdout"].decode("utf-8", errors="replace")
         stderr = streams["stderr"].decode("utf-8", errors="replace")

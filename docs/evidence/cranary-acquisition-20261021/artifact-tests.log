@@ -1,0 +1,10 @@
+........................................................................ [ 39%]
+........................................................................ [ 79%]
+.....................................                                    [100%]
+=============================== warnings summary ===============================
+tests/security/test_https_acquisition.py::test_rest_and_mcp_use_actual_owner_grant_and_fixed_binary_worker
+  /tmp/agentporter-cranary-acquisition-v18-harness/.venv/lib/python3.13/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+181 passed, 2 deselected, 1 warning in 4.94s

@@ -1,0 +1,34 @@
+{
+  "snapshot_receipt": {
+    "http_status": 200,
+    "bytes": 710490,
+    "sha256": "a069c3138f2b49c339d5f500f8beff8872d95a125e61a01b8307a7a6eba214fd",
+    "expected_sha256_verified": true,
+    "headers": {
+      "content-type": "application/x-gzip"
+    },
+    "retrieved_at": "2026-10-21T22:59:57.740972+00:00",
+    "workspace_id": "cranary",
+    "path": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/PACKAGES-v19-acceptance-a167ea485e86b228.gz",
+    "source_url": "https://packagemanager.posit.co/cran/2021-06-30/src/contrib/PACKAGES.gz",
+    "training_eligible": false,
+    "historical_identity_verified": false
+  },
+  "snapshot_offline_verification": {
+    "sha256": "a069c3138f2b49c339d5f500f8beff8872d95a125e61a01b8307a7a6eba214fd",
+    "expanded_sha256": "2b70321658ff7c6bd3159b62ed8f28708d3544d1b6dce8aa7ce443dc17296280",
+    "bytes": 710490,
+    "expanded_bytes": 3255263
+  },
+  "github_saved_receipt": {
+    "api_path": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/rrlite-a167ea485e86b228-source-api.json",
+    "api_sha256": "25337cf0a4334c020ff95073cd439d6bf885154eb8a8c33bc2c2b17f7fa90aaa",
+    "source_path": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/rrlite-a167ea485e86b228.c",
+    "source_sha256": "015761af6d0374967c6eb563b211eab208b3b9572673176e659c74fb1d107007"
+  },
+  "verified_at_utc": "2026-10-21T23:02:44.787531+00:00",
+  "cited_commit": "b390ba0afb5f1613572ba4ce3d5d733987edd0bd",
+  "canonical_source_url": "https://api.github.com/repos/ropensci-archive/rrlite/contents/src/rrlite.c?ref=b390ba0afb5f1613572ba4ce3d5d733987edd0bd",
+  "gateway_pid": 530299,
+  "gateway_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7"
+}

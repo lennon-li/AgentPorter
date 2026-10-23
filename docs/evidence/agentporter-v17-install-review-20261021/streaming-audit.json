@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "archive_sha256": "a1b91f9f15a44cc5e9ecbb265b73f17f47472b028b0009468e84b379d6340dac",
+  "payload_files": 26353,
+  "expanded_bytes": 3458330164,
+  "package_fingerprint": "4273eb64b8fee55ff56e388a0645539556411fb7a827050b82876a6ccef4338b",
+  "source_files": 73,
+  "version": "20261021T211000.000017Z",
+  "payload_executed": false,
+  "independent_review_clearance": false
+}

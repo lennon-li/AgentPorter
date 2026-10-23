@@ -1,0 +1,16 @@
+{
+  "harness": "/tmp/agentporter-cranary-hardened-v19-harness",
+  "package_source": "/tmp/agentporter-cranary-hardened-v19-extracted/release/src",
+  "allowed_local_relocations": {
+    "venv/pyvenv.cfg": {
+      "before": "1c44697406197d4454766c2576f0c1746870278b60cb5e4d33209a1c9c5016af",
+      "after": "806129913bf0a56e7b2833eac292f200802aa62db9053b9f8d4b292bd017a48a"
+    },
+    "venv/lib/python3.13/site-packages/agentporter_development.pth": {
+      "before": "0a5413d5c2356d0bc21889b1333dbc216747678d1d04b4415b52e042b9b90263",
+      "after": "98db9acc875613146b2b683029b64745c43346140ea6ba8b93c9aca9fa20d84d"
+    }
+  },
+  "installed": false,
+  "pytest_addopts": "-o pythonpath=/tmp/agentporter-cranary-hardened-v19-extracted/release/src"
+}

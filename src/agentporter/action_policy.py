@@ -50,6 +50,7 @@ SCOPE_ACTIONS = frozenset({
     "trash_path",
     "exec_run",
     "exec_start",
+    "https_download",
     "job_cancel",
     "git_add",
     "git_checkout",

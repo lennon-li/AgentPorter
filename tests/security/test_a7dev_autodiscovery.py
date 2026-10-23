@@ -35,8 +35,9 @@ def test_defaults_explicit_preservation_and_noop():
     assert all(row[k] for k in ('writable', 'allow_execute', 'allow_git', 'allow_artifacts', 'allow_agent_dispatch'))
     assert row['local_http_ports'] == []
     assert not any(row[k] for k in ('allow_venkata_ssh', 'allow_venkata_transfer', 'allow_scinet_training', 'allow_scinet_diagnostic'))
-    assert output['public-client-policy.yaml']['workspaces']['demo']['operations'] == ['read', 'write', 'git_read', 'exec', 'dispatch']
-    assert output['development-runtime.yaml']['allowed_workspace_roots'][-1] == {'path': '/repos/demo', 'writable': False}
+    assert output['public-client-policy.yaml']['workspaces']['demo']['operations'] == ['read', 'write', 'git_read', 'exec', 'dispatch', 'dispatch_write']
+    assert output['development-runtime.yaml']['allowed_workspace_roots'][-1] == {'path': '/repos/demo', 'writable': True}
+    assert state['demo']['profile_version'] == 2
     assert output['development-runtime.yaml']['workers'] == docs['development-runtime.yaml']['workers']
     assert a.plan(output, state, {'demo': {'path': '/repos/demo', 'dev': 1, 'ino': 3}})[0] == output
     assert a.plan(output, state, {})[0] == docs
@@ -54,7 +55,125 @@ def test_capacity_and_override():
     out, state, _ = a.plan(documents(), {}, {'demo': {'path': '/repos/demo', 'dev': 1, 'ino': 1}})
     out['workspaces.yaml']['workspaces']['demo']['writable'] = False
     again, managed, report = a.plan(out, state, {})
-    assert again == out and managed == {} and report['overridden'] == ['demo']
+    assert again == out and managed['demo']['overridden'] is True and report['overridden'] == ['demo']
+
+
+def legacy_enrollment():
+    import copy
+    docs = documents()
+    identity = {'path': '/repos/demo', 'dev': 1, 'ino': 3}
+    rows = a.generated(identity['path'], version=1)
+    docs[a.FILES[0]]['workspaces']['demo'] = rows['registry']
+    docs[a.FILES[1]]['workspaces']['demo'] = rows['policy']
+    docs[a.FILES[2]]['allowed_workspace_roots'].append(rows['runtime'])
+    return docs, {'demo': {'identity': copy.deepcopy(identity), 'rows': copy.deepcopy(rows)}}, {'demo': identity}
+
+
+def test_untouched_legacy_upgrade_is_versioned_and_idempotent():
+    docs, state, candidates = legacy_enrollment()
+    output, managed, report = a.plan(docs, state, candidates)
+    assert report['upgraded'] == ['demo'] and not report['added']
+    assert managed['demo']['profile_version'] == 2
+    assert output[a.FILES[1]]['workspaces']['demo']['operations'][-1] == 'dispatch_write'
+    assert output[a.FILES[2]]['allowed_workspace_roots'][-1]['writable'] is True
+    assert docs[a.FILES[2]]['allowed_workspace_roots'][-1]['writable'] is False
+    again, same_state, report = a.plan(output, managed, candidates)
+    assert again == output and same_state == managed and not report['upgraded']
+
+
+@pytest.mark.parametrize('edit', ['policy_deny', 'registry_deny', 'runtime_deny', 'explicit_grant', 'delete_all'])
+def test_legacy_operator_overrides_persist_without_reenrollment(edit):
+    docs, state, candidates = legacy_enrollment()
+    if edit == 'policy_deny':
+        docs[a.FILES[1]]['workspaces']['demo']['operations'].remove('dispatch')
+    elif edit == 'registry_deny':
+        docs[a.FILES[0]]['workspaces']['demo']['allow_agent_dispatch'] = False
+    elif edit == 'runtime_deny':
+        docs[a.FILES[2]]['allowed_workspace_roots'].pop()
+    elif edit == 'explicit_grant':
+        docs[a.FILES[1]]['workspaces']['demo']['operations'].append('dispatch_write')
+        docs[a.FILES[2]]['allowed_workspace_roots'][-1]['writable'] = True
+    else:
+        del docs[a.FILES[0]]['workspaces']['demo']
+        del docs[a.FILES[1]]['workspaces']['demo']
+        docs[a.FILES[2]]['allowed_workspace_roots'].pop()
+    output, managed, report = a.plan(docs, state, candidates)
+    assert output == docs and report['overridden'] == ['demo'] and not report['upgraded']
+    assert managed['demo']['overridden'] is True
+    # A new inode or a later timer scan cannot reclaim explicitly removed scope.
+    candidates['demo'] = {**candidates['demo'], 'ino': 99}
+    again, same_state, report = a.plan(output, managed, candidates)
+    assert again == output and same_state == managed and not report['added']
+
+
+@pytest.mark.parametrize('tamper', ['unknown_version', 'false_version', 'extra_scope', 'wrong_runtime', 'numeric_runtime', 'invalid_override'])
+def test_managed_profile_tampering_fails_closed(tamper):
+    import copy
+    docs, state, candidates = legacy_enrollment()
+    state = copy.deepcopy(state)
+    row = state['demo']
+    if tamper == 'unknown_version':
+        row['profile_version'] = 3
+    elif tamper == 'false_version':
+        row['profile_version'] = True
+    elif tamper == 'extra_scope':
+        row['rows']['policy']['operations'].append('https')
+    elif tamper == 'wrong_runtime':
+        row['rows']['runtime']['writable'] = True
+    elif tamper == 'numeric_runtime':
+        row['rows']['runtime']['writable'] = 0
+    else:
+        row['profile_version'] = 1
+        row['overridden'] = False
+    with pytest.raises(ValueError):
+        a.plan(docs, state, candidates)
+
+
+def test_legacy_upgrade_preserves_explicit_protected_overlap():
+    docs, state, candidates = legacy_enrollment()
+    docs[a.FILES[0]]['workspaces']['protected'] = {'path': '/repos/demo/private', 'writable': False}
+    output, managed, report = a.plan(docs, state, candidates)
+    assert report['revoked'] == ['demo'] and not report['upgraded']
+    assert not managed and 'demo' not in output[a.FILES[0]]['workspaces']
+    assert output[a.FILES[0]]['workspaces']['protected'] == docs[a.FILES[0]]['workspaces']['protected']
+
+
+@pytest.mark.parametrize('failure', ['write', 'health'])
+def test_legacy_upgrade_transaction_restores_exact_legacy_bytes(tmp_path, monkeypatch, failure):
+    docs, state, candidates = legacy_enrollment()
+    output, upgraded, _ = a.plan(docs, state, candidates)
+    config, control = tmp_path / 'config', tmp_path / 'control'
+    config.mkdir()
+    control.mkdir()
+    before = {name: yaml.safe_dump(doc).encode() for name, doc in docs.items()}
+    after = {name: yaml.safe_dump(doc).encode() for name, doc in output.items()}
+    old_state = a.canonical(state)
+    for name, body in before.items():
+        (config / name).write_bytes(body)
+        os.chmod(config / name, 0o600)
+    (control / 'managed.json').write_bytes(old_state)
+    os.chmod(control / 'managed.json', 0o600)
+    uid = os.getuid()
+    real_write, real_read = a.atomic_write, a.private_read
+    failed = []
+    def write(fd, name, body, owner):
+        if failure == 'write' and name == a.FILES[1] and body == after[name] and not failed:
+            failed.append(True)
+            raise OSError('injected migration failure')
+        return real_write(fd, name, body, uid)
+    def health():
+        if failure == 'health' and not failed:
+            failed.append(True)
+            raise OSError('injected migration failure')
+    monkeypatch.setattr(a, 'atomic_write', write)
+    monkeypatch.setattr(a, 'private_read', lambda fd, name, owner, **kw: real_read(fd, name, uid, **kw))
+    monkeypatch.setattr(a, 'systemctl', lambda *args, **kw: subprocess.CompletedProcess(args, 3 if args[0] == 'is-active' else 0))
+    monkeypatch.setattr(a, 'health', health)
+    with a.directory(config) as cfd, a.directory(control) as sfd:
+        with pytest.raises(OSError, match='injected migration'):
+            a.transaction(cfd, sfd, uid, before, after, old_state, a.canonical(upgraded))
+    assert all((config / name).read_bytes() == body for name, body in before.items())
+    assert (control / 'managed.json').read_bytes() == old_state
 
 
 def test_candidate_filtering_and_pinning(tmp_path):
@@ -134,6 +253,22 @@ def test_acl_native_private_git_hardlink_and_symlink(tmp_path):
     assert f'user:{recipient}:---' in acl(project / '.ssh')
     assert subprocess.check_output(['/usr/bin/getfacl', '-cp', str(outside)]) == before
     assert f'default:user:{recipient}:---' in acl(project)
+    assert f'default:user:{uid}:rwx' in acl(project)
+    assert f'default:user:{uid}:' not in acl(project / '.ssh')
+    assert f'default:user:{uid}:' not in acl(project / '.git')
+
+
+def test_human_default_preserves_masked_rights_and_service_default_deny(tmp_path):
+    unrelated = SERVICE_UID + 500
+    subprocess.run(['setfacl', '-m', f'd:u:{unrelated}:rwx,d:g::rwx,d:m::r--,d:o::---', str(tmp_path)], check=True)
+    with a.directory(tmp_path) as fd:
+        a.set_acl(fd, SERVICE_UID, 'rwx', default=True, collaborator=os.getuid())
+        entries = a.acl_entries(fd)
+    assert entries[f'default:user:{os.getuid()}'] == 'rwx'
+    assert entries[f'default:user:{SERVICE_UID}'] == '---'
+    assert entries[f'default:user:{unrelated}'] == 'r--'
+    assert entries['default:group:'] == 'r--'
+    assert entries['default:other:'] == '---'
 
 
 def test_acl_mask_preserves_unrelated_effective_rights(tmp_path):
@@ -317,6 +452,25 @@ def test_noop_scan_never_stops_or_restarts(tmp_path, monkeypatch):
     assert not report['configuration_changed'] and not service_calls
 
 
+def test_overridden_scan_never_refreshes_acl_or_restarts(tmp_path, monkeypatch):
+    service_calls, config = run_fixture(tmp_path, monkeypatch)
+    for name in a.FILES[:2]:
+        doc = yaml.safe_load((config / name).read_bytes())
+        del doc['workspaces']['new']
+        (config / name).write_text(yaml.safe_dump(doc))
+    runtime = yaml.safe_load((config / a.FILES[2]).read_bytes())
+    runtime['allowed_workspace_roots'] = runtime['allowed_workspace_roots'][:1]
+    (config / a.FILES[2]).write_text(yaml.safe_dump(runtime))
+    grants = []
+    monkeypatch.setattr(a, 'grant_tree', lambda *args, **kw: grants.append(args))
+    original_write = a.atomic_write
+    monkeypatch.setattr(a, 'atomic_write', lambda fd, name, body, uid: original_write(fd, name, body, os.getuid()))
+    for _ in range(2):
+        report = a.run(True)
+        assert report['overridden'] == ['new'] and not report['added']
+        assert not grants and not service_calls
+
+
 def test_busy_scan_never_stops_or_changes_config(tmp_path, monkeypatch):
     service_calls, config = run_fixture(tmp_path, monkeypatch, busy=True)
     before = {p.name: p.read_bytes() for p in config.iterdir()}
@@ -384,7 +538,7 @@ def test_new_explicit_overlap_revokes_managed_root(kind):
     assert output[a.FILES[0]]['workspaces']['restricted'] == restricted
     assert report['revoked'] == ['new']
     if kind != 'alias':
-        assert {'path': identity['path'], 'writable': False} not in output[a.FILES[2]]['allowed_workspace_roots']
+        assert not any(row['path'] == identity['path'] for row in output[a.FILES[2]]['allowed_workspace_roots'])
 
 
 def test_revoked_managed_root_is_not_acl_refreshed(tmp_path, monkeypatch):
@@ -494,7 +648,8 @@ def test_installed_location_avoids_private_libexec_ancestor():
     installer = (SCRIPT.parent / 'install-a7dev-autodiscovery.sh').read_text()
     assert 'readonly target=/opt/agentporter-autodiscovery' in installer
     assert 'sudo /usr/bin/install -d -o root -g root -m 0755 "$target"' in installer
-    assert 'sudo /usr/bin/install -T -o root -g root -m 0644 /dev/stdin "$destination"' in installer
+    assert 'sudo /usr/bin/install -T -o root -g root -m 0600 /dev/stdin "$private_stage/input"' in installer
+    assert installer.index('"$private_stage/input" | sudo /usr/bin/sha256sum') < installer.index('-m 0644 "$private_stage/input" "$destination"')
     assert a.INSTALLED in (SCRIPT.parent / 'agentporter-dev-autodiscovery.service').read_text()
     # Model the observed private ancestor and the dedicated installation modes.
     def accessible(modes):

@@ -1,0 +1,47 @@
+[
+  {
+    "command": [
+      "exec/cranary",
+      "."
+    ],
+    "network_access": false,
+    "exit_code": 124,
+    "timed_out": true,
+    "duration_seconds": 60.06145524978638,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "5560a553170105ee40fff60c825a4eee920c320ab68d9a446f2fc8a695032b98"
+  },
+  {
+    "command": [
+      "exec/cranary",
+      ".",
+      "--check"
+    ],
+    "network_access": false,
+    "exit_code": 124,
+    "timed_out": true,
+    "duration_seconds": 60.06199645996094,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "5560a553170105ee40fff60c825a4eee920c320ab68d9a446f2fc8a695032b98"
+  },
+  {
+    "command": [
+      "exec/cranary",
+      ".",
+      "--json"
+    ],
+    "network_access": false,
+    "exit_code": 2,
+    "timed_out": false,
+    "duration_seconds": 54.427775859832764,
+    "stdout_sha256": "dc4d894e9d099a0ff8b6a44532c067969aa30623520d0c4036cdb538812c44b1",
+    "stderr_sha256": "efeb0b9a6d9e6ccfc9164436f0b1c8f16e13d803681ea148573441f2d0cb3f2c",
+    "verdicts": {
+      "cran": "unknown",
+      "security": "pass_with_waivers",
+      "quality": "pass"
+    },
+    "r_cmd_check": "skipped",
+    "laya": null
+  }
+]

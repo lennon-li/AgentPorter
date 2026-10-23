@@ -1,0 +1,349 @@
+{
+  "runner_review": "targeted existing-reviewed-release reactivation",
+  "status": "PASS for exact owner-run existing-release reactivation proposal; live execution remains a separate owner action",
+  "behavioral_mock_scenarios": [
+    {
+      "scenario": "stop_fail",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "quiet_fail",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "cgroup_exists",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "new_before_policy",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo /usr/bin/cmp -s /backup/reviewed-runtime.json /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/python3 -I /installer --rollback .candidate-fixture",
+        "sudo /usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/systemctl start agentporter-development.service"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "new_applied",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo -u agentporter-dev -- /usr/bin/test -f /config/project-delegation-recovery-v1/receipt.json",
+        "policy --rollback --expected-plan-sha256 fixture",
+        "sudo /usr/bin/python3 -I /installer --rollback .candidate-fixture",
+        "sudo /usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/systemctl start agentporter-development.service"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "new_no_receipt",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo -u agentporter-dev -- /usr/bin/test -f /config/project-delegation-recovery-v1/receipt.json",
+        "sudo /usr/bin/cmp -s /backup/reviewed-runtime.json /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/python3 -I /installer --rollback .candidate-fixture",
+        "sudo /usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/systemctl start agentporter-development.service"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "new_runtime_drift",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo /usr/bin/cmp -s /backup/reviewed-runtime.json /config/development-runtime.yaml"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "new_config_drift",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo /usr/bin/cmp -s /backup/reviewed-runtime.json /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "policy_rollback_fail",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo -u agentporter-dev -- /usr/bin/test -f /config/project-delegation-recovery-v1/receipt.json",
+        "policy --rollback --expected-plan-sha256 fixture"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "release_rollback_fail",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo /usr/bin/cmp -s /backup/reviewed-runtime.json /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/python3 -I /installer --rollback .candidate-fixture"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "old_clean",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/systemctl start agentporter-development.service"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "old_partial_known",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/reviewed-runtime.json /config/development-runtime.yaml",
+        "restore_runtime /backup/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/systemctl start agentporter-development.service"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "old_partial_unknown",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/reviewed-runtime.json /config/development-runtime.yaml"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "old_config_drift",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "unknown_pointer",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "final_mismatch",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo -u agentporter-dev -- /usr/bin/test -f /config/project-delegation-recovery-v1/receipt.json",
+        "policy --rollback --expected-plan-sha256 fixture",
+        "sudo /usr/bin/python3 -I /installer --rollback .candidate-fixture",
+        "sudo /usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml"
+      ],
+      "final_runner_reverified": true
+    },
+    {
+      "scenario": "restore_fail",
+      "passed": true,
+      "exit_code": 1,
+      "calls": [
+        "sudo /usr/bin/systemctl stop agentporter-development.service",
+        "quiet",
+        "sudo /usr/bin/test ! -e /sys/fs/cgroup/system.slice/agentporter-development.service",
+        "sudo /usr/bin/cmp -s /backup/public-client-policy.yaml /config/public-client-policy.yaml",
+        "sudo /usr/bin/cmp -s /backup/workspaces.yaml /config/workspaces.yaml",
+        "sudo /usr/bin/cmp -s /backup/public-https.yaml /config/public-https.yaml",
+        "sudo /usr/bin/cmp -s /backup/development-runtime.yaml /config/development-runtime.yaml",
+        "sudo /usr/bin/cmp -s /backup/reviewed-runtime.json /config/development-runtime.yaml",
+        "restore_runtime /backup/development-runtime.yaml"
+      ],
+      "final_runner_reverified": true
+    }
+  ],
+  "runner_sha256": "0bc6336986aac04ab5a745395f166f1da8df03daf899a6458050d7524ba8d2dd",
+  "behavioral_mock_scenarios_passed": 17,
+  "runtime_freeze_tests": [
+    {
+      "scenario": "regular",
+      "passed": true,
+      "outputs_verified_bytes_only": true
+    },
+    {
+      "scenario": "symlink",
+      "passed": true,
+      "outputs_verified_bytes_only": true
+    },
+    {
+      "scenario": "fifo",
+      "passed": true,
+      "outputs_verified_bytes_only": true
+    },
+    {
+      "scenario": "directory",
+      "passed": true,
+      "outputs_verified_bytes_only": true
+    },
+    {
+      "scenario": "oversized",
+      "passed": true,
+      "outputs_verified_bytes_only": true
+    },
+    {
+      "scenario": "mismatch",
+      "passed": true,
+      "outputs_verified_bytes_only": true
+    }
+  ],
+  "runtime_freeze_tests_passed": 6,
+  "reviewer": "independent access_release_audit agent, separate from implementation authors",
+  "final_timestamp": "2026-10-22T00:16:40.313017+00:00",
+  "blocking_findings": [],
+  "source_sha256": {
+    "scripts/resume-a7dev-project-access.sh": "0bc6336986aac04ab5a745395f166f1da8df03daf899a6458050d7524ba8d2dd",
+    "scripts/preflight-a7dev-project-access-retry.py": "b4e11649a4f2275b2d1dc9ed14bac514629b5ff17bdf5f4e8ffdcfab170ba709",
+    "scripts/verify-existing-project-access-release.py": "0f71edb8aae7c5c3ffbd207f3ccfb44e3bab679dfda598ddad267e6b9071fbeb",
+    "scripts/verify-a7dev-project-access.py": "0c85c0548797076ef71faba9a8c276abefcb6c659c9d1d693be69fa79c49c39b"
+  },
+  "candidate": {
+    "version": "20261021T232414.837654Z",
+    "artifact_sha256": "c2924acec4e2a5bb15b36c41891929179f614c211a79a5a57f5b53e258d28566",
+    "fingerprint": "099b88c95f0fb23e33554e85a426e1b25b9fbba9ca3fe4fffd1ab4869b5da315",
+    "manifest_sha256": "c47044f4ca5bcd1558c8abe355dea949df7d571e370f162d51db1d118f619716",
+    "installed_payload_independently_verified": 26359,
+    "installed_payload_log": "/tmp/a7dev-project-access-installed-independent-final.log",
+    "new_archive_created": false,
+    "installed_code_changes": false
+  },
+  "focused_tests": {
+    "result": "36 passed in0.24s",
+    "command": ".venv/bin/python -m pytest -q tests/security/test_project_access_retry_preflight.py tests/security/test_project_access_acceptance.py --basetemp=/tmp/rr-72",
+    "log": "/tmp/a7dev-project-access-recovery-independent-tests.log"
+  },
+  "checks": [
+    "Exact existing immutable payload independently rehashed and root ownership/read-only modes/symlink containment verified under ordinary native yeli; outer sandbox rootUIDmapping to nobody was an environment-only false rejection.",
+    "Corrected external validator0c85... recognizes exactly3previously established protected traversal-only roots, retaining read=false flags; all41ordinary listing+offlineexec+write/read/remove and otherprotectedread/execdenials remain mandatory. Immutable bundled old validator differs intentionally; no artifact/source rewrite.",
+    "Preflight authenticates exact rolled_back2c4...plan,3backuphashes,unchangedpublicpolicy/registry/HTTPS and normalizedoldruntime; refusesnewerstate and preservespriorrecovery durably viaatomicnoreplace directory rename underprivateconfig.",
+    "Runner validates exact priorrootinstallerreceipt .candidate-482d30fb1a69a9aa75dc7f5ff88250fe and previous-runtime/currentold matching before reuse; maintains freshbackup/runtime pair and originalA7production PID/release snapshots.",
+    "Unprivileged standard-library runtime reader rejects leaf symlink/nonregular/oversized/mismatched template, hashes bounded bytes in memory before emitting; root standardtee freezesinto freshprivatebackup then rootrehashesbefore install. No mutable Python code executes asroot.",
+    "Service mustbe stopped,SQLquiet and cgroupabsent before rollback writes; unknownpointer/newerconfig/unknownpartialruntime leavesstopped. Appliedpolicy rollsback viafrozenhelper before exactimmutableinstallerrelease rollback; full4file equality requiredbeforestartingold.",
+    "Known oldpointer+reviewednewruntime partialactivation is atomically restored to exact old runtime; unrecognizedstate is not overwritten. Rootwrites limited to existing A7Dev config/current symlink and privatebackup; noSQLitechanges.",
+    "Corrected external public acceptance runsbefore acceptingactivation; actualproviderchecks runafter rollbacktrapdisable to avoid undoing workingaccess for providerquota. Production A7 comparisons remainmandatory."
+  ],
+  "warnings": [
+    "No security failure was established by the first rollback: the inherited validator incorrectly required directory-list permission on three protected traverse-only roots.",
+    "The existing immutable bundled validator remains unchanged and should not be used for this retry; owner runner pins the corrected external validator."
+  ],
+  "not_verified": [
+    "Actual privileged reactivation and post-retry public/live provider acceptance; no real service/config state was modified by reviewer."
+  ],
+  "privileged_commands_executed": 0,
+  "real_provider_calls": 0,
+  "credentials_read": false,
+  "production_modified": false
+}

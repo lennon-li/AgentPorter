@@ -1,0 +1,2207 @@
+{
+  "date": "2026-10-22",
+  "workspace": "agentporter-dev",
+  "head": "ec570bc9041c99e372494de76d1b154c5d742b93",
+  "branch": "a7dev-autodiscovery-20261022",
+  "upstream": "origin/a7dev-autodiscovery-20261022",
+  "ahead_behind": "0\t0",
+  "staged_names": [],
+  "counts": {
+    "documentation/configuration; review separately": 58,
+    "source; ownership/review unresolved; exclude": 28,
+    "tests; ownership/review unresolved; exclude": 44,
+    "archive; exclude": 8,
+    "generated evidence; review separately": 171,
+    "uncertain; exclude": 29,
+    "operator installer/build tooling; exclude pending separate review": 25,
+    "credential-risk filename; exclude": 1
+  },
+  "entries": [
+    {
+      "status": " M",
+      "path": "README.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "docs/action-authorization-design.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "docs/agent-roster-action-policy.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "docs/agent7-asgard-actions.openapi.json",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/action_policy.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/agents/broker.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/middleware.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/rest/routers/agents.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/rest/routers/exec.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/rest/schemas.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/sandbox/bubblewrap.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/server.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/tools/agents.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/tools/artifacts.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/tools/execution.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/tools/files.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/tools/git.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/tools/jobs.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "src/agentporter/tools/system.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "tests/_support.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "tests/conftest.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "tests/unit/test_dispatch_task_permissions.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "tests/unit/test_operator_action_policy.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "tests/unit/test_public_action_inventory.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": " M",
+      "path": "tests/unit/test_venkata_transfer.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": ".agentporter-integration-source-20261020.tgz",
+      "classification": "archive; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "CHATGPT_A7DEV_ASGARD_CONNECTION_AUDIT.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/A7DEV_BINARY_DOWNLOAD_DISCOVERY_20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/A7DEV_JAX_DISPATCH_SCOPE_20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/A7DEV_PROJECT_ACCESS_INSTALL_REVIEW.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/A7DEV_PROJECT_ACCESS_RETRY_20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/AGENTPORTER_V19_FINAL_CLOSEOUT.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/CRANARY_A7DEV_WORKING_PAYLOADS_20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/HANDOFF_A7DEV_GIT_COMMIT_PUSH_REPAIR_20261022.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/HANDOFF_AGENTPORTER_ASGARD_BCC_DEPLOYMENT_PLAN_20261022.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/HANDOFF_AGENTPORTER_COMBINED_V19_20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/HANDOFF_AGENTPORTER_CRANARY_V19_APPROVAL.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/HANDOFF_AGENTPORTER_TO_CHATGPT_2026-10-21.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/HANDOFF_AGENTPORTER_V17_INSTALL_REVIEW.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/HANDOFF_AGENTPORTER_V19_COMBINED_BUILD.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/INDEPENDENT_V19_REVIEW_CHECKPOINT_20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-closure-audit-addendum-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-cranary-https-authorization-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-directory-access-repair-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-directory-access-security-review-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-jax-liz-acceptance-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-use-now-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-v10-live-acceptance-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-v10-preflight-correction-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-v11-argie-readonly-candidate-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-v11-independent-security-review-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-v12-argie-policy-repair-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-v12-live-acceptance-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/a7dev-wei-free-repair-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/artifact-manifest-fix-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/artifact-manifest-retry-review-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/combined-v19-overlay-pins.json",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/combined-v19-source-check.json",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/cranary-acquisition-access-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/cranary-https-readiness.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/credential-refresh-retry-review-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/development-delegation-unblock.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/docstring-only-artifact-finalizer.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/final-artifact-audit.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/final-artifact-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/final-build.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/final-harness.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/final-status.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/independent-final-review.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/input-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/install-a7dev-acquisition-repair.sh",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/live-before-activation.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/live-repair-verified.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/prior-capability-review.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/prior-git-review.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/recovery-tests.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/review-ledger.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/source-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-acquisition-repair-20261022/source-verification.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-binary-discovery-20261021/public-local-discovery-and-download.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-binary-discovery-20261021/sha256.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-binary-discovery-20261021/verification.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/artifact-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/artifact-harness.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/build.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/independent-artifact.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/independent-native.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/independent-review.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/input-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/install-a7dev-project-access.sh",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/native-workspace-review.md",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/policy-worker-result.md",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/post-test-payload-verification.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/public-access-before.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/retry-runtime-template.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/sha256.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-20261021/source-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/corrected-external-validator.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/focused-tests.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/independent-recovery-review.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/installed-payload-verification.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/installed-payload-verifier.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/live-closeout.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/owner-reported-acceptance-classification.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/read-only-live-closeout-verifier.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/resume-a7dev-project-access.sh",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/retry-preflight.md",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/retry-preflight.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/sha256.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/a7dev-project-access-retry-20261021/validator-fix.md",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-20261021/artifact-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-20261021/canonical-reproducibility.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-20261021/native-provider-evidence.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-20261021/sha256.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-20261021/source-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-20261021/source-manifest.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-20261021/v15-build-review.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-20261021/v15-harness-relocations.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-20261021/v15-streaming-audit.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/artifact-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/canonical-reproducibility.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/cli-provenance.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/final-service-state.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/harness-test-script-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/live-cranary.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/live-wei-inventory.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/native-parent-review.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/native-provider-evidence.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/sha256.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/source-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/source-manifest.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/v17-build-review.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/v17-harness-relocations.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/v17-post-test-payload.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-closeout-v17-20261021/v17-streaming-audit.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/artifact-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/build-report.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/current-source-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/delta-audit.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/delta-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/final-a7dev-service.txt",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/final-production-service.txt",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/final-release.txt",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/final-worktree-status.txt",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/harness-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/harness-relocations.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/isolated-import.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/live-inspection.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/live-inspection.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/new-bubblewrap.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/new-jobs.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/new-resources.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/package-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/post-test-manifest.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/prepare-v17-install-review.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/process-tree-tests.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/proposal-syntax-check.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/resource-tests.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/sha256.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/source-delta.patch",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/source-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/agentporter-v17-install-review-20261021/streaming-audit.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/artifact-harness-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/artifact-tests.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/candidate-source/action_policy.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/candidate-source/https_download.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/candidate-source/rest/routers/exec.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/candidate-source/rest/schemas.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/candidate-source/scoped_https.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/candidate-source/server-backport.patch",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/candidate-source/server.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/candidate-source/source-manifest.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/cranary-root-screening-summary.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/full-source-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/live-initial-failures.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/live-scope-inspection.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/research-24-tests.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/rrlite-acquisition-receipt.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/sha256.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/source-final-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/v18-build-review.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/v18-harness-relocations.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/v18-post-test-manifest.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-acquisition-20261021/v18-streaming-audit.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/acceptance-routing-tests.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/acceptance-verifier.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/artifact-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/audit-combined-candidate.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/build-report.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/final-a7dev-service.txt",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/final-production-service.txt",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/final-release.txt",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/harness-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/harness-relocations.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/input-pins.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/isolated-import.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/live-current-inspection.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/live-current-inspection.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/post-test-manifest.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/prepare-combined-candidate.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/proposal-syntax.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/sha256.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/source-delta.patch",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/source-gate.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/streaming-audit.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/v18-fresh-audit.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/v2-policy.yaml",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/cranary-hardened-v19-20261021/worktree-status.txt",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/acquisition-consumer-attempt-audit.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/acquisition-receipts-final.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/closeout-checkpoint-history.md",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/final-services.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/final-worktree-status.txt",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/github-canonical-live.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/installation-first-acceptance-failure.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/installed-manifest-verification.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/latest-live-inspection.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/live-inspection.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/live-inspection.log",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/live-job-cgroups.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/live-summary.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/native-read-challenge.txt",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/native-workers-live.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/orphan-recovered-live.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/preflight.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/public-isolation-live.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/restored-workspace-acceptance.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/restored-workspace-policy.yaml",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/restored-workspace-verifier.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/sha256.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/source-evidence-acl-repair.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/evidence/v19-final-closeout-20261021/workspace-policy-helper.py",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/examples/a7dev-all-project-delegation-policy.yaml",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/examples/a7dev-cranary-acquisition-https.yaml",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/examples/a7dev-cranary-public-https.yaml",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/examples/a7dev-job-resources.conf",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/examples/a7dev-public-client-policy.yaml",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/examples/a7dev-restored-workspace-policy.yaml",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/examples/cranary-scoped-https.yaml",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/production-delegation-readiness-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/production-readiness-session-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/production-relay-activation-gates.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/production-relay-security-review-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/production-security-review-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/provider-e2e-readiness-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/provider-origin-pickup-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/receiving-egress-independent-review-20261021.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/scoped-cranary-public-https.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/shared-agent-resources-readiness-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/shared-resource-cache-security-review-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "docs/shared-resource-validation-latency-20261020.md",
+      "classification": "documentation/configuration; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "review-artifacts/a7dev-project-access-release-files.json",
+      "classification": "generated evidence; review separately",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "review-artifacts/agentporter-cranary-hardened-v19.tgz",
+      "classification": "archive; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "review-artifacts/agentporter-v12-base.tgz",
+      "classification": "archive; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "review-artifacts/agentporter-v15.tgz",
+      "classification": "archive; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "review-artifacts/agentporter-v17-install-r2.tgz",
+      "classification": "archive; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "review-artifacts/agentporter-v17-install-r3.tgz",
+      "classification": "archive; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "review-artifacts/agentporter-v17.tgz",
+      "classification": "archive; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "review-artifacts/agentporter-v18-cranary-acquisition.tgz",
+      "classification": "archive; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/agentporter-dev-credential-sync.service",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/agentporter-dev-credential-sync.timer",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/audit-closeout-artifact.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/audit-cranary-acquisition-candidate.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/audit-cranary-hardened-candidate.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/authorize-a7dev-cranary-https.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/authorize-a7dev-project-delegation.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/build-development-candidate.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/canonicalize-closeout-artifact.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/diagnose-a7dev-v9.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/diagnose-v19-population-preview.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/install-a7dev-project-access.sh",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/install-approved-a7dev-v10.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/install-approved-a7dev-v11.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/install-approved-a7dev-v12.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/install-approved-a7dev-v7.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/install-approved-a7dev-v8.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/install-approved-a7dev-v9.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/install-development-artifact.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/mirror-development-workspaces.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/preflight-a7dev-project-access-retry.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-a7dev-acquisition-repair.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-closeout-candidate.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-closeout-harness.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-cranary-acquisition-candidate.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-cranary-hardened-candidate.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-development-overlay.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-project-access-candidate.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-provider-origin-candidate.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-v17-install-review.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-v17-v18-combined.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/prepare-v19-combined-candidate.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/provision-development-runtime.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/recover-v19-orphan-prof-job.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/refresh-development-worker-credentials.py",
+      "classification": "credential-risk filename; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/repack-development-candidate.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/repair-a7dev-directory-access.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/repair-a7dev-wei-free.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/restore-a7dev-workspace-access.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/resume-a7dev-project-access.sh",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/run-approved-a7dev-v10.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/run-approved-a7dev-v11.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/run-approved-a7dev-v12.py",
+      "classification": "operator installer/build tooling; exclude pending separate review",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-a7dev-acquisition-repair.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-a7dev-binary-discovery.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-a7dev-cranary-acquisition.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-a7dev-cranary-https.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-a7dev-project-access.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-a7dev-wei-free.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-argie-policy-sandbox.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-candidate-tools.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-development-candidate.sh",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-existing-project-access-release.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "scripts/verify-provider-origin-sandbox.py",
+      "classification": "uncertain; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/admission.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/agents/development.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/agents/development_egress.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/agents/production_relay.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/agents/provider_egress.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/client_policy.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/https_download.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/process_handles.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/resource_runner.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/resources.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/scoped_https.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/scoped_https_worker.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "src/agentporter/workspaces/bounded.py",
+      "classification": "source; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_a7dev_directory_access_repair.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_a7dev_https_policy_install.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_a7dev_v9_diagnostic.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_a7dev_wei_free_repair.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_acquisition_acceptance_routing.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_acquisition_receipts.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_argie_policy_canary.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_capability_inventory.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_closeout_client_policy.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_closeout_file_bounds.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_closeout_lifecycle.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_closeout_resources.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_development_artifact.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_development_egress.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_development_runtime.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_development_v9_activation.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_git_workspace_ownership.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_headroom_audit.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_https_acquisition.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_process_tree_cancellation.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_project_access_acceptance.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_project_access_retry_preflight.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_project_delegation_authorization.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_provider_origin_broker.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_public_delegation_readiness.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_shared_resource_cache_audit.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/security/test_shared_toolkit_validation_cache.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/unit/test_development_delegation.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/unit/test_development_provisioning.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/unit/test_production_delegation_relay.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/unit/test_scoped_https.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/unit/test_worker_credential_refresh.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/verify_https_audit_regressions.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/verify_https_integration_offline.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/verify_production_relay_offline.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/verify_scoped_https_offline.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/verify_shared_agent_resources_offline.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    },
+    {
+      "status": "??",
+      "path": "tests/verify_worker_credential_refresh_offline.py",
+      "classification": "tests; ownership/review unresolved; exclude",
+      "approved_for_project_publication": false
+    }
+  ],
+  "publication_candidate_manifest": [],
+  "reason": "Repair stopped at verified auth/policy/target blockers. No pending project changes reviewed or approved for publication."
+}

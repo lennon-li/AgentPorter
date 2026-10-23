@@ -1,0 +1,10 @@
+{
+  "artifact-gate.log": "cff431752193800c7efc0e0652fea3ddcce0c409d51a628653a00c592c7e72de",
+  "canonical-reproducibility.json": "37b5be0fe567923bb611dd13c577174d5dbd9498cb3d9cff6c08a0954acd8cf2",
+  "native-provider-evidence.json": "7dfba8f8fb7891a57e10dcea7f3fb3ef9f3b319903b9aba8441e8a112ecc2b01",
+  "source-gate.log": "f4a0f6ea9d3b16c87ead738aec370ff5d88de1bfe5af23c92949b63ef7cf3bad",
+  "source-manifest.json": "a4916c1bf408164ad8d60b211c3ebe3a5ea0495df17014c49ba03269c6a28957",
+  "v15-build-review.json": "ef46f5d5b29f1f3087cca367c0762aaf6cb5cbc519cf19bf4e3a8740577adef6",
+  "v15-harness-relocations.json": "77e0981661fff233442ce0bff3e1636f4cc3475d6575fd3c4f4f20e1021446be",
+  "v15-streaming-audit.json": "cd11e5effba30af9f9e270f53dd6872bf2cacbd4ef3b959049f5d6d98eb1444c"
+}

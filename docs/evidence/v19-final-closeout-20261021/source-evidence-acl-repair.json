@@ -1,0 +1,15 @@
+{
+  "before": {
+    "docs/evidence/cranary-acquisition-20261021/candidate-source": "user::rwx\nuser:agentporter-dev:rwx\t#effective:---\ngroup::rwx\t#effective:---\nmask::---\nother::---\ndefault:user::rwx\ndefault:user:agentporter-dev:rwx\ndefault:group::rwx\ndefault:mask::rwx\ndefault:other::r-x\n\n",
+    "docs/evidence/cranary-acquisition-20261021/candidate-source/rest": "user::rwx\nuser:agentporter-dev:rwx\t#effective:---\ngroup::rwx\t#effective:---\nmask::---\nother::---\ndefault:user::rwx\ndefault:user:agentporter-dev:rwx\ndefault:group::rwx\ndefault:mask::rwx\ndefault:other::r-x\n\n",
+    "docs/evidence/cranary-acquisition-20261021/candidate-source/rest/routers": "user::rwx\nuser:agentporter-dev:rwx\t#effective:---\ngroup::rwx\t#effective:---\nmask::---\nother::---\ndefault:user::rwx\ndefault:user:agentporter-dev:rwx\ndefault:group::rwx\ndefault:mask::rwx\ndefault:other::r-x\n\n"
+  },
+  "after": {
+    "docs/evidence/cranary-acquisition-20261021/candidate-source": "user::rwx\nuser:agentporter-dev:r-x\ngroup::---\nmask::r-x\nother::---\ndefault:user::rwx\ndefault:user:agentporter-dev:rwx\ndefault:group::rwx\ndefault:mask::rwx\ndefault:other::r-x\n\n",
+    "docs/evidence/cranary-acquisition-20261021/candidate-source/rest": "user::rwx\nuser:agentporter-dev:r-x\ngroup::---\nmask::r-x\nother::---\ndefault:user::rwx\ndefault:user:agentporter-dev:rwx\ndefault:group::rwx\ndefault:mask::rwx\ndefault:other::r-x\n\n",
+    "docs/evidence/cranary-acquisition-20261021/candidate-source/rest/routers": "user::rwx\nuser:agentporter-dev:r-x\ngroup::---\nmask::r-x\nother::---\ndefault:user::rwx\ndefault:user:agentporter-dev:rwx\ndefault:group::rwx\ndefault:mask::rwx\ndefault:other::r-x\n\n"
+  },
+  "source_hashes_verified": 8,
+  "applied": true,
+  "scope": "Exactly three source-only evidence directories; service read/traverse; no file data changed"
+}

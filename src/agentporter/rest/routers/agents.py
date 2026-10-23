@@ -6,7 +6,10 @@ router = APIRouter(prefix="/workspaces/{workspace_id}/agents", tags=["Agents"])
 
 @router.get("/list", response_model=List[AgentInfo])
 def list_agents(workspace_id: str, request: Request):
-    return request.app.state.tools["list_agents"]()
+    try:
+        return request.app.state.tools["list_agents"](workspace_id=workspace_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 @router.post(
     "/dispatch",

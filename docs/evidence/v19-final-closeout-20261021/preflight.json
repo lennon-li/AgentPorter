@@ -1,0 +1,104 @@
+{
+  "timestamp_utc": "2026-10-21T22:10:07.069719+00:00",
+  "owner_authorized": true,
+  "argie_hold_accepted": true,
+  "privileged_writes_performed": false,
+  "installed": false,
+  "prior_evidence_files_reverified": 23,
+  "requested_gate_exists": false,
+  "commands": {
+    "a7dev_service": {
+      "argv": [
+        "systemctl",
+        "show",
+        "agentporter-development.service",
+        "-p",
+        "ActiveState",
+        "-p",
+        "MainPID",
+        "-p",
+        "NRestarts",
+        "-p",
+        "Delegate",
+        "-p",
+        "DelegateSubgroup",
+        "-p",
+        "DropInPaths",
+        "-p",
+        "MemoryMax",
+        "-p",
+        "TasksMax",
+        "-p",
+        "ControlGroup"
+      ],
+      "exit_code": 0,
+      "stdout": "MainPID=4102155\nNRestarts=0\nControlGroup=/system.slice/agentporter-development.service\nDelegate=no\nDelegateSubgroup=\nMemoryMax=infinity\nTasksMax=107647\nActiveState=active\nDropInPaths=\n",
+      "stderr": ""
+    },
+    "production_service": {
+      "argv": [
+        "systemctl",
+        "--user",
+        "show",
+        "agentporter.service",
+        "-p",
+        "ActiveState",
+        "-p",
+        "MainPID",
+        "-p",
+        "NRestarts"
+      ],
+      "exit_code": 0,
+      "stdout": "MainPID=664960\nNRestarts=0\nActiveState=active\n",
+      "stderr": ""
+    },
+    "cgroup_controllers": {
+      "argv": [
+        "cat",
+        "/sys/fs/cgroup/cgroup.controllers"
+      ],
+      "exit_code": 0,
+      "stdout": "cpuset cpu io memory hugetlb pids rdma misc dmem\n",
+      "stderr": ""
+    },
+    "systemd_version": {
+      "argv": [
+        "systemctl",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "systemd 255 (255.4-1ubuntu8.18)\n+PAM +AUDIT +SELINUX +APPARMOR +IMA +SMACK +SECCOMP +GCRYPT -GNUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 -IDN +IPTC +KMOD +LIBCRYPTSETUP +LIBFDISK +PCRE2 -PWQUALITY +P11KIT +QRENCODE +TPM2 +BZIP2 +LZ4 +XZ +ZLIB +ZSTD -BPF_FRAMEWORK -XKBCOMMON +UTMP +SYSVINIT default-hierarchy=unified\n",
+      "stderr": ""
+    },
+    "current_release": {
+      "argv": [
+        "readlink",
+        "/opt/agentporter-development/current"
+      ],
+      "exit_code": 0,
+      "stdout": "/opt/agentporter-development/versions/20261021T132836.936455Z\n",
+      "stderr": ""
+    },
+    "sudo_preflight": {
+      "argv": [
+        "sudo",
+        "-n",
+        "true"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "sudo: a password is required\n"
+    },
+    "installer_permissions": {
+      "argv": [
+        "stat",
+        "-c",
+        "%U %G %a %n",
+        "/usr/local/libexec/agentporter/install-development-artifact.py"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "stat: cannot statx '/usr/local/libexec/agentporter/install-development-artifact.py': Permission denied\n"
+    }
+  }
+}

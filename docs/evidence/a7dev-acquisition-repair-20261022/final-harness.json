@@ -1,0 +1,20 @@
+{
+  "harness": "/tmp/jax-acquisition-repair-final-harness",
+  "package_source": "/tmp/jax-acquisition-repair-final-candidate/release/src",
+  "allowed_local_relocations": {
+    "venv/pyvenv.cfg": {
+      "before": "b7fc97d9caf08e1aa4f783bd8294a592eeb3e518986f416cfe8e2f19af5669be",
+      "after": "1576713ffc68ac16cc630ac3cfc68d2a217fbc60fb2468d53604834a9ea0644f"
+    },
+    "venv/lib/python3.13/site-packages/agentporter_development.pth": {
+      "before": "726b63a4f5946f9115cb3eea7d455371c496daa543e35fa9055624b487e3b747",
+      "after": "22d51a39cb861fe713bf60fc6e5b6a14f23f74527323155170c1393720e8cdf2"
+    }
+  },
+  "installed": false,
+  "pytest_addopts": "-o pythonpath=/tmp/jax-acquisition-repair-final-candidate/release/src",
+  "excluded_harness_only_script": {
+    "path": "scripts/prepare-v19-combined-candidate.py",
+    "reason": "Unreadable retired source helper, no test references; not an artifact exclusion"
+  }
+}

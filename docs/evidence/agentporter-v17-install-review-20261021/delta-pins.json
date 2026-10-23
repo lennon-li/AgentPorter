@@ -1,0 +1,5 @@
+{
+  "src/agentporter/tools/jobs.py": "720e3a2679e83ab8d6593bcde0c03d543271a26243f1c7ff7fcf27adfcf45333",
+  "src/agentporter/resources.py": "6c778afac7be3318dec9e35210791f6457e494e32c71f49881ab32c65d48fbba",
+  "src/agentporter/sandbox/bubblewrap.py": "b17e7d519c3697f3bc2b85bd2bf27fc1025dce3ad387bcd4dd6ee7620f822f53"
+}

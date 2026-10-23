@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "manifest_entries": 26357,
+  "source_files": 74,
+  "operator_scripts_and_policy_pinned": true,
+  "allowed_local_relocations": [
+    "venv/pyvenv.cfg",
+    "venv/lib/python3.13/site-packages/agentporter_development.pth"
+  ],
+  "installed": false
+}

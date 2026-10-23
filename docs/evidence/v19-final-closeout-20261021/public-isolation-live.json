@@ -1,0 +1,164 @@
+{
+  "passed": true,
+  "negative_cases": 6,
+  "public_scope": [
+    "agentporter-dev",
+    "cranary"
+  ],
+  "metadata_head_passed": true,
+  "calls": [
+    {
+      "tool": "server_deploy_info",
+      "arguments": {},
+      "is_error": false,
+      "data": {
+        "version": "0.1.0.dev0",
+        "pid": 504228,
+        "started_at": "2026-10-21T18:36:04-0400",
+        "package_path": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter",
+        "python": "/opt/agentporter-development/current/venv/bin/python",
+        "loaded_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "disk_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "stale": false,
+        "modules": {
+          "agentporter": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/__init__.py",
+          "agentporter.server": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/server.py",
+          "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/tools/scinet_training.py"
+        }
+      }
+    },
+    {
+      "tool": "list_workspaces",
+      "arguments": {},
+      "is_error": false,
+      "data": [
+        {
+          "workspace_id": "cranary",
+          "path": "/home/yeli/repos/cranary",
+          "exists": true,
+          "writable": true,
+          "description": "CRAN package canary and archival validation repository",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        },
+        {
+          "workspace_id": "agentporter-dev",
+          "path": "/home/yeli/agent-work/agentporter-dev",
+          "exists": true,
+          "writable": true,
+          "description": "AgentPorter development checkout; production excluded",
+          "permissions": {
+            "execute": true,
+            "git": true,
+            "artifacts": true,
+            "agent_dispatch": true,
+            "local_http_ports": [],
+            "venkata_ssh": false,
+            "venkata_transfer": false,
+            "scinet_diagnostic": false,
+            "scinet_training": false
+          }
+        }
+      ]
+    },
+    {
+      "tool": "write_file",
+      "arguments": {
+        "workspace_id": "agentporter-dev",
+        "path": "docs/evidence/v19-final-closeout-20261021/public-write-denied-8a18b95bac2a166d.txt",
+        "content": "synthetic public write must be denied"
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool write_file"
+      }
+    },
+    {
+      "tool": "read_file",
+      "arguments": {
+        "workspace_id": "obsidian",
+        "path": "AgentSystem/agent-memory/who/liz.short.md"
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool read_file"
+      }
+    },
+    {
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "IRVRI",
+        "argv": [
+          "true"
+        ],
+        "network_access": false
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool exec_run"
+      }
+    },
+    {
+      "tool": "read_file",
+      "arguments": {
+        "workspace_id": "agentporter-dev",
+        "path": "/var/lib/agentporter-dev/config/internal-client.key"
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool read_file"
+      }
+    },
+    {
+      "tool": "read_file",
+      "arguments": {
+        "workspace_id": "cranary",
+        "path": "../AgentPorter/README.md"
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool read_file"
+      }
+    },
+    {
+      "tool": "job_status",
+      "arguments": {
+        "job_id": "job_494fce9fb61642529bcfa7d4"
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool job_status"
+      }
+    },
+    {
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "curl",
+          "-sSI",
+          "https://api.github.com/repos/ropensci/software-review/issues/1"
+        ],
+        "network_access": true,
+        "timeout_seconds": 15
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "HTTP/1.1 200\nContent-Type: application/json; charset=utf-8\nETag: W/\"b4cf99283a73ea3f0d1498039281247a39f9509e2d9d6fb5dca8b00cb463f23b\"\nLast-Modified: Tue, 06 Oct 2026 12:10:43 GMT\nContent-Length: 7091\n\n",
+        "stderr": "",
+        "timeout": false,
+        "workspace_id": "cranary"
+      }
+    }
+  ]
+}

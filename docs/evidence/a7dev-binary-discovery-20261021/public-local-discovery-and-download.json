@@ -1,0 +1,565 @@
+{
+  "passed": true,
+  "timestamp": "2026-10-21T23:30:09.077190+00:00",
+  "calls": [
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "server_deploy_info",
+      "arguments": {},
+      "is_error": false,
+      "data": {
+        "version": "0.1.0.dev0",
+        "pid": 530299,
+        "started_at": "2026-10-21T18:58:39-0400",
+        "package_path": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter",
+        "python": "/opt/agentporter-development/current/venv/bin/python",
+        "loaded_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "disk_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "stale": false,
+        "modules": {
+          "agentporter": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/__init__.py",
+          "agentporter.server": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/server.py",
+          "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/tools/scinet_training.py"
+        }
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "get_capabilities",
+      "arguments": {},
+      "is_error": false,
+      "data": {
+        "gateway_version": "0.1.0.dev0",
+        "transport": "mcp_streamable_http",
+        "auth": "header_api_key",
+        "sandbox": {
+          "backend": "bubblewrap",
+          "available": true,
+          "version": "bubblewrap 0.9.0",
+          "network": "disabled"
+        },
+        "supported_tools": [
+          "get_capabilities",
+          "list_workspaces",
+          "workspace_info",
+          "list_files",
+          "search_text",
+          "read_file",
+          "write_file",
+          "apply_patch",
+          "mkdir",
+          "move_path",
+          "trash_path",
+          "exec_run",
+          "exec_start",
+          "job_status",
+          "job_output",
+          "job_result",
+          "job_cancel",
+          "git_status",
+          "git_diff",
+          "git_log",
+          "git_show",
+          "local_http_request",
+          "list_artifacts",
+          "read_artifact",
+          "list_agents",
+          "dispatch_agent"
+        ],
+        "scoped_public_https": {
+          "enabled": true,
+          "workspaces": [
+            "cranary"
+          ],
+          "methods": [
+            "GET",
+            "HEAD"
+          ],
+          "hosts": [
+            "api.github.com",
+            "bioconductor.org",
+            "cran-archive.r-project.org",
+            "cran.r-project.org",
+            "packagemanager.posit.co"
+          ],
+          "generic_shell_network": false,
+          "authorization": "owner-installed 0600 allowlist; no caller boolean grants access",
+          "downloads": {
+            "hosts": [
+              "cran.r-project.org",
+              "packagemanager.posit.co"
+            ],
+            "directory": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads",
+            "max_response_bytes": 16777216,
+            "timeout_seconds": 60
+          }
+        }
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "https_download",
+      "arguments": {
+        "workspace_id": "cranary",
+        "url": "https://packagemanager.posit.co/cran/2022-06-30/src/contrib/PACKAGES.gz",
+        "filename": "PACKAGES-2022-06-30-tool-discovery-737f0fbf30681d97.gz",
+        "max_bytes": 16777216,
+        "timeout_seconds": 60
+      },
+      "is_error": false,
+      "data": {
+        "http_status": 200,
+        "bytes": 776874,
+        "sha256": "d2cd86e52af94510adf4e9aed96d4cc7b4172a5a93c3ba0e0094569bf93e4c52",
+        "expected_sha256_verified": false,
+        "headers": {
+          "content-type": "application/x-gzip"
+        },
+        "retrieved_at": "2026-10-21T23:30:11.757788+00:00",
+        "workspace_id": "cranary",
+        "path": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/PACKAGES-2022-06-30-tool-discovery-737f0fbf30681d97.gz",
+        "source_url": "https://packagemanager.posit.co/cran/2022-06-30/src/contrib/PACKAGES.gz",
+        "training_eligible": false,
+        "historical_identity_verified": false
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "exec_run",
+      "arguments": {
+        "workspace_id": "cranary",
+        "argv": [
+          "python3",
+          "-I",
+          "-c",
+          "import gzip,hashlib,io,json; from pathlib import Path; p=Path('data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/PACKAGES-2022-06-30-tool-discovery-737f0fbf30681d97.gz'); assert p.stat().st_size==776874; raw=p.read_bytes(); digest=hashlib.sha256(raw).hexdigest(); assert digest=='d2cd86e52af94510adf4e9aed96d4cc7b4172a5a93c3ba0e0094569bf93e4c52'; f=gzip.GzipFile(fileobj=io.BytesIO(raw)); expanded=f.read(67108865); f.close(); assert len(expanded)<=67108864; records=expanded.count(b\"Package: \"); assert records>=1000; print(json.dumps({\"saved_sha256\":digest,\"saved_bytes\":len(raw),\"gzip_integrity_verified\":True,\"expanded_sha256\":hashlib.sha256(expanded).hexdigest(),\"expanded_bytes\":len(expanded),\"package_records\":records}))"
+        ],
+        "network_access": false,
+        "timeout_seconds": 30
+      },
+      "is_error": false,
+      "data": {
+        "exit_code": 0,
+        "stdout": "{\"saved_sha256\": \"d2cd86e52af94510adf4e9aed96d4cc7b4172a5a93c3ba0e0094569bf93e4c52\", \"saved_bytes\": 776874, \"gzip_integrity_verified\": true, \"expanded_sha256\": \"71d1c54a6c2e636732227fa2501c9d25b665ab66a6becd5b1f55dd20be2ce077\", \"expanded_bytes\": 3540372, \"package_records\": 18339}\n",
+        "stderr": "",
+        "duration": 0.22201037406921387,
+        "truncated": false,
+        "timed_out": false,
+        "timeout_seconds": 30
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "https_download",
+      "arguments": {
+        "workspace_id": "cranary",
+        "url": "https://packagemanager.posit.co/cran/2022-06-30/src/contrib/PACKAGES.gz",
+        "filename": "PACKAGES-2022-06-30-tool-discovery-737f0fbf30681d97.gz",
+        "max_bytes": 16777217,
+        "timeout_seconds": 60
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool https_download"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "https_download",
+      "arguments": {
+        "workspace_id": "cranary",
+        "url": "https://packagemanager.posit.co/cran/2022-06-30/src/contrib/PACKAGES.gz",
+        "filename": "PACKAGES-2022-06-30-tool-discovery-737f0fbf30681d97.gz",
+        "max_bytes": 16777216,
+        "timeout_seconds": 61
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool https_download"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "https_download",
+      "arguments": {
+        "workspace_id": "cranary",
+        "url": "https://example.com/PACKAGES.gz",
+        "filename": "PACKAGES-2022-06-30-tool-discovery-737f0fbf30681d97.gz",
+        "max_bytes": 16777216,
+        "timeout_seconds": 60
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool https_download"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "https_download",
+      "arguments": {
+        "workspace_id": "cranary",
+        "url": "https://127.0.0.1/PACKAGES.gz",
+        "filename": "PACKAGES-2022-06-30-tool-discovery-737f0fbf30681d97.gz",
+        "max_bytes": 16777216,
+        "timeout_seconds": 60
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool https_download"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "https_download",
+      "arguments": {
+        "workspace_id": "Qman",
+        "url": "https://packagemanager.posit.co/cran/2022-06-30/src/contrib/PACKAGES.gz",
+        "filename": "PACKAGES-2022-06-30-tool-discovery-737f0fbf30681d97.gz",
+        "max_bytes": 16777216,
+        "timeout_seconds": 60
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool https_download"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "https_download",
+      "arguments": {
+        "workspace_id": "cranary",
+        "url": "https://packagemanager.posit.co/cran/2022-06-30/src/contrib/PACKAGES.gz",
+        "filename": "../escape.gz",
+        "max_bytes": 16777216,
+        "timeout_seconds": 60
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool https_download"
+      }
+    },
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool": "https_download",
+      "arguments": {
+        "workspace_id": "cranary",
+        "url": "https://packagemanager.posit.co/cran/2022-06-30/src/contrib/PACKAGES.gz",
+        "filename": "checksum-denial-247b15b6728724f5.gz",
+        "max_bytes": 16777216,
+        "timeout_seconds": 60,
+        "expected_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "is_error": true,
+      "data": {
+        "message": "Error executing tool https_download"
+      }
+    },
+    {
+      "endpoint": "http://127.0.0.1:8876/mcp",
+      "tool": "server_deploy_info",
+      "arguments": {},
+      "is_error": false,
+      "data": {
+        "version": "0.1.0.dev0",
+        "pid": 530299,
+        "started_at": "2026-10-21T18:58:39-0400",
+        "package_path": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter",
+        "python": "/opt/agentporter-development/current/venv/bin/python",
+        "loaded_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "disk_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "stale": false,
+        "modules": {
+          "agentporter": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/__init__.py",
+          "agentporter.server": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/server.py",
+          "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/tools/scinet_training.py"
+        }
+      }
+    }
+  ],
+  "discoveries": [
+    {
+      "endpoint": "https://1xs4h6qn-8876.use.devtunnels.ms/mcp",
+      "tool_names": [
+        "venkata_transfer",
+        "venkata_diagnostic",
+        "scinet_diagnostic",
+        "scinet_login",
+        "server_deploy_info",
+        "scinet_stage",
+        "scinet_submit",
+        "scinet_job_status",
+        "scinet_job_logs",
+        "scinet_setup",
+        "scinet_setup_status",
+        "scinet_inference_preflight",
+        "scinet_inference_stage",
+        "scinet_inference_provision",
+        "scinet_inference_approve",
+        "scinet_inference_submit",
+        "scinet_inference_results",
+        "scinet_preflight",
+        "scinet_record_approvals",
+        "scinet_environment_check",
+        "get_capabilities",
+        "list_workspaces",
+        "workspace_info",
+        "list_files",
+        "search_text",
+        "read_file",
+        "write_file",
+        "apply_patch",
+        "mkdir",
+        "move_path",
+        "trash_path",
+        "https_download",
+        "exec_run",
+        "exec_start",
+        "job_status",
+        "job_output",
+        "job_result",
+        "job_cancel",
+        "local_http_request",
+        "git_status",
+        "git_diff",
+        "git_log",
+        "git_show",
+        "git_fetch",
+        "git_pull",
+        "git_push",
+        "git_commit",
+        "git_add",
+        "git_branch",
+        "git_checkout",
+        "list_artifacts",
+        "read_artifact",
+        "list_agents",
+        "dispatch_agent"
+      ],
+      "https_download": {
+        "name": "https_download",
+        "description": "Download approved historical source bytes into owner-scoped receipts; never overwrite or execute.",
+        "inputSchema": {
+          "properties": {
+            "workspace_id": {
+              "title": "Workspace Id",
+              "type": "string"
+            },
+            "url": {
+              "title": "Url",
+              "type": "string"
+            },
+            "filename": {
+              "title": "Filename",
+              "type": "string"
+            },
+            "expected_sha256": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expected Sha256"
+            },
+            "max_bytes": {
+              "default": 16777216,
+              "title": "Max Bytes",
+              "type": "integer"
+            },
+            "timeout_seconds": {
+              "default": 60,
+              "title": "Timeout Seconds",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "workspace_id",
+            "url",
+            "filename"
+          ],
+          "type": "object",
+          "title": "https_downloadArguments"
+        },
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": true
+        }
+      },
+      "deployment": {
+        "version": "0.1.0.dev0",
+        "pid": 530299,
+        "started_at": "2026-10-21T18:58:39-0400",
+        "package_path": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter",
+        "python": "/opt/agentporter-development/current/venv/bin/python",
+        "loaded_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "disk_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "stale": false,
+        "modules": {
+          "agentporter": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/__init__.py",
+          "agentporter.server": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/server.py",
+          "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/tools/scinet_training.py"
+        }
+      }
+    },
+    {
+      "endpoint": "http://127.0.0.1:8876/mcp",
+      "tool_names": [
+        "venkata_transfer",
+        "venkata_diagnostic",
+        "scinet_diagnostic",
+        "scinet_login",
+        "server_deploy_info",
+        "scinet_stage",
+        "scinet_submit",
+        "scinet_job_status",
+        "scinet_job_logs",
+        "scinet_setup",
+        "scinet_setup_status",
+        "scinet_inference_preflight",
+        "scinet_inference_stage",
+        "scinet_inference_provision",
+        "scinet_inference_approve",
+        "scinet_inference_submit",
+        "scinet_inference_results",
+        "scinet_preflight",
+        "scinet_record_approvals",
+        "scinet_environment_check",
+        "get_capabilities",
+        "list_workspaces",
+        "workspace_info",
+        "list_files",
+        "search_text",
+        "read_file",
+        "write_file",
+        "apply_patch",
+        "mkdir",
+        "move_path",
+        "trash_path",
+        "https_download",
+        "exec_run",
+        "exec_start",
+        "job_status",
+        "job_output",
+        "job_result",
+        "job_cancel",
+        "local_http_request",
+        "git_status",
+        "git_diff",
+        "git_log",
+        "git_show",
+        "git_fetch",
+        "git_pull",
+        "git_push",
+        "git_commit",
+        "git_add",
+        "git_branch",
+        "git_checkout",
+        "list_artifacts",
+        "read_artifact",
+        "list_agents",
+        "dispatch_agent"
+      ],
+      "https_download": {
+        "name": "https_download",
+        "description": "Download approved historical source bytes into owner-scoped receipts; never overwrite or execute.",
+        "inputSchema": {
+          "properties": {
+            "workspace_id": {
+              "title": "Workspace Id",
+              "type": "string"
+            },
+            "url": {
+              "title": "Url",
+              "type": "string"
+            },
+            "filename": {
+              "title": "Filename",
+              "type": "string"
+            },
+            "expected_sha256": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expected Sha256"
+            },
+            "max_bytes": {
+              "default": 16777216,
+              "title": "Max Bytes",
+              "type": "integer"
+            },
+            "timeout_seconds": {
+              "default": 60,
+              "title": "Timeout Seconds",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "workspace_id",
+            "url",
+            "filename"
+          ],
+          "type": "object",
+          "title": "https_downloadArguments"
+        },
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": true
+        }
+      },
+      "deployment": {
+        "version": "0.1.0.dev0",
+        "pid": 530299,
+        "started_at": "2026-10-21T18:58:39-0400",
+        "package_path": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter",
+        "python": "/opt/agentporter-development/current/venv/bin/python",
+        "loaded_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "disk_fingerprint": "2a41380b67529e5bb27fa3e00d7a84ced0946989879b3948a97c25f5eeee6ac7",
+        "stale": false,
+        "modules": {
+          "agentporter": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/__init__.py",
+          "agentporter.server": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/server.py",
+          "agentporter.tools.scinet_training": "/opt/agentporter-development/versions/20261021T212000.000019Z/src/agentporter/tools/scinet_training.py"
+        }
+      }
+    }
+  ],
+  "chatgpt_registration_refreshed": false,
+  "chatgpt_native_invocation_verified": false,
+  "receipt": {
+    "http_status": 200,
+    "bytes": 776874,
+    "sha256": "d2cd86e52af94510adf4e9aed96d4cc7b4172a5a93c3ba0e0094569bf93e4c52",
+    "expected_sha256_verified": false,
+    "headers": {
+      "content-type": "application/x-gzip"
+    },
+    "retrieved_at": "2026-10-21T23:30:11.757788+00:00",
+    "workspace_id": "cranary",
+    "path": "data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/PACKAGES-2022-06-30-tool-discovery-737f0fbf30681d97.gz",
+    "source_url": "https://packagemanager.posit.co/cran/2022-06-30/src/contrib/PACKAGES.gz",
+    "training_eligible": false,
+    "historical_identity_verified": false
+  },
+  "offline_verification": {
+    "saved_sha256": "d2cd86e52af94510adf4e9aed96d4cc7b4172a5a93c3ba0e0094569bf93e4c52",
+    "saved_bytes": 776874,
+    "gzip_integrity_verified": true,
+    "expanded_sha256": "71d1c54a6c2e636732227fa2501c9d25b665ab66a6becd5b1f55dd20be2ce077",
+    "expanded_bytes": 3540372,
+    "package_records": 18339
+  },
+  "download_denials_passed": 7
+}

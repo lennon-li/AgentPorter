@@ -29,15 +29,22 @@ def create_agent_tools(broker: AgentBroker):
             )
         selected = next(item for item in public_agent_inventory(broker.list_agents())
                         if item["agent"] == agent.lower().strip())
+        # Report the same verified launch blocker exposed by inventory.
+        detail = "; ".join(
+            str(selected[key]) for key in ("confinement_status", "availability_reason")
+            if selected.get(key)
+        )
+        suffix = ("; " + detail) if detail else ""
         if not selected.get("registered") or not selected.get("available"):
             raise PermissionError(
                 "Named agent is unavailable, unregistered, or misrouted: "
-                + agent.lower().strip() + "; no alternate runtime will be substituted"
+                + agent.lower().strip() + "; no alternate runtime will be substituted" + suffix
             )
         if selected.get("delegatable") is False:
             raise PermissionError(
                 "Named agent registered but delegation blocked: "
                 + str(selected.get("confinement_status") or "OS confinement unavailable")
+                + ("; " + str(selected["availability_reason"]) if selected.get("availability_reason") else "")
             )
         return broker.dispatch_agent(
             agent=agent,

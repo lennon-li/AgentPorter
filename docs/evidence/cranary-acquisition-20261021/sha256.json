@@ -1,0 +1,38 @@
+{
+  "archive_sha256": "fb6b36a63de7738db09baa6aca0e1b2fcb825ddf2778c1357c6ca3dde084976d",
+  "profile": "cranary-acquisition-only derivative of v12",
+  "source_tests_passed": 1498,
+  "source_subtests_passed": 24,
+  "source_standalone_verifiers": "all passed",
+  "artifact_tests_passed": 181,
+  "artifact_tests_deselected": [
+    "v17 public-principal policy integration",
+    "v17 uncertain cgroup cleanup integration"
+  ],
+  "research_tests_passed": 24,
+  "installed": false,
+  "independently_reviewed": false,
+  "sha256": {
+    "artifact-harness-pins.json": "11dce273da33fd092d7687395c1d379af65a58a716a265730c211314256e2a58",
+    "artifact-tests.log": "67d79d3d3885b5f1626dd50bd377ca51a08c3af56e1d5d1e44378740a80841c1",
+    "candidate-source/action_policy.py": "77d48bf4d11a435f5d2a1603d7ee0881aa31aaf3fa4b7d004c582290100ce103",
+    "candidate-source/https_download.py": "4809e716c4747b573a843c052b356e62195335a315848ebd1e948ce4c6b1fc64",
+    "candidate-source/rest/routers/exec.py": "b53fbb13cc0188f824be0b83d669f514581a994621f4673e4dfe9109e9c58a14",
+    "candidate-source/rest/schemas.py": "4f22dbf82852b955965022804e3efba32c29406668beea6eb61e4176844c9119",
+    "candidate-source/scoped_https.py": "1d8015f5e280fbbab9bd8dca1fdb5091bc7bd43c3169a529e8b8b0a0cbeff1cc",
+    "candidate-source/server-backport.patch": "39dd9e464de7acdac38dbabd6ea24d1b863671b03836db23961fcdf440d724b5",
+    "candidate-source/server.py": "3f3ded478d992c155af60a27c09bbd05422c45cd5459a04841bb26a8cd7bbf44",
+    "candidate-source/source-manifest.json": "1929be117d18938539e48447d0484a00fb8dc44c7d4a7cec4c1f6bb225735641",
+    "cranary-root-screening-summary.json": "653bf8cd589caf723e1c17aeeb08a6918cb9905e9542eba159b6c3279bdaf853",
+    "full-source-pins.json": "60493bbc054d709694954e1038f70e7df81f8869713ad4336a2eb3b1e158e001",
+    "live-initial-failures.json": "b949bfef5a1f425002931556d9050b4945756305f58820b01c48c6676a84dc4c",
+    "live-scope-inspection.log": "2511dbfbce93a069d783f22ef3565a2e9a8446d7c7ed44f62ef8a7318c4760fb",
+    "research-24-tests.json": "c6adcc215ba4eb1423f55bc22f6637d5bb110a49cbe1e9f8efb61741c69f0d07",
+    "rrlite-acquisition-receipt.json": "18d8907f10f4830374a9d3b3d4070e3862b2e0b8a8ef8285ba824a3bc2f6baa7",
+    "source-final-gate.log": "72501d2b10d6822600ec03ffbb5fea4e64bf3749e267b8fcd2255f6e1596900b",
+    "v18-build-review.json": "ead43b22c5468896e8fcd6bccdc11cc6c92d37f40b8abaf29de7208aef2c94a0",
+    "v18-harness-relocations.json": "0aa9420336eebd278a7551280d1280705795c48b78a585914e9ae0195394a78a",
+    "v18-post-test-manifest.json": "3d1e3f9debd899722100e918c3c15a40427753fbb54c7fb46cf38923de7df278",
+    "v18-streaming-audit.json": "47e04137cfdbde55eb2e7d0fd252697d7b566c7f8ba33c5ba8aafd85c72a4129"
+  }
+}

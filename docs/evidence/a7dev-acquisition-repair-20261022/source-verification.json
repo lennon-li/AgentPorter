@@ -1,0 +1,41 @@
+{
+  "status": "source verified; activation requires local sudo authentication",
+  "full_source_gate": {
+    "tests_passed": 1663,
+    "subtests_passed": 24,
+    "failed": 0,
+    "warning": "Existing Starlette/AnyIO deprecation"
+  },
+  "receipt_tests_latest": {
+    "passed": 49,
+    "failed": 0,
+    "includes_real_competing_publishers": true
+  },
+  "regression_red": {
+    "attempted_unsafe_unlinks": [
+      "PACKAGES.gz",
+      "PACKAGES.gz.receipt.json"
+    ]
+  },
+  "regression_green": {
+    "published_path_unlinks": 0
+  },
+  "root_cause": "A stat followed by unlink is not an atomic conditional deletion.",
+  "repair": "Anonymous O_TMPFILE staging and no unlink of published paths; partial publication raises error and preserves evidence.",
+  "historical_identity_verified": false,
+  "training_eligible": false,
+  "installed": false,
+  "committed": false,
+  "pushed": false,
+  "subsequent_docstring_correction": {
+    "executable_ast_unchanged": true,
+    "reason": "Clarify anonymous staging and preservation of published names on failure"
+  },
+  "first_artifact_gate": {
+    "passed": 1663,
+    "failed": 1,
+    "subtests_passed": 24,
+    "failure": "Harness imported package via src symlink; deployment-info test expects canonical package path",
+    "resolution": "Use PYTEST_ADDOPTS canonical package path; no source or test assertion changes"
+  }
+}

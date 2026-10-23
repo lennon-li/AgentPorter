@@ -1,0 +1,29 @@
+{
+  "source": "Derived from owner-pasted verification-qku2n_zd output; not a new live run",
+  "original_failed_roots": [
+    "agentporter",
+    "repos",
+    "AgentPorter"
+  ],
+  "corrected_classification": {
+    "ordinary_projects": 41,
+    "ordinary_read_write_exec_passed": 41,
+    "protected_traverse_only_listing_denied_expected": [
+      "AgentPorter",
+      "agentporter",
+      "repos"
+    ],
+    "protected_readable_roots_passed": [
+      "asgard-hermes-review",
+      "obsidian"
+    ],
+    "failures": [],
+    "failure_reasons": {}
+  },
+  "live_rollbacks_owner_reported": {
+    "policy": true,
+    "release": "20261021T212000.000019Z",
+    "candidate_receipt": ".candidate-482d30fb1a69a9aa75dc7f5ff88250fe"
+  },
+  "current_reactivation_verified": false
+}

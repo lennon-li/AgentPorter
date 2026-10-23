@@ -1,0 +1,102 @@
+[
+  {
+    "agent": "wei",
+    "returncode": 0,
+    "timeout": false,
+    "nonce": true,
+    "expected_nonce_observed": true,
+    "duration": 8.279382850043476,
+    "native_tools": [
+      {
+        "tool": "read",
+        "status": "completed"
+      }
+    ],
+    "evidence": "/tmp/provider-origin-wei-result-9avx_5zr",
+    "output_sha256": "01cf540325a4879a24e128c2c981ccd40ac97da3d6ee3b2ea0e60ee0fe524512"
+  },
+  {
+    "agent": "liz",
+    "returncode": 0,
+    "timeout": false,
+    "nonce": true,
+    "expected_nonce_observed": true,
+    "duration": 13.773304047062993,
+    "native_tools": [
+      {
+        "tool": "command_execution",
+        "exit_code": 0
+      }
+    ],
+    "evidence": "/tmp/provider-origin-liz-result-tpv9s7cr",
+    "output_sha256": "fe6adac1aeb2043da720dfb4512d103ea7b62f5646d2df4ab9f1547f87f026ad"
+  },
+  {
+    "agent": "prof",
+    "returncode": 0,
+    "timeout": false,
+    "nonce": true,
+    "expected_nonce_observed": true,
+    "duration": 13.276284372899681,
+    "native_tools": [
+      {
+        "tool": "command_execution",
+        "exit_code": 0
+      }
+    ],
+    "evidence": "/tmp/provider-origin-prof-result-ngnlygr1",
+    "output_sha256": "6ff4ed5fb2b16c739011a2172d49d743e554398303ca08a213bbdfd5bceb36da"
+  },
+  {
+    "agent": "ming",
+    "returncode": 1,
+    "timeout": false,
+    "nonce": false,
+    "expected_nonce_observed": false,
+    "duration": 1.8046205339487642,
+    "native_tools": [],
+    "evidence": "/tmp/provider-origin-ming-result-wwzuri8m",
+    "output_sha256": "4d3a1981b797fa8021111549007100cd53bed1cd4d5330af0e4339af2a4ca709"
+  },
+  {
+    "agent": "jax",
+    "returncode": 0,
+    "timeout": false,
+    "expected_nonce_observed": true,
+    "duration": 10.165562510024756,
+    "native_tools": [
+      {
+        "tool": "command_execution",
+        "exit_code": 0
+      }
+    ],
+    "evidence": "/tmp/provider-origin-jax-result-czt43g3i",
+    "output_sha256": "d454d80a85955064354f279612f28ca03e94e5b6509e48a8cd582f14b31a3f8c",
+    "route": "unchanged canonical fixed Headroom bridge"
+  },
+  {
+    "agent": "ming",
+    "phase": "after_reported_reset",
+    "evidence": "/tmp/provider-origin-ming-result-p9qaptrz",
+    "returncode": 0,
+    "expected_nonce_observed": true,
+    "output_sha256": "75ac7fc82434e28de81811a6da78807ec418d6063c5ee2f7876d7ad4522702ea",
+    "duration": 5.490920579060912
+  },
+  {
+    "agent": "ming",
+    "phase": "exact frozen CLI",
+    "evidence": "/tmp/provider-origin-ming-result-62psq2kn",
+    "returncode": 0,
+    "expected_nonce_observed": true,
+    "duration": 6.289029208943248,
+    "native_tools": [
+      {
+        "tool": "Read",
+        "is_error": false,
+        "fixture_nonce": "ORIGIN_CANARY_1745b36ed3ed92d04bf190b666163ced"
+      }
+    ],
+    "output_sha256": "8330fb0e66bf7f018fb133b8c5e67b850ecb3d1bb21624b0071026fce07192fe"
+  }
+]

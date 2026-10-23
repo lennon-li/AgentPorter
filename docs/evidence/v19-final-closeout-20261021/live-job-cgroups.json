@@ -1,0 +1,18 @@
+{
+  "observed": [
+    {
+      "name": "apj_ccb351e3b10141bdb04d8514fb858a9c",
+      "observed_at": 1792622760.5922847,
+      "error": "PermissionError: [Errno 13] Permission denied: '/sys/fs/cgroup/system.slice/agentporter-development.service/apj_ccb351e3b10141bdb04d8514fb858a9c/memory.max'",
+      "removed_at": 1792622771.597208
+    },
+    {
+      "name": "apj_a9ae0f9bdad7407da74038f1f4add5da",
+      "observed_at": 1792622804.6077406,
+      "error": "PermissionError: [Errno 13] Permission denied: '/sys/fs/cgroup/system.slice/agentporter-development.service/apj_a9ae0f9bdad7407da74038f1f4add5da/memory.max'",
+      "removed_at": 1792622818.6133053
+    }
+  ],
+  "passed": false,
+  "all_observed_groups_removed": true
+}

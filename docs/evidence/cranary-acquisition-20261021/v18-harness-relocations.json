@@ -1,0 +1,16 @@
+{
+  "harness": "/tmp/agentporter-cranary-acquisition-v18-harness",
+  "package_source": "/tmp/agentporter-cranary-acquisition-v18-extracted/release/src",
+  "allowed_local_relocations": {
+    "venv/pyvenv.cfg": {
+      "before": "644091f35e956618a8c8587d28b056eadcd882b492c9effaca33281145786c86",
+      "after": "86b076f52de50556eb9cdaf903128213955e65655ec67ecd0b9ba1b2aeb30c62"
+    },
+    "venv/lib/python3.13/site-packages/agentporter_development.pth": {
+      "before": "07cacb1e0d50e085a46e75c28d017d46772981ff1bc9497254e37a24c174714a",
+      "after": "73b32b13ddfcfb192a8791624f6fc9aaab553b3d499d2fc06bce9e0bd3e5d712"
+    }
+  },
+  "installed": false,
+  "pytest_addopts": "-o pythonpath=/tmp/agentporter-cranary-acquisition-v18-extracted/release/src"
+}

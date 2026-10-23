@@ -1,0 +1,105 @@
+[
+  {
+    "case": "old_pair_intact",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop",
+      "ACTION systemctl start",
+      "ACTION systemctl is-active"
+    ],
+    "diagnostic": "Acceptance failed; exact previous A7Dev restored. Evidence: /private-backup"
+  },
+  {
+    "case": "new_pair_valid_receipt",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop",
+      "ACTION immutable-installer-rollback",
+      "ACTION systemctl start",
+      "ACTION systemctl is-active"
+    ],
+    "diagnostic": "Acceptance failed; exact previous A7Dev restored. Evidence: /private-backup"
+  },
+  {
+    "case": "new_pair_missing_receipt",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop"
+    ],
+    "diagnostic": "Exact rollback pair unavailable/changed; leave stopped and preserve /private-backup."
+  },
+  {
+    "case": "new_pair_invalid_receipt",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop"
+    ],
+    "diagnostic": "Exact rollback pair unavailable/changed; leave stopped and preserve /private-backup."
+  },
+  {
+    "case": "new_pair_unknown_runtime",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop"
+    ],
+    "diagnostic": "Exact rollback pair unavailable/changed; leave stopped and preserve /private-backup."
+  },
+  {
+    "case": "old_link_known_partial_runtime",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop",
+      "ACTION prepare-private-runtime-restore",
+      "ACTION atomic-runtime-restore",
+      "ACTION systemctl start",
+      "ACTION systemctl is-active"
+    ],
+    "diagnostic": "Acceptance failed; exact previous A7Dev restored. Evidence: /private-backup"
+  },
+  {
+    "case": "old_link_unknown_runtime",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop"
+    ],
+    "diagnostic": "Unknown partial runtime state; leave stopped and preserve /private-backup."
+  },
+  {
+    "case": "unknown_active_release",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop"
+    ],
+    "diagnostic": "Unexpected active release; leave stopped and preserve /private-backup."
+  },
+  {
+    "case": "changed_policy",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop"
+    ],
+    "diagnostic": "Unexpected policy change; refuse overwrite. A7Dev remains stopped; evidence /private-backup."
+  },
+  {
+    "case": "unquiet_jobs",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop"
+    ],
+    "diagnostic": "Cannot verify stopped/quiet service; preserve /private-backup and leave A7Dev stopped."
+  },
+  {
+    "case": "stop_failed",
+    "passed": true,
+    "actions": [
+      "ACTION systemctl stop"
+    ],
+    "diagnostic": "Cannot verify stopped/quiet service; preserve /private-backup and leave A7Dev stopped."
+  },
+  {
+    "case": "not_stopped_yet",
+    "passed": true,
+    "actions": [],
+    "diagnostic": ""
+  }
+]

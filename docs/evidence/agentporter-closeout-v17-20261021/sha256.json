@@ -1,0 +1,35 @@
+{
+  "archive": "review-artifacts/agentporter-v17.tgz",
+  "archive_sha256": "acbc64e95e238a3d568035834b75949456064445af89110bc68ddf8d18c6c72f",
+  "package_fingerprint": "085b63bf291595817d81ae99a14967e10b7a9d56138f39ddbd5ca27b273dbf2d",
+  "source_gate": {
+    "pytest_passed": 1439,
+    "subtests_passed": 24,
+    "standalone_verifiers": "all passed"
+  },
+  "frozen_artifact_gate": {
+    "pytest_passed": 1439,
+    "subtests_passed": 24,
+    "standalone_verifiers": "all passed"
+  },
+  "installed": false,
+  "independently_reviewed": false,
+  "production_activated": false,
+  "sha256": {
+    "artifact-gate.log": "c3a5ad90e451836b5fef8e8a6aa6aa600b2be203b2cecc1f01e4c52dca217ed7",
+    "canonical-reproducibility.json": "37b5be0fe567923bb611dd13c577174d5dbd9498cb3d9cff6c08a0954acd8cf2",
+    "cli-provenance.json": "a8ae8a4504e10a9dd85e6f6049104f38e9ee334e0c03a3a0266481c6925e4257",
+    "final-service-state.json": "44c83844ce05bff4a5e422e70115edd1b07c1b3a690b1dc42b33a4f6c3f3051d",
+    "harness-test-script-pins.json": "c1fe92f4d0de3e4c519f025134f55470e1e155568bc7d17ed551cc26d45d1e1f",
+    "live-cranary.log": "c82a3ae212c3d221c2f8fd92a1fc3936782829dae88b86fcd693d0be9fd2b76c",
+    "live-wei-inventory.log": "438713f25c94babfd55e2f11344580256929ed739d51f8bc6968f454b2db7634",
+    "native-parent-review.json": "f760b916a6b540b32bf8a977d09065b3485184920066f5a64c0ce911921da443",
+    "native-provider-evidence.json": "b0803d7244549a310e431dae0846f95f48cb24db749b6561f98409575231289e",
+    "source-gate.log": "0ed768040e95240d0313b7125ed1aa38bd27a1d1d92e5cbdaa03ed3929b2091e",
+    "source-manifest.json": "3339e48ad6aa019e5d76e482398e9272ea9d35248f109b8a07f48ac385c9e6cf",
+    "v17-build-review.json": "20bd5e85d68dbd700c03d1c0fd3feba7e63d2a5d4f5345413c9146e228ea20ee",
+    "v17-harness-relocations.json": "ed063ddb393be93d27c992a889766e6f63f13443b580701048e28ed16a2594b7",
+    "v17-post-test-payload.json": "2f060e94adcc333568a9e1beaa7c171a52771788d6698a17dcfb9784436498bf",
+    "v17-streaming-audit.json": "a1af9a9d8bcf6f91486675ce7c7149701dc791ec5b606964c8940ccc99c402a9"
+  }
+}

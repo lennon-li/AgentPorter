@@ -1,0 +1,44 @@
+[
+  {
+    "label": "rrlite-repository",
+    "url": "https://api.github.com/repos/ropensci/rrlite",
+    "is_error": false,
+    "exit_code": 77,
+    "stderr": "{\"event\": \"public_https_denied_or_error\", \"workspace_id\": \"cranary\", \"host\": \"api.github.com\", \"method\": \"GET\", \"error_type\": \"PermissionError\"}\nScoped public HTTPS denied: PermissionError\n"
+  },
+  {
+    "label": "rrlite-commit",
+    "url": "https://api.github.com/repos/ropensci/rrlite/commits/b390ba0afb5f1613572ba4ce3d5d733987edd0bd",
+    "is_error": false,
+    "exit_code": 77,
+    "stderr": "{\"event\": \"public_https_denied_or_error\", \"workspace_id\": \"cranary\", \"host\": \"api.github.com\", \"method\": \"GET\", \"error_type\": \"PermissionError\"}\nScoped public HTTPS denied: PermissionError\n"
+  },
+  {
+    "label": "rrlite-file",
+    "url": "https://api.github.com/repos/ropensci/rrlite/contents/src/rrlite.c?ref=b390ba0afb5f1613572ba4ce3d5d733987edd0bd",
+    "is_error": false,
+    "exit_code": 77,
+    "stderr": "{\"event\": \"public_https_denied_or_error\", \"workspace_id\": \"cranary\", \"host\": \"api.github.com\", \"method\": \"GET\", \"error_type\": \"PermissionError\"}\nScoped public HTTPS denied: PermissionError\n"
+  },
+  {
+    "label": "richfitz-commit",
+    "url": "https://api.github.com/repos/richfitz/rrlite/commits/b390ba0afb5f1613572ba4ce3d5d733987edd0bd",
+    "is_error": false,
+    "exit_code": 77,
+    "stderr": "{\"event\": \"public_https_denied_or_error\", \"workspace_id\": \"cranary\", \"host\": \"api.github.com\", \"method\": \"GET\", \"error_type\": \"PermissionError\"}\nScoped public HTTPS denied: PermissionError\n"
+  },
+  {
+    "label": "posit-head",
+    "url": "https://packagemanager.posit.co/cran/2021-01-02/src/contrib/PACKAGES",
+    "is_error": true,
+    "exit_code": null,
+    "stderr": null
+  },
+  {
+    "label": "large-existing-cran-head",
+    "url": "https://cran.r-project.org/src/contrib/Archive/TCIU/TCIU_1.1.0.tar.gz",
+    "is_error": false,
+    "exit_code": 0,
+    "stderr": ""
+  }
+]

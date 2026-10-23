@@ -18,9 +18,10 @@ def _policy_file(config_dir: Path, body: str) -> Path:
 
 
 def test_default_modes_cover_complete_public_catalog():
-    assert len(DEFAULT_ACTION_MODES) == 53
+    assert len(DEFAULT_ACTION_MODES) == 54
     assert DEFAULT_ACTION_MODES["get_capabilities"] == "ALLOW"
     assert DEFAULT_ACTION_MODES["dispatch_agent"] == "SCOPE"
+    assert DEFAULT_ACTION_MODES["https_download"] == "SCOPE"
     assert DEFAULT_ACTION_MODES["git_push"] == "LOCKED"
     assert DEFAULT_ACTION_MODES["scinet_submit"] == "APPROVAL"
 

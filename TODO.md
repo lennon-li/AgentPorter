@@ -4,6 +4,11 @@ AgentPorter is being developed by dogfooding: use it for real work, record frict
 
 ## Current state
 
+The [consolidated A7Dev status](docs/A7DEV_CURRENT_STATE.md) and
+[action map](docs/A7DEV_ACTION_MAP.md) are the entry points for the current
+development implementation. The roadmap below contains historical package-level
+items; unchecked items are not evidence that a development feature is absent.
+
 ### A7Dev operator deployment — 2026-10-22
 
 - [x] Install acquisition/Git repair in development only; receipt integrity verified.

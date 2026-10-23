@@ -1,0 +1,19 @@
+{
+  "release": "20261022T015212.581522Z",
+  "verification": "executed locally via connected public a7dev tools; read-only checks",
+  "https_download_advertised": true,
+  "cranary_git_status_succeeded": true,
+  "receipt_integrity": {
+    "http_status": 200,
+    "bytes": 776874,
+    "sha256": "d2cd86e52af94510adf4e9aed96d4cc7b4172a5a93c3ba0e0094569bf93e4c52",
+    "receipt_sha256": "eaaf59fa6ebc8e58b57e4c55ae65e5dcffd627f0f8fc2ebbd2828582aecf3af0",
+    "gzip_integrity": true,
+    "expanded_bytes": 3540372,
+    "historical_identity_verified": false,
+    "training_eligible": false
+  },
+  "existing_workspaces": 46,
+  "new_download_or_research_write_performed": false,
+  "activated_by_this_agent": false
+}

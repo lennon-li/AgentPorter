@@ -1,0 +1,35 @@
+{
+  "protocol": "laya-rrlite-source-acquisition-v1",
+  "repository": "ropensci-archive/rrlite",
+  "cited_commit": "b390ba0afb5f1613572ba4ce3d5d733987edd0bd",
+  "github_blob_sha1": "bba6bf7f836a0ebdc52f2554ab32b8bd7410ed1d",
+  "source_sha256": "015761af6d0374967c6eb563b211eab208b3b9572673176e659c74fb1d107007",
+  "source_bytes": 4271,
+  "api_response_receipts": [
+    {
+      "kind": "commit",
+      "url": "https://api.github.com/repos/ropensci-archive/rrlite/commits/b390ba0afb5f1613572ba4ce3d5d733987edd0bd",
+      "retrieved_at": "2026-10-21T20:19:33.727223+00:00",
+      "body_bytes": 4920,
+      "response_body_sha256": "68537a5b67a27a49b66c0a0fe86fd8d72bbee10130c34ef6945cbcd32664f09c",
+      "exit_code": 0,
+      "redirects_followed": false
+    },
+    {
+      "kind": "source",
+      "url": "https://api.github.com/repos/ropensci-archive/rrlite/contents/src/rrlite.c?ref=b390ba0afb5f1613572ba4ce3d5d733987edd0bd",
+      "retrieved_at": "2026-10-21T20:19:34.528979+00:00",
+      "body_bytes": 6886,
+      "response_body_sha256": "25337cf0a4334c020ff95073cd439d6bf885154eb8a8c33bc2c2b17f7fa90aaa",
+      "exit_code": 0,
+      "redirects_followed": false
+    }
+  ],
+  "canonical_repository_discovery": "Approved GitHub search plus direct canonical API GET; no redirects followed",
+  "source_pointer_resolved": true,
+  "independently_adjudicated_semantic_defects": 0,
+  "training_eligible": false,
+  "evaluation_eligible": false,
+  "rights_cleared": false,
+  "reviewer_text_is_not_ground_truth": true
+}

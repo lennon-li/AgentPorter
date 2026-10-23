@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "archive_sha256": "fb6b36a63de7738db09baa6aca0e1b2fcb825ddf2778c1357c6ca3dde084976d",
+  "base_sha256": "e35b83635f96feb97b533709bbad1c7b5c4054bf6f9c8bcc7d51af8dacd664a5",
+  "manifest_entries": 26346,
+  "source_files": 67,
+  "expanded_bytes": 3458290439,
+  "package_fingerprint": "4df2fb253af0f9ccb8e93ebc4797bd1214c51e44bceca27dbc5df3b7e2c437b8",
+  "version": "20261021T202703.839741Z",
+  "changed_release_files": [
+    "operator-plan/public-https.yaml.proposed",
+    "src/agentporter/action_policy.py",
+    "src/agentporter/https_download.py",
+    "src/agentporter/rest/routers/exec.py",
+    "src/agentporter/rest/schemas.py",
+    "src/agentporter/scoped_https.py",
+    "src/agentporter/server.py",
+    "venv/lib/python3.13/site-packages/agentporter_development.pth",
+    "venv/pyvenv.cfg"
+  ],
+  "other_worker_profiles_changed": false,
+  "production_changed": false,
+  "installed": false,
+  "payload_executed": false,
+  "independently_reviewed": false
+}
