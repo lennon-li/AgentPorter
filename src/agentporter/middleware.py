@@ -89,6 +89,17 @@ class SecurityMiddleware:
             )
             return
 
+        # MCP clients probe OAuth metadata without the server's API key.
+        # AgentPorter does not advertise OAuth, so let these exact read-only
+        # paths reach the app's 404 after host, rate, and size checks. A 401
+        # here looks like malformed OAuth metadata to tunnel clients.
+        if scope.get("method", "GET").upper() in {"GET", "HEAD"} and scope.get("path") in {
+            "/.well-known/oauth-protected-resource/mcp",
+            "/.well-known/oauth-protected-resource",
+        }:
+            await self.app(scope, receive, send)
+            return
+
         raw_header = headers.get(self.header_bytes)
         if raw_header is None and self.legacy_header_bytes:
             raw_header = headers.get(self.legacy_header_bytes)
