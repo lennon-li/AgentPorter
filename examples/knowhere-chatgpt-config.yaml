@@ -1,0 +1,18 @@
+# Separate from ~/.config/agentporter/config.yaml.
+server:
+  host: "127.0.0.1"
+  port: 8776
+  name: "Knowhere AgentPorter for ChatGPT"
+
+security:
+  auth: "api_key"
+  header_name: "X-AgentPorter-Key"
+  allowed_hosts:
+    - "127.0.0.1"
+    - "127.0.0.1:*"
+    - "localhost"
+    - "localhost:*"
+
+sandbox:
+  backend: "bubblewrap"
+  network: false

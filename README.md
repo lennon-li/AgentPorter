@@ -203,6 +203,8 @@ agentporter serve --host 127.0.0.1 --port 8765
 - [Local setup](docs/local-setup.md)
 - [Deployment and verified activation](docs/deployment.md)
 - [MCP clients](docs/mcp-clients.md)
+- [ChatGPT access through an OpenAI Secure MCP Tunnel](docs/openai-tunnel-setup.md)
+- [Knowhere AgentPorter and ChatGPT setup runbook](setup.md)
 - [Worker delegation guide](docs/delegation-guide.md)
 - [Named-agent roster and action authorization matrix](docs/agent-roster-action-policy.md)
 - [Owner approval, overrides and sandbox design](docs/action-authorization-design.md)
