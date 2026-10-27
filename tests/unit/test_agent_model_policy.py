@@ -95,6 +95,9 @@ def test_dispatch_inherited_prohibited_model_uses_fallback(workspace_registry, t
         assert adapter.last_model == OPENAI_FALLBACK_MODEL
         assert result["requested_model"] == OPENAI_FALLBACK_MODEL
         assert result["configured_model"] == "gpt-5.6-luna"
+        assert result["model"] == OPENAI_FALLBACK_MODEL
+        assert result["effective_model"] == OPENAI_FALLBACK_MODEL
+        assert result["actual_model"] == "unknown"
     finally:
         broker.job_manager.cancel(result["job_id"])
 
@@ -106,12 +109,31 @@ def test_dispatch_explicit_prohibited_model_is_rejected(workspace_registry, tmp_
         broker.dispatch_agent("fake-openai", "test", "test-ws", model="gpt-5.6-luna", read_only=False)
 
 
-def test_dispatch_explicit_allowed_model_is_preserved(workspace_registry, tmp_path):
+@pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-6.1-sol"])
+def test_dispatch_explicit_allowed_model_is_preserved(workspace_registry, tmp_path, model):
     broker, adapter = _fake_broker(workspace_registry, tmp_path)
-    result = broker.dispatch_agent("fake-openai", "test", "test-ws", model="gpt-6-luna", read_only=False)
+    result = broker.dispatch_agent("fake-openai", "test", "test-ws", model=model, read_only=False)
 
     try:
-        assert adapter.last_model == "gpt-6-luna"
-        assert result["requested_model"] == "gpt-6-luna"
+        assert adapter.last_model == model
+        assert result["requested_model"] == model
+        assert result["configured_model"] == "gpt-5.6-luna"
+        assert result["model"] == model
+        assert result["effective_model"] == model
+        assert result["actual_model"] == "unknown"
     finally:
         broker.job_manager.cancel(result["job_id"])
+
+
+def test_dispatch_preserves_allowed_inherited_model(workspace_registry, tmp_path):
+    broker, adapter = _fake_broker(workspace_registry, tmp_path)
+    adapter.default_model = "gpt-6.1-sol"
+
+    result = broker.dispatch_agent("fake-openai", "test", "test-ws", read_only=False)
+
+    assert adapter.last_model == ""
+    assert result["requested_model"] == ""
+    assert result["configured_model"] == "gpt-6.1-sol"
+    assert result["model"] == "gpt-6.1-sol"
+    assert result["effective_model"] == "gpt-6.1-sol"
+    assert result["actual_model"] == "unknown"
