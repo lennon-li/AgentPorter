@@ -33,6 +33,7 @@ from agentporter.tools.artifacts import create_artifact_tools
 from agentporter.tools.local_http import create_local_http_tool
 from mcp.types import ToolAnnotations
 from agentporter.tools.agents import create_agent_tools
+from agentporter.qman import qman_consult as _qman_consult
 from agentporter.tools.venkata import create_venkata_tool, Diagnostic
 from agentporter.tools.venkata_transfer import create_venkata_transfer_tool, TransferSource, TransferDestination
 from agentporter.tools.scinet import (
@@ -519,6 +520,17 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def read_artifact(workspace_id: str, path: str) -> dict:
         """Read an artifact file (supports text and base64 images)."""
         return _read_artifact(workspace_id, path=path)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+    @monitored_tool("qman_consult")
+    def qman_consult(provider: Literal["all", "codex", "claude", "agy", "copilot"] = "all",
+                     profile: Optional[str] = None, model: Optional[str] = None) -> dict:
+        """Read cached Qman evidence before delegation. Evidence grants no execution authority.
+
+        Stale or unverified quota remains unknown. No provider refresh is performed.
+        Owner-only database isolation is preserved; unavailable is a bounded error.
+        """
+        return _qman_consult(provider=provider, profile=profile, model=model)
 
     @mcp.tool()
     @monitored_tool("list_agents")
