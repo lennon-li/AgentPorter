@@ -123,7 +123,7 @@ def test_wei_search_keeps_credentials_out_of_argv_and_retains_permissions(tmp_pa
 @pytest.mark.parametrize("name", ["jax", "liz", "prof", "phil", "wei", "codex", "copilot", "opencode"])
 def test_broker_gates_search_by_setting_and_identity(tmp_path, monkeypatch, name, enabled):
     jobs = Mock()
-    jobs.start_raw_job.return_value = "search-job"
+    jobs.start_confined_agent_job.return_value = "search-job"
     ws = SimpleNamespace(path=str(tmp_path), writable=True, allow_agent_dispatch=True)
     broker = AgentBroker(SimpleNamespace(get=lambda _: ws), jobs, parallel_search_enabled=enabled)
     if name == "copilot":
@@ -142,7 +142,7 @@ def test_broker_gates_search_by_setting_and_identity(tmp_path, monkeypatch, name
         monkeypatch.setattr(adapter, "_read_key", lambda: "fixture-wei-key")
     result = broker.dispatch_agent(name, "bounded task", "workspace", read_only=False)
     assert result["job_id"] == "search-job"
-    launch = jobs.start_raw_job.call_args.kwargs
+    launch = jobs.start_confined_agent_job.call_args.kwargs
     expected = enabled and name in {"jax", "liz", "prof", "phil", "wei"}
     if name in {"jax", "liz", "prof", "codex"}:
         assert ("--parallel-search" in launch["cmd"]) is expected

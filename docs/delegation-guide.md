@@ -1,5 +1,17 @@
 # Worker Delegation Guide
 
+The public MCP/REST delegation interface uses the [seven named agents and action policy](agent-roster-action-policy.md). Generic runtime adapter IDs remain internal.
+
+**Release-stage restriction:** The work-in-progress hardening candidate
+temporarily rejects *all* worker launches until a kernel-confined worker
+backend exists, while retaining the seven discoverable identities and their
+configured models. The launch instructions below describe the historical
+deployed behavior and intended future permissions; they are **not** proof
+that this candidate can currently delegate. Inspect `delegatable` and
+`confinement_status` separately from `available`.
+Do not deploy the WIP candidate as a functioning seven-agent service.
+
+
 AgentPorter worker delegation is asynchronous. A successful `dispatch_agent` response means the worker process started; it does **not** mean the worker finished or that its final answer has been collected.
 
 ## Writing within authorized workspaces

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import logging
 import re
 import sys
@@ -18,7 +17,6 @@ from agentporter.agents.adapters.opencode import OpenCodeAdapter, WeiAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
 from agentporter.agents.policy import ExecutionPolicy
 from agentporter.qman import shadow_consult, record_shadow
-from agentporter.agents.isolated_codex import safe_launcher_environment
 from agentporter.workspaces.registry import WorkspaceRegistry
 
 if TYPE_CHECKING:
@@ -149,6 +147,9 @@ class AgentBroker:
                     routing_note = f" (policy override from {configured_model})"
             route_target = effective_model or "BLOCKED"
             results.append({
+                # CLI discovery is not an authorization to launch the worker.
+                "delegatable": False,
+                "confinement_status": "blocked_pending_os_confinement",
                 "agent": key,
                 "worker_cli": runtime,
                 "alias": alias,
@@ -198,6 +199,13 @@ class AgentBroker:
         ws = self.workspace_registry.get(workspace_id)
         if not ws.allow_agent_dispatch:
             raise PermissionError(f"Workspace '{workspace_id}' does not allow agent dispatch")
+        # The host-user Popen path has no kernel-enforced boundary; CLI flags
+        # and prompt policy cannot prevent publication or reading host secrets.
+        # Re-enable only via a verified, broker-owned confined launch method.
+        if not callable(getattr(self.job_manager, "start_confined_agent_job", None)):
+            raise PermissionError(
+                "Delegated execution blocked: OS-confined agent launcher is not installed"
+            )
         if allow_commit or allow_push:
             raise PermissionError("Delegated commit/push require a separate operator-verified approval; caller booleans are insufficient")
         effective_read_only = read_only or not ws.writable
@@ -237,29 +245,11 @@ class AgentBroker:
             else ""
         )
 
-        git_clean = True
-        git_dir = os.path.join(ws.path, ".git")
-        if os.path.exists(git_dir):
-            try:
-                env = os.environ.copy()
-                env.update({
-                    "GIT_CONFIG_NOSYSTEM": "1",
-                    "GIT_CONFIG_GLOBAL": "/dev/null",
-                    "GIT_OPTIONAL_LOCKS": "0",
-                    "GIT_PAGER": "cat",
-                    "GIT_EXTERNAL_DIFF": "",
-                })
-                res = subprocess.run(
-                    ["git", "-c", "core.fsmonitor=false", "status", "--short"],
-                    cwd=ws.path,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    env=env,
-                )
-                git_clean = not bool(res.stdout.strip())
-            except Exception:
-                pass
+        # Git cleanliness is not probed with host-user subprocesses from
+        # this broker. The future confined worker backend may report a verified
+        # snapshot or the client may request an independently sandboxed git_status
+        # action. Unknown is safer than host execution or an invented "clean".
+        git_clean = None
 
         runtime, alias, role, persona = identities.get(
             agent_key, ("codex" if isinstance(adapter, CodexAdapter) else "opencode" if isinstance(adapter, OpenCodeAdapter) else agent_key,
@@ -309,6 +299,9 @@ class AgentBroker:
             **controls,
         )
         if isinstance(adapter, CodexAdapter):
+            # Import lazily to prevent duplicate sys.modules entry on -m launch.
+            from agentporter.agents.isolated_codex import safe_launcher_environment
+
             # Force a temporary, screened CODEX_HOME and verify the actual MCP
             # roster before the CLI can start. The user's home config can
             # contain mutating MCP tools and inherited network permissions.
@@ -338,7 +331,7 @@ class AgentBroker:
 
         qman_shadow = shadow_consult(agent_key, effective_model)
         try:
-            job_id = self.job_manager.start_raw_job(
+            job_id = self.job_manager.start_confined_agent_job(
                 workspace_id=workspace_id,
                 workspace_path=ws.path,
                 cmd=cmd,
@@ -349,6 +342,7 @@ class AgentBroker:
                 reasoning_level=requested_reasoning or configured_reasoning,
                 cli_version=cli_ver,
                 timeout_seconds=900,
+                policy=policy,
                 env=launch_env,
             )
         except Exception:

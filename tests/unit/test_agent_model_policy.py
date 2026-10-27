@@ -1,6 +1,7 @@
 """Regression tests for prohibited and remapped worker models."""
 
 import pytest
+from unittest.mock import Mock
 
 from agentporter.agents.adapters.base import AgentAdapter
 from agentporter.agents.broker import AgentBroker, OPENAI_FALLBACK_MODEL
@@ -49,6 +50,9 @@ def _fake_broker(workspace_registry, tmp_path):
     broker = AgentBroker(workspace_registry, JobManager(tmp_path / "state"))
     adapter = FakeOpenAIAdapter()
     broker.adapters = {adapter.name: adapter}
+    # Test routing through a synthetic confinement capability only; never launch a host process.
+    broker.job_manager.start_confined_agent_job = Mock(return_value="test-confined-job")
+    broker.job_manager.cancel = Mock()
     return broker, adapter
 
 

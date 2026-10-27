@@ -89,6 +89,17 @@ class SecurityMiddleware:
             )
             return
 
+        # MCP clients probe OAuth metadata without the server's API key.
+        # AgentPorter does not advertise OAuth, so let these exact read-only
+        # paths reach the app's 404 after host, rate, and size checks. A 401
+        # here looks like malformed OAuth metadata to tunnel clients.
+        if scope.get("method", "GET").upper() in {"GET", "HEAD"} and scope.get("path") in {
+            "/.well-known/oauth-protected-resource/mcp",
+            "/.well-known/oauth-protected-resource",
+        }:
+            await self.app(scope, receive, send)
+            return
+
         raw_header = headers.get(self.header_bytes)
         if raw_header is None and self.legacy_header_bytes:
             raw_header = headers.get(self.legacy_header_bytes)
@@ -106,9 +117,11 @@ class SecurityMiddleware:
             return
 
         if scope.get("method", "GET").upper() in {"POST", "PUT", "PATCH"}:
-            # MCP Streamable HTTP may keep a POST request body open while the
-            # server handles the session. Do not wait for end-of-body on MCP;
-            # that would deadlock the transport and block the event loop.
+            # The MCP SDK's RequestBodyLimitMiddleware enforces a byte cap
+            # before Starlette's response machinery, including chunked
+            # requests without Content-Length. Raising from downstream
+            # receive() here would be misreported as HTTP 500 by Starlette.
+            # Do not prebuffer or wait for EOF in this outer middleware.
             if scope.get("path") in {"/mcp", "/mcp/"}:
                 await self.app(scope, receive, send)
                 return

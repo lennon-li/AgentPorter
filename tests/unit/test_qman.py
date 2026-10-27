@@ -65,7 +65,7 @@ def gateway(tmp_path,monkeypatch):
     monkeypatch.setenv("QMAN_PREFLIGHT_MODE","shadow")
     ws=SimpleNamespace(path=str(tmp_path),writable=True,allow_agent_dispatch=True)
     jobs=Mock()
-    jobs.start_raw_job.return_value="job-unit"
+    jobs.start_confined_agent_job.return_value="job-unit"
     broker=AgentBroker(SimpleNamespace(get=lambda _:ws),jobs,config_dir=tmp_path)
     adapter=broker.adapters["jax"]
     adapter.executable_override="/usr/bin/false"
@@ -83,7 +83,7 @@ def test_real_tool_broker_path_keeps_routing(gateway,monkeypatch,caplog,observat
         result=dispatch(agent="jax",task="PRIVATE PROMPT",workspace_id="unit")
     read.assert_called_once_with("codex","jax",model="gpt-6.1-sol")
     assert result["selected_agent"] == "jax"
-    assert jobs.start_raw_job.call_args.kwargs["agent"] == "jax"
+    assert jobs.start_confined_agent_job.call_args.kwargs["agent"] == "jax"
     assert "PRIVATE PROMPT" not in caplog.text
     event=json.loads(caplog.records[-1].message)
     assert event["would_change_decision"] is None
@@ -115,7 +115,7 @@ def test_existing_gates_cannot_be_bypassed_by_headroom(gateway,monkeypatch,denia
         monkeypatch.setattr(broker.adapters["agy"],"detect",lambda:{"is_installed":True})
     with pytest.raises((PermissionError,ValueError)):
         broker.dispatch_agent(agent,"task","unit",**args)
-    jobs.start_raw_job.assert_not_called()
+    jobs.start_confined_agent_job.assert_not_called()
     read.assert_not_called()
 
 

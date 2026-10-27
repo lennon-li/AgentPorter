@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenAI Secure MCP Tunnel for knowhere AgentPorter
+After=network-online.target agentporter-chatgpt.service
+Wants=network-online.target agentporter-chatgpt.service
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/agentporter/openai-tunnel.env
+Environment="MCP_EXTRA_HEADERS=X-AgentPorter-Key: env:AGENTPORTER_API_KEY"
+Environment="MCP_DISCOVERY_EXTRA_HEADERS=X-AgentPorter-Key: env:AGENTPORTER_API_KEY"
+ExecStart=%h/.local/bin/tunnel-client run --profile knowhere-agentporter
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

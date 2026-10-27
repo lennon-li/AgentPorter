@@ -18,7 +18,7 @@ def broker(tmp_path, monkeypatch):
     exe.chmod(0o755)
     ws = SimpleNamespace(path=str(tmp_path), writable=True, allow_agent_dispatch=True)
     jobs = Mock()
-    jobs.start_raw_job.return_value = "job-test"
+    jobs.start_confined_agent_job.return_value = "job-test"
     gateway = AgentBroker(SimpleNamespace(get=lambda _: ws), jobs)
     adapter = gateway.adapters["jax"]
     adapter.executable_override = str(exe)
@@ -34,23 +34,26 @@ def broker(tmp_path, monkeypatch):
 def test_default_on_writable_workspace_is_read_only(broker):
     gateway, _, jobs = broker
     result = gateway.dispatch_agent("jax", "inspect only", "test")
-    cmd = jobs.start_raw_job.call_args.kwargs["cmd"]
+    cmd = jobs.start_confined_agent_job.call_args.kwargs["cmd"]
     assert cmd[cmd.index("--sandbox") + 1] == "read-only"
     assert "Authorization: READ-ONLY" in cmd[-1]
     assert "Workspace edits: NOT allowed (read-only)" in cmd[-1]
     assert "MAY MODIFY FILES WITHIN SCOPE" not in cmd[-1]
     assert result["read_only"] is True
-    assert jobs.start_raw_job.call_args.kwargs["env"] is not None
-    assert jobs.start_raw_job.call_args.kwargs["cmd"][1:4] == ["-I", "-m", "agentporter.agents.isolated_codex"]
+    assert jobs.start_confined_agent_job.call_args.kwargs["policy"].workspace_write is False
+    assert result["git_clean_at_dispatch"] is None  # No host-user Git subprocess.
+    assert jobs.start_confined_agent_job.call_args.kwargs["env"] is not None
+    assert jobs.start_confined_agent_job.call_args.kwargs["cmd"][1:4] == ["-I", "-m", "agentporter.agents.isolated_codex"]
 
 
 def test_explicit_edit_opt_in_is_writable(broker):
     gateway, _, jobs = broker
     result = gateway.dispatch_agent("jax", "authorized scoped edit", "test", read_only=False)
-    cmd = jobs.start_raw_job.call_args.kwargs["cmd"]
+    cmd = jobs.start_confined_agent_job.call_args.kwargs["cmd"]
     assert cmd[cmd.index("--sandbox") + 1] == "workspace-write"
     assert "Authorization: MAY MODIFY FILES WITHIN SCOPE" in cmd[-1]
     assert result["read_only"] is False
+    assert jobs.start_confined_agent_job.call_args.kwargs["policy"].workspace_write is True
 
 
 @pytest.mark.parametrize("flag", ["allow_commit", "allow_push"])
@@ -58,7 +61,7 @@ def test_read_only_rejects_commit_or_push_override(broker, flag):
     gateway, _, jobs = broker
     with pytest.raises(PermissionError, match="operator-verified approval"):
         gateway.dispatch_agent("jax", "inspect only", "test", **{flag: True})
-    jobs.start_raw_job.assert_not_called()
+    jobs.start_confined_agent_job.assert_not_called()
 
 
 def test_writable_workspace_rejects_unsupported_read_only_adapter(broker, monkeypatch):
@@ -66,20 +69,25 @@ def test_writable_workspace_rejects_unsupported_read_only_adapter(broker, monkey
     monkeypatch.setattr(gateway.adapters["agy"], "detect", lambda: {"is_installed": True})
     with pytest.raises(PermissionError, match="cannot enforce read-only"):
         gateway.dispatch_agent("agy", "read only", "test")
-    jobs.start_raw_job.assert_not_called()
+    jobs.start_confined_agent_job.assert_not_called()
 
 
 def test_read_only_workspace_cannot_be_overridden(broker):
     gateway, workspace, jobs = broker
     workspace.writable = False
     result = gateway.dispatch_agent("jax", "test", "test", read_only=False)
-    cmd = jobs.start_raw_job.call_args.kwargs["cmd"]
+    cmd = jobs.start_confined_agent_job.call_args.kwargs["cmd"]
     assert cmd[cmd.index("--sandbox") + 1] == "read-only"
     assert result["read_only"] is True
+    assert jobs.start_confined_agent_job.call_args.kwargs["policy"].workspace_write is False
+    assert result["git_clean_at_dispatch"] is None  # No host-user Git subprocess.
 
 
 def test_mcp_tool_wrapper_defaults_read_only():
     gateway = Mock()
+    gateway.list_agents.return_value = [
+        {"agent": "jax", "worker_cli": "codex", "available": True}
+    ]
     gateway.dispatch_agent.return_value = {"job_id": "job-test"}
     _, dispatch = create_agent_tools(gateway)
     dispatch(agent="jax", task="inspection", workspace_id="test")
@@ -181,4 +189,4 @@ def test_legacy_wei_alias_cannot_bypass_free_model_policy(tmp_path, monkeypatch)
             "wei", "do not execute", "test", read_only=False,
             model="opencode-go/glm-5.3-flash",
         )
-    jobs.start_raw_job.assert_not_called()
+    jobs.start_confined_agent_job.assert_not_called()

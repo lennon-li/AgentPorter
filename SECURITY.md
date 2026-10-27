@@ -14,53 +14,53 @@ boundaries are part of the product contract.
 
 - target workspace mounted read-write or read-only according to configuration;
 - private `/tmp`;
-- host home, SSH credentials, Windows mounts, and Docker sockets omitted;
-- read-only system runtimes;
-- cleared environment, synthetic `HOME=/tmp`, and host `.gitconfig` for commit metadata;
-- unshared network namespace with outbound networking disabled by default for MCP calls; REST/GPT Action `exec_run` and `exec_start` default to `network_access=true` (an explicit `false` runs offline). Network-enabled runs share the host network and mount host SSH and GitHub credentials read-only;
+- no host home, SSH keys, GitHub credential directory, SSH-agent socket,
+  global Git configuration, Windows mounts, or Docker socket are mounted;
+- read-only system runtimes, private environment, and synthetic `HOME=/tmp`;
+- network namespaces are always unshared for generic execution. Both REST
+  and MCP default offline; `network_access=true` is rejected without a trusted
+  approval/egress broker, which is not implemented in this candidate;
+- the top-level `.git` control directory/file is mounted read-only even if
+  the workspace itself is writable. This does **not** prevent a writable
+  sandbox process from creating nested repos or writing alternate Git files;
 - `--die-with-parent`, so background helpers (dbus, git credential caches) are killed with the command instead of holding the run open;
-- bounded synchronous output;
-- bounded async job logs and execution timeout.
+- bounded synchronous output collected incrementally with a hard byte
+  ceiling; overproducing processes are killed instead of buffered in full;
+- asynchronous job output streamed through bounded pipes; each stream has a
+  strict byte budget. Exhaustion or timeout kills the child's process group,
+  including ordinary descendants retaining inherited output descriptors.
+  Detached host-user descendants can still escape a process-group boundary;
+  separate OS identity / cgroup containment remains required.
 
 AgentPorter does not yet impose cgroup CPU/memory quotas. Treat time and output
 limits as denial-of-service mitigation, not complete resource accounting.
 
-### Worker delegation: host-user boundary
+### Worker delegation: candidate fails closed; confined launcher pending
 
-`dispatch_agent` launches installed coding-agent CLIs as the host user because
-those programs normally require provider credentials and model API access.
-Every dispatch is read-only by default. Explicit `read_only: false` and a
-writable, delegation-enabled workspace are needed for edits. Delegated
-`allow_commit` and `allow_push` flags are rejected until server-side,
-operator-verified approval exists; caller booleans do not count as proof.
+The seven named identities remain discoverable even when a CLI is installed.
+**Installed/available is different from authorized/delegatable**; the
+candidate reports `delegatable=false` and
+`confinement_status=blocked_pending_os_confinement` for every worker. An
+attempt to `dispatch_agent`, whether `read_only=true` or a requested write,
+raises `PermissionError` before CLI launch. The broker has no raw-launcher
+fallback, and `JobManager.start_raw_job(agent=...)` refuses host-user agent
+processes. Only a future *trusted, kernel-confined* agent launch path may
+restore delegation.
 
-Codex family workers launch through `python -I -m` with an environment
-allowlist to prevent workspace-controlled module shadowing, then receive a
-short-lived isolated configuration home
-with selected model-provider options and their existing authentication identity.
-Unrelated MCP servers/hooks/plugins are not copied. Runtime MCP listing must
-confirm no enabled tools except the opt-in, fixed Parallel Search endpoint;
-failed checks refuse the worker. Project-level MCP/plugin configuration is refused. Worker command sandbox network access is
-explicitly disabled, irrespective of inherited persistent settings.
-Only model-provider/authentication environment variables are retained.
-These are defenses in depth, **not OS-level isolation**. The model client
-must still contact its provider, and host-user file access may expose
-information beyond the registered workspace.
+This is a deliberate temporary **availability regression** relative to the
+running release; do not deploy it as a feature-complete seven-agent service.
+It fixes the immediate unsafe host worker execution path by disabling it,
+rather than solving the final OS isolation and cloud-model-egress problem.
+A confined launcher must provide strictly scoped filesystem writes,
+credential isolation, and model-only egress for each named runtime without
+switching any profile/model/provider. Existing CLI-specific read-only
+switches are still defenses in depth, not a substitute for isolation.
+The user's voice and ChatGPT client consent do not mint a server-trusted
+approval receipt for commits/pushes.
 
-Consequences:
-
-- worker CLIs are **not** contained by AgentPorter's Bubblewrap sandbox;
-- worker processes may access whatever the host account and their own CLI
-  sandbox/policy allow;
-- a read-only workspace is only eligible for an adapter that can enforce
-  read-only execution at the CLI level, and no configured mutable external
-  tools in its isolated profile;
-- prompt wording is not treated as a security boundary;
-- model/reasoning overrides are accepted only when the adapter can actually
-  enforce them.
-
-Users should only enable `allow_agent_dispatch` for workspaces where this
-host-level trust is acceptable.
+See the [authorization design](docs/action-authorization-design.md) and
+[53-action classification](docs/agent-roster-action-policy.md) for the
+pending approval issuer, publisher service, and negative acceptance tests.
 
 ## 2. Ingress security
 
@@ -71,8 +71,9 @@ AgentPorter defaults to:
 - only localhost Host headers;
 - constant-time key comparison;
 - per-client rate limiting;
-- a request-body ceiling enforced both from `Content-Length` and actual ASGI
-  body bytes.
+- request-body limits: REST counts declared and actual ASGI bytes; MCP
+  uses the SDK's native pre-handler 413 enforcement, capped at the lower of
+  the configured limit and its 4 MiB default (including streamed bodies).
 
 Remote access is opt-in. Add only the specific tunnel/reverse-proxy hostname you
 control to `allowed_hosts`. Broad tunnel-domain wildcards are not defaults.
@@ -107,8 +108,10 @@ A local workspace may independently allow or deny:
 - worker-agent dispatch;
 - exact loopback HTTP ports.
 
-`writable: false` controls file mutation and direct sandbox mounts. Worker
-agents additionally require an adapter capable of enforcing read-only mode.
+`writable: false` controls file mutation and direct sandbox mounts.
+Git fetch mutates FETCH_HEAD, refs and objects and is denied in a read-only
+workspace; pull uses fast-forward-only mode to prevent implicit merge commits.
+Worker agents require an adapter capable of enforcing read-only mode.
 
 ## 5. Loopback HTTP
 
@@ -120,14 +123,33 @@ It is disabled by default for each workspace. A request is allowed only when
 the destination port appears in that workspace's `local_http_ports` list.
 Redirect following is disabled.
 
-## 6. Git inspection
+## 6. Git publication and independent approval boundary
 
-Only read operations are exposed: status, diff, log, and show. AgentPorter
-suppresses global/system Git configuration, external diff helpers, fsmonitor,
-and pagers where practical, and bounds returned output.
+Direct Git inspection includes status, diff, log, show and branch listing;
+additional tools include fetch, fast-forward-only pull, staging and checkout.
+The dedicated `git_commit` and `git_push` endpoints return permission
+denied (REST HTTP 403) until independently verified owner approval receipts
+are implemented. Delegated workers also reject caller-supplied commit/push
+flags without a trusted receipt.
 
-Repository-local Git configuration still exists on the host, so Git inspection
-should be used only for registered workspaces the host user trusts.
+**These dedicated locks are not a global publication guarantee.**
+Arbitrary writable execution (especially REST's current networking default),
+host-user worker CLIs, local HTTP side effects and other external capabilities
+can still mutate Git metadata or publish without hitting the locked direct Git
+tools. Writable execution can also access host SSH/GitHub credentials when
+networking is enabled; a read-only credential mount does not prevent disclosure.
+The API key authenticates the client but is not a signed, operation-specific
+approval from the owner. Client-side ChatGPT **Always ask** does not prove an
+operator approval to AgentPorter.
+
+This boundary is a pending architectural risk, not resolved by the seven-agent
+roster change. Before claiming comprehensive action-policy enforcement, add a
+server-verified, short-lived approval protocol and isolate unrestricted
+execution/worker processes from Git and publication credentials. Review
+the complete [action authorization matrix](docs/agent-roster-action-policy.md).
+
+Repository-local Git configuration still exists on the host. Use these
+operations only for trusted, registered workspaces.
 
 ## 7. Runtime state
 

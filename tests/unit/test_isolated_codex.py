@@ -148,7 +148,7 @@ def test_broker_does_not_accept_caller_publication_flags(tmp_path, monkeypatch):
     for field in ("allow_commit", "allow_push"):
         with pytest.raises(PermissionError, match="operator-verified approval"):
             broker.dispatch_agent("jax", "task", "ws", read_only=False, **{field: True})
-    broker.job_manager.start_raw_job.assert_not_called()
+    broker.job_manager.start_confined_agent_job.assert_not_called()
 
 
 def test_selected_profile_fails_closed(tmp_path):
@@ -228,3 +228,23 @@ def test_unknown_or_invalid_account_constraints_fail_closed(tmp_path, value):
     (tmp_path / "config.toml").write_text(value)
     with pytest.raises(RuntimeError, match="account constraint"):
         guard._clean_profile_data(tmp_path)
+
+
+def test_isolated_module_launch_has_no_runpy_double_import_warning(tmp_path):
+    import subprocess
+    import sys
+
+    source_root = Path(__file__).resolve().parents[2] / "src"
+    script = (
+        "import runpy,sys\n"
+        "sys.path.insert(0,sys.argv[1])\n"
+        "sys.argv=['isolated-codex','--help']\n"
+        "runpy.run_module('agentporter.agents.isolated_codex',run_name='__main__')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", script, str(source_root)],
+        cwd=tmp_path, capture_output=True, text=True, timeout=12,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "RuntimeWarning" not in result.stderr
+    assert "Isolated Codex" not in result.stderr

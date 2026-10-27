@@ -12,7 +12,7 @@ from logging.handlers import RotatingFileHandler
 from starlette.types import ASGIApp
 import uvicorn
 from mcp.server.mcpserver import MCPServer
-from mcp.server.transport_security import TransportSecuritySettings
+from mcp.server.transport_security import DEFAULT_MAX_REQUEST_BODY_SIZE, TransportSecuritySettings
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -25,6 +25,7 @@ from agentporter.workspaces.registry import WorkspaceRegistry
 from agentporter.sandbox.bubblewrap import BubblewrapSandbox
 from agentporter.tools.jobs import JobManager
 from agentporter.agents.broker import AgentBroker
+from agentporter.action_policy import OperatorActionPolicy
 from agentporter.tools.system import create_system_tools
 from agentporter.tools.files import create_file_tools
 from agentporter.tools.execution import create_execution_tools
@@ -102,12 +103,14 @@ def log_tool_event(tool_name: str, kwargs: dict, result: Any, duration: float, e
         pass
 
 
-def monitored_tool(tool_name: str):
+def _monitored_tool(tool_name: str, policy=None):
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(**kwargs):
             t0 = time.time()
             try:
+                if policy is not None:
+                    policy.check(tool_name, kwargs)
                 res = fn(**kwargs)
                 log_tool_event(tool_name, kwargs, res, time.time() - t0)
                 return res
@@ -138,6 +141,16 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         registry, job_manager, config_dir=getattr(config, "config_dir", None),
         parallel_search_enabled=getattr(getattr(config, "parallel_search", None), "enabled", False),
     )
+
+    # The same decorated callables are used by MCP and REST. An operator's
+    # protected mode file is loaded at startup, not from an agent request.
+    operator_policy = OperatorActionPolicy(
+        config.config_dir,
+        workspace_roots=[row["path"] for row in registry.list_all()],
+    )
+
+    def monitored_tool(tool_name: str):
+        return _monitored_tool(tool_name, policy=operator_policy)
 
     # Instantiate tool sets
     _get_capabilities, _list_workspaces, _workspace_info = create_system_tools(registry, sandbox)
@@ -535,7 +548,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     @mcp.tool()
     @monitored_tool("list_agents")
     def list_agents() -> list[dict]:
-        """List available CLI agent workers (Codex, Claude, OpenCode, Agy)."""
+        """List the seven named worker identities and live availability."""
         return _list_agents()
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
@@ -569,7 +582,9 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         "sandbox": sandbox,
         "job_manager": job_manager,
         "agent_broker": agent_broker,
+        "operator_action_policy": operator_policy,
         "tools": {
+            "server_deploy_info": server_deploy_info,
             "list_workspaces": list_workspaces,
             "workspace_info": workspace_info,
             "list_files": list_files,
@@ -631,8 +646,13 @@ def create_asgi_app(config: Config) -> ASGIApp:
     """Create Starlette ASGI application with Streamable HTTP and Security Middleware."""
     mcp, context = build_mcp_server(config)
     
+    # Let the MCP SDK reject oversized streamed bodies before Starlette
+    # generates a response; never relax its native four-MiB default.
     streamable_app = mcp.streamable_http_app(
-        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)
+        max_request_body_size=min(
+            config.security.max_payload_bytes, DEFAULT_MAX_REQUEST_BODY_SIZE
+        ),
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
 
     @asynccontextmanager
@@ -651,6 +671,12 @@ def create_asgi_app(config: Config) -> ASGIApp:
     
     app.state.tools = context["tools"]
 
+    @app.exception_handler(PermissionError)
+    async def permission_error_response(request, exc: PermissionError):
+        """Return authorization denials as 403 rather than HTTP 500."""
+        return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+
     @app.get("/health")
     async def health():
         return JSONResponse({"status": "healthy"})
@@ -659,7 +685,8 @@ def create_asgi_app(config: Config) -> ASGIApp:
     # host paths are never exposed through the tunnel without the API key.
     @app.get("/api/v1/server/deploy-info", operation_id="server_deploy_info")
     async def server_deploy_info():
-        return JSONResponse(deploy_info())
+        # Enforce the same operator policy as the MCP tool.
+        return JSONResponse(context["tools"]["server_deploy_info"]())
     
     app.include_router(api_router, prefix="/api/v1")
     # streamable_http_app already serves its endpoint at /mcp. Mounting it at

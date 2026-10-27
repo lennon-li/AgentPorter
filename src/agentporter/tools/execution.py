@@ -23,6 +23,11 @@ def create_execution_tools(
         timeout_seconds: int = 30,
         network_access: bool = False,
     ) -> dict:
+        if network_access:
+            raise PermissionError(
+                "Networked generic execution requires independent approval and "
+                "scoped egress; unavailable"
+            )
         ws = _workspace(workspace_id)
         return sandbox.run(
             workspace_path=ws.path,
@@ -40,6 +45,11 @@ def create_execution_tools(
         timeout_seconds: int = 300,
         network_access: bool = False,
     ) -> dict:
+        if network_access:
+            raise PermissionError(
+                "Networked generic execution requires independent approval and "
+                "scoped egress; unavailable"
+            )
         ws = _workspace(workspace_id)
         timeout = sandbox.clamp_timeout(timeout_seconds)
         bwrap_cmd = sandbox.build_bwrap_args(
