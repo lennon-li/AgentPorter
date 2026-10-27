@@ -1,0 +1,22 @@
+--- a/src/agentporter/agents/provider_egress.py
++++ b/src/agentporter/agents/provider_egress.py
+@@ -59,6 +59,9 @@
+         'api.enterprise.githubcopilot.com')},
+ }
+ RULES['prof'] = RULES['liz']
++# Native Copilot validates the selected account before opening model APIs.
++# Admit that read only; repository APIs, login and token issuance remain denied.
++RULES['phil']['api.github.com'] = frozenset({('GET', '/copilot_internal/user')})
+ MAX_HEADER = 32768
+ MAX_BODY = 16 * 1024 * 1024
+ TOKEN = re.compile(rb"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
+@@ -75,6 +78,9 @@
+ def operation_allowed(rules: dict, host: str, method: str, target: str) -> bool:
+     if host not in rules or not target.startswith('/') or target.startswith('//'):
+         return False
++    # The observed bootstrap has no query parameters; reject alternate forms.
++    if host == 'api.github.com':
++        return (method, target) in rules[host] and target == '/copilot_internal/user'
+     parsed = urlsplit(target)
+     path = parsed.path
+     if (parsed.scheme or parsed.netloc or parsed.fragment or '%' in path or

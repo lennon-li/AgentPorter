@@ -1,0 +1,26 @@
+{
+  "active_source": "/opt/agentporter-development/versions/20261022T224004.423620Z/src",
+  "activated": false,
+  "files": {
+    "agentporter/agents/development.py": {
+      "baseline_sha256": "fee75deeedbb3dd0cd63b46da9cea22bfd1e0e96a03361a8249d4b11ceec317e",
+      "candidate_sha256": "b0d9d556d23e9e44f355dc37a50675106e9ed82c9a153ac3156ab767708bcaa2"
+    },
+    "agentporter/agents/development_egress.py": {
+      "baseline_sha256": "f1a52ee0fd387365bb32a6c4ccd39251846288afef713778aedcf44ed92ec872",
+      "candidate_sha256": "9722df4a12a912bdc2ee54da9e3af6cea6916df826bdf604ce59fe9754272ad8"
+    },
+    "agentporter/agents/provider_egress.py": {
+      "baseline_sha256": "a07743050b630dca2da4eb3a770eccbc52588cb5828062ecd4da74131fe2d434",
+      "candidate_sha256": "17b89d0ee7eea49b9e6b7b50d6f418a6342dabc1f414c5e22b3abc4e9120d759"
+    },
+    "agentporter/provenance.py": {
+      "baseline_sha256": "df2b39cb9954992b80c5adf1059b643b29c30aa628eb9e8cdb4ebabe2bfaa712",
+      "candidate_sha256": "106d933e5bc19a2b1c9ca45afb2bcfe0e2a87a8c5b5da1756b2586e4a5161e57"
+    },
+    "agentporter/tools/jobs.py": {
+      "baseline_sha256": "720e3a2679e83ab8d6593bcde0c03d543271a26243f1c7ff7fcf27adfcf45333",
+      "candidate_sha256": "934f87704ad01eb8aeddc3a8e0c1399587ded19af1d1f18630f566618f99fabb"
+    }
+  }
+}

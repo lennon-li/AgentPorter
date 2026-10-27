@@ -17,6 +17,7 @@ from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter, WeiAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
 from agentporter.agents.policy import ExecutionPolicy
+from agentporter.qman import shadow_consult, record_shadow
 from agentporter.agents.isolated_codex import safe_launcher_environment
 from agentporter.workspaces.registry import WorkspaceRegistry
 
@@ -335,19 +336,25 @@ class AgentBroker:
         else:
             launch_env = None
 
-        job_id = self.job_manager.start_raw_job(
-            workspace_id=workspace_id,
-            workspace_path=ws.path,
-            cmd=cmd,
-            agent=agent_key,
-            provider=provider,
-            model=configured_model,
-            requested_model=requested_model,
-            reasoning_level=requested_reasoning or configured_reasoning,
-            cli_version=cli_ver,
-            timeout_seconds=900,
-            env=launch_env,
-        )
+        qman_shadow = shadow_consult(agent_key, effective_model)
+        try:
+            job_id = self.job_manager.start_raw_job(
+                workspace_id=workspace_id,
+                workspace_path=ws.path,
+                cmd=cmd,
+                agent=agent_key,
+                provider=provider,
+                model=configured_model,
+                requested_model=requested_model,
+                reasoning_level=requested_reasoning or configured_reasoning,
+                cli_version=cli_ver,
+                timeout_seconds=900,
+                env=launch_env,
+            )
+        except Exception:
+            record_shadow(qman_shadow)
+            raise
+        record_shadow(qman_shadow, job_id=job_id, launched=True)
 
         return {
             "worker_cli": runtime,
