@@ -80,9 +80,9 @@ def test_real_tool_broker_path_keeps_routing(gateway,monkeypatch,caplog,observat
     monkeypatch.setattr(qman,"qman_consult",read)
     _,dispatch=create_agent_tools(broker)
     with caplog.at_level(logging.INFO,logger="agentporter.qman"):
-        result=dispatch(agent="jax",task="PRIVATE PROMPT",workspace_id="unit")
+        result=broker.dispatch_agent(agent="jax",task="PRIVATE PROMPT",workspace_id="unit")
     read.assert_called_once_with("codex","jax",model="gpt-6.1-sol")
-    assert result["selected_agent"] == "jax"
+    assert result["worker_cli"] == "codex"
     assert jobs.start_confined_agent_job.call_args.kwargs["agent"] == "jax"
     assert "PRIVATE PROMPT" not in caplog.text
     event=json.loads(caplog.records[-1].message)
@@ -128,3 +128,15 @@ def test_registration_readonly_metadata(tmp_path,monkeypatch):
     tool={t.name:t for t in mcp._tool_manager.list_tools()}["qman_consult"]
     assert tool.annotations.read_only_hint is True
     assert tool.annotations.destructive_hint is False
+
+
+def test_public_dispatch_still_refuses_unconfined_worker(gateway, monkeypatch):
+    broker, _, jobs = gateway
+    read = Mock(return_value=payload())
+    monkeypatch.setattr(qman, "qman_consult", read)
+    _, dispatch = create_agent_tools(broker)
+    with pytest.raises(PermissionError, match="confinement"):
+        dispatch(agent="jax", task="task", workspace_id="unit")
+    jobs.start_confined_agent_job.assert_not_called()
+    jobs.start_raw_job.assert_not_called()
+    read.assert_not_called()
