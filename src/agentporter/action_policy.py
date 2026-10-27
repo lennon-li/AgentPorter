@@ -18,6 +18,7 @@ ALLOW_ACTIONS = frozenset({
     "list_workspaces",
     "workspace_info",
     "list_agents",
+    "qman_consult",
     "list_files",
     "search_text",
     "read_file",

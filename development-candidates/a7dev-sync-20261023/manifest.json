@@ -1,0 +1,13 @@
+{
+  "baseline_source": "/tmp/agentporter-cranary-hardened-v19-harness/scripts/refresh-development-worker-credentials.py",
+  "baseline_sha256": "18b96a4112d460c10c25d34377cc9bb06f21e4aa4c1b27dcce0ebd969bf97811",
+  "candidate_sha256": "08ee71075a16e04be302b785ff5dd295fd50dab45204a766526eb96eecbd8ed8",
+  "activated": false,
+  "actual_credentials_read": false,
+  "artifact_hashes": {
+    "candidate.patch": "a024548a34b333469df3a18ad1a1ac2178fcb42ef1819a3cf23c0f703b799451",
+    "scripts/refresh-development-worker-credentials.py": "08ee71075a16e04be302b785ff5dd295fd50dab45204a766526eb96eecbd8ed8",
+    "tests/test_sync.py": "fafcef1c0e2ea7707fb606a35719b56abb1a6c18e71148364558b3f1ee5cdd75",
+    "tests/verify_worker_credential_refresh_offline.py": "2bdabb339e3c279964715409abe5a8e3956d159661251e6dd211c55c147cbdd6"
+  }
+}

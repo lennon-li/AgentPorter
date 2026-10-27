@@ -1,0 +1,177 @@
+--- a/src/agentporter/agents/provider_egress.py
++++ b/src/agentporter/agents/provider_egress.py
+@@ -9,6 +9,7 @@
+ 
+ import contextlib
+ import json
++import logging
+ import re
+ import socket
+ import ssl
+@@ -65,6 +66,58 @@
+ MAX_HEADER = 32768
+ MAX_BODY = 16 * 1024 * 1024
+ TOKEN = re.compile(rb"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
++
++
++_DIAGNOSTIC_LOGGER = logging.getLogger('agentporter.agents.provider_egress')
++_DIAGNOSTIC_HOSTS = frozenset(host for rules in RULES.values() for host in rules) | {
++    'search.parallel.ai',
++    # Recognized native public origins for diagnosis only; not egress admission.
++    'daily-cloudcode-pa.sandbox.googleapis.com',
++    'autopush-cloudcode-pa.sandbox.googleapis.com',
++}
++_DIAGNOSTIC_STAGES = frozenset({'connect', 'downstream_tls', 'request_header', 'request_body',
++    'payload', 'upstream_connect', 'upstream_tls', 'upstream_request', 'upstream_response',
++    'response_stream', 'upstream_status'})
++_DIAGNOSTIC_OPERATIONS = {
++    '/v1/responses':'responses', '/backend-api/codex/responses':'codex_responses',
++    '/responses':'responses', '/chat/completions':'chat_completions',
++    '/v1/chat/completions':'chat_completions', '/v1/messages':'claude_messages',
++    '/v1/messages/count_tokens':'claude_count_tokens', '/v1/oauth/token':'oauth_refresh',
++    '/oauth/token':'oauth_refresh', '/token':'oauth_refresh',
++    '/copilot_internal/user':'copilot_account_read', '/models':'models', '/v1/models':'models',
++    '/backend-api/codex/models':'codex_models', '/backend-api/wham/accounts/check':'codex_account_read',
++    '/oauth2/v2/userinfo':'google_userinfo', '/inference/openai/v1/chat/completions':'wei_chat',
++    '/v1internal:loadCodeAssist':'google_load_code_assist',
++    '/v1internal:fetchAvailableModels':'google_models',
++    '/v1internal:streamGenerateContent':'google_stream_generate',
++    '/v1internal:generateContent':'google_generate', '/v1internal:countTokens':'google_count_tokens',
++    '/v1internal:fetchAdminControls':'google_admin_controls',
++    '/v1internal:fetchUserInfo':'google_user_info',
++    '/v1internal:retrieveUserQuotaSummary':'google_quota_summary',
++    '/v1internal:listExperiments':'google_experiments', '/mcp':'parallel_mcp',
++    # Recognized native operations for diagnosis only; RULES stay unchanged.
++    '/v1internal:getCodeAssistGlobalUserSetting':'google_global_user_setting',
++    '/v1internal:listCloudAICompanionProjects':'google_companion_projects',
++    '/v1internal:initiateMeshSession':'google_mesh_session',
++    '/v1internal:internalAtomicAgenticChat':'google_atomic_agentic_chat',
++    '/v1internal:fetchCodeCustomizationState':'google_code_customization',
++    '/v1internal:listAuthorizedDevices':'google_authorized_devices',
++    '/copilot_internal/v2/token':'copilot_token_exchange',
++}
++
++
++def _diagnostic_operation(header):
++    # Raw header/path/query bytes are transient and never returned or logged.
++    try:
++        parts = header.split(b'\r\n', 1)[0].split(b' ')
++        if len(parts) != 3:
++            return 'unknown', 'unknown'
++        method = parts[0].decode('ascii')
++        path = parts[1].split(b'?', 1)[0].decode('ascii')
++        return (method if method in {'GET', 'POST', 'DELETE'} else 'unknown',
++                _DIAGNOSTIC_OPERATIONS.get(path, 'unknown'))
++    except (AttributeError, UnicodeError, ValueError):
++        return 'unknown', 'unknown'
+ 
+ 
+ def provider_rules(agent: str, parallel_search: bool = False) -> dict:
+@@ -266,6 +319,9 @@
+     def __init__(self, socket_path: Path, *, agent: str, parallel_search: bool = False, model_evidence=None):
+         super().__init__(socket_path)
+         self.rules = provider_rules(agent, parallel_search)
++        self._diagnostic_agent = agent if agent in RULES else 'unknown'
++        self._diagnostic_count = 0
++        self._diagnostic_lock = threading.Lock()
+         self._model_evidence = model_evidence
+         self._tls_directory = Path(socket_path).parent / 'provider-tls'
+         self._tls_directory.mkdir(mode=0o700)
+@@ -324,23 +380,51 @@
+         self._upstream_context = ssl.create_default_context(cafile='/etc/ssl/certs/ca-certificates.crt')
+         self._upstream_context.set_alpn_protocols(['http/1.1'])
+ 
++    def _diagnostic(self, *, stage, host='unknown', method='unknown', operation='unknown', status=None):
++        # Only static enums and a bounded integer enter the service journal.
++        # Diagnostics are secondary: any failure must leave forwarding unchanged.
++        try:
++            with self._diagnostic_lock:
++                if self._diagnostic_count >= 32:
++                    return
++                self._diagnostic_count += 1
++            safe_stage = stage if stage in _DIAGNOSTIC_STAGES else 'unknown'
++            event = {
++                'event':'provider_egress_diagnostic',
++                'agent':self._diagnostic_agent if self._diagnostic_agent in RULES else 'unknown',
++                'host':host if host in _DIAGNOSTIC_HOSTS else 'unknown',
++                'method':method if method in {'GET','POST','DELETE'} else 'unknown',
++                'operation':operation if operation in _DIAGNOSTIC_OPERATIONS.values() else 'unknown',
++                'stage':safe_stage,
++                'error_code':'upstream_non_2xx' if safe_stage == 'upstream_status' else 'local_rejection_or_transport_failure',
++                'upstream_status':status if type(status) is int and 100 <= status <= 599 else None,
++            }
++            _DIAGNOSTIC_LOGGER.warning('provider_egress_diagnostic %s', json.dumps(event, sort_keys=True))
++        except Exception:
++            pass
++
+     def _handle(self, client: socket.socket) -> None:
+         downstream = upstream = None
+         response_started = False
+         observer = None
++        stage, host, method, operation = 'connect', 'unknown', 'unknown', 'unknown'
+         try:
+             host, remainder = _read_connect(client)
+             host = host.lower()
+             if host not in self.rules or remainder:
+                 raise PermissionError('Unadmitted CONNECT authority or early payload')
+             client.sendall(b'HTTP/1.1 200 Connection Established\r\n\r\n')
++            stage = 'downstream_tls'
+             downstream = self._contexts[host].wrap_socket(client, server_side=True)
+             with self._lock:
+                 self._connections.add(downstream)
++            stage = 'request_header'
+             header, initial_body = read_header(downstream)
++            method, operation = _diagnostic_operation(header)
+             outgoing, length = request_header(header, host, self.rules)
+             if len(initial_body) > length:
+                 raise ValueError('Pipelined request or excessive body')
++            stage = 'request_body'
+             body = bytearray(initial_body)
+             downstream.settimeout(IDLE_TIMEOUT)
+             while len(body) < length:
+@@ -348,10 +432,13 @@
+                 if not block:
+                     raise ValueError('Truncated request body')
+                 body.extend(block)
++            stage = 'payload'
+             validate_payload(header, body, host)
+             # No upstream connection exists until authority and operation pass.
++            stage = 'upstream_connect'
+             raw = _connect_public(host)
+             try:
++                stage = 'upstream_tls'
+                 upstream = self._upstream_context.wrap_socket(raw, server_hostname=host)
+             except BaseException:
+                 raw.close()
+@@ -360,8 +447,15 @@
+                 self._connections.add(upstream)
+             upstream.settimeout(IDLE_TIMEOUT)
+             downstream.settimeout(IDLE_TIMEOUT)
++            stage = 'upstream_request'
+             upstream.sendall(outgoing + body)
++            stage = 'upstream_response'
+             response_header, response_body = read_header(upstream, timeout=IDLE_TIMEOUT)
++            status_match = re.match(rb'HTTP/1\.[01] ([1-5][0-9]{2})(?: |$)', response_header)
++            status = int(status_match[1]) if status_match else None
++            if status is not None and not 200 <= status < 300:
++                self._diagnostic(stage='upstream_status', host=host, method=method,
++                                 operation=operation, status=status)
+             if response_header.startswith(b'HTTP/1.1 101 '):
+                 raise ValueError('Unexpected protocol upgrade')
+             # Feed only authenticated upstream Responses data, never request or worker text.
+@@ -373,6 +467,7 @@
+                 observer.feed(response_header + b'\r\n\r\n' + response_body)
+             downstream.sendall(response_header + b'\r\n\r\n' + response_body)
+             response_started = True
++            stage = 'response_stream'
+             while not self._stop.is_set():
+                 block = upstream.recv(65536)
+                 if not block:
+@@ -383,6 +478,7 @@
+             if observer is not None:
+                 observer.finish()
+         except (OSError, ValueError, PermissionError, ssl.SSLError):
++            self._diagnostic(stage=stage, host=host, method=method, operation=operation)
+             if not response_started:
+                 with contextlib.suppress(OSError):
+                     (downstream or client).sendall(b'HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
