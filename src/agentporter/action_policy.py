@@ -18,7 +18,6 @@ ALLOW_ACTIONS = frozenset({
     "list_workspaces",
     "workspace_info",
     "list_agents",
-    "qman_consult",
     "list_files",
     "search_text",
     "read_file",
@@ -74,6 +73,7 @@ APPROVAL_ACTIONS = frozenset({
 })
 
 LOCKED_ACTIONS = frozenset({
+    "qman_consult",
     "git_commit",
     "git_push",
 })

@@ -199,6 +199,8 @@ class AgentBroker:
         ws = self.workspace_registry.get(workspace_id)
         if not ws.allow_agent_dispatch:
             raise PermissionError(f"Workspace '{workspace_id}' does not allow agent dispatch")
+        # Never downgrade to start_raw_job if a backend is missing or errors.
+        # The future backend must enforce this exact policy.
         # The host-user Popen path has no kernel-enforced boundary; CLI flags
         # and prompt policy cannot prevent publication or reading host secrets.
         # Re-enable only via a verified, broker-owned confined launch method.
@@ -329,7 +331,7 @@ class AgentBroker:
         else:
             launch_env = None
 
-        qman_shadow = shadow_consult(agent_key, effective_model)
+        qman_shadow = shadow_consult(agent_key, effective_model, self.workspace_registry)
         try:
             job_id = self.job_manager.start_confined_agent_job(
                 workspace_id=workspace_id,

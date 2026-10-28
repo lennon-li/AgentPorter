@@ -543,7 +543,8 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         Stale or unverified quota remains unknown. No provider refresh is performed.
         Owner-only database isolation is preserved; unavailable is a bounded error.
         """
-        return _qman_consult(provider=provider, profile=profile, model=model)
+        return _qman_consult(provider=provider, profile=profile, model=model,
+                             workspace_registry=registry)
 
     @mcp.tool()
     @monitored_tool("list_agents")

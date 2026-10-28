@@ -59,7 +59,7 @@ The user's voice and ChatGPT client consent do not mint a server-trusted
 approval receipt for commits/pushes.
 
 See the [authorization design](docs/action-authorization-design.md) and
-[53-action classification](docs/agent-roster-action-policy.md) for the
+[54-action classification](docs/agent-roster-action-policy.md) for the
 pending approval issuer, publisher service, and negative acceptance tests.
 
 ## 2. Ingress security

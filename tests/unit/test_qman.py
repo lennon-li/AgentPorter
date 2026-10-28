@@ -24,7 +24,21 @@ def native(tmp_path, monkeypatch):
     db.write_bytes(b"fixture")
     db.chmod(0o600)
     monkeypatch.setattr(qman, "DATABASE", db)
+    root=tmp_path/"qman-source"
+    (root/"src").mkdir(parents=True)
+    interpreter=root/".venv/bin/python"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.write_bytes(b"synthetic interpreter")
+    monkeypatch.setattr(qman, "ROOT", root)
+    monkeypatch.setattr(qman, "PYTHON", interpreter)
     return db
+
+
+@pytest.fixture
+def registry(tmp_path):
+    safe=tmp_path/"registered-workspace"
+    safe.mkdir()
+    return SimpleNamespace(list_all=lambda: [{"path": str(safe)}])
 
 
 @pytest.mark.parametrize("provider,profile,model", [("bad",None,None),([],None,None),("all","x;id",None),("all",None,"$(id)")])
@@ -35,27 +49,31 @@ def test_invalid_scope_no_subprocess(monkeypatch,provider,profile,model):
     run.assert_not_called()
 
 
-def test_exact_json_and_fixed_argv(native,monkeypatch):
-    expected=payload()
-    reader=Mock(return_value=json.dumps(expected).encode())
+def test_exact_json_and_fixed_argv(native,registry,monkeypatch):
+    raw=payload()
+    raw["resources"][0].update({"provider":"codex", "quota_state":"headroom_reported", "quota_reason":"quota_only_not_execution_authorization", "principal":"PRIVATE"})
+    reader=Mock(return_value=json.dumps(raw).encode())
     monkeypatch.setattr(qman,"_read",reader)
-    assert qman.qman_consult("codex","jax","gpt-6.1-sol") == expected
+    result=qman.qman_consult("codex","jax","gpt-6.1-sol",workspace_registry=registry)
+    assert result["execution_authorized"] is False and result["dispatch_enabled"] is False
+    assert result["resources"][0]["provider"] == "codex"
+    assert "principal" not in json.dumps(result) and "profile" not in result["resources"][0]
     argv=reader.call_args.args[0]
     assert "collect" not in argv and "--db" in argv and "consult" in argv
-    assert argv[-4:] == ["--profile","jax","--model","gpt-6.1-sol"]
+    assert argv[-2:] == ["--profile=jax","--model=gpt-6.1-sol"]
 
 
 @pytest.mark.parametrize("raw", [b"not json", b"[]", b'{"mode":"consultation","resources":[],"execution_authorized":true,"dispatch_enabled":false}', b"NaN"])
-def test_bad_json_controlled(native,monkeypatch,raw):
+def test_bad_json_controlled(native,registry,monkeypatch,raw):
     monkeypatch.setattr(qman,"_read",lambda _:raw)
-    assert qman.qman_consult()["mode"] == "consultation_unavailable"
+    assert qman.qman_consult(workspace_registry=registry)["mode"] == "consultation_unavailable"
 
 
-def test_owner_permissions_preserved(native,monkeypatch):
+def test_owner_permissions_preserved(native,registry,monkeypatch):
     native.chmod(0o644)
     reader=Mock()
     monkeypatch.setattr(qman,"_read",reader)
-    assert qman.qman_consult()["error"] == "owner_only_database_unavailable"
+    assert qman.qman_consult(workspace_registry=registry)["error"] == "owner_only_database_unavailable"
     assert native.stat().st_mode & 0o777 == 0o644
     reader.assert_not_called()
 
@@ -81,7 +99,7 @@ def test_real_tool_broker_path_keeps_routing(gateway,monkeypatch,caplog,observat
     _,dispatch=create_agent_tools(broker)
     with caplog.at_level(logging.INFO,logger="agentporter.qman"):
         result=broker.dispatch_agent(agent="jax",task="PRIVATE PROMPT",workspace_id="unit")
-    read.assert_called_once_with("codex","jax",model="gpt-6.1-sol")
+    read.assert_called_once_with("codex","jax",model="gpt-6.1-sol",workspace_registry=broker.workspace_registry)
     assert result["worker_cli"] == "codex"
     assert jobs.start_confined_agent_job.call_args.kwargs["agent"] == "jax"
     assert "PRIVATE PROMPT" not in caplog.text
@@ -140,3 +158,136 @@ def test_public_dispatch_still_refuses_unconfined_worker(gateway, monkeypatch):
     jobs.start_confined_agent_job.assert_not_called()
     jobs.start_raw_job.assert_not_called()
     read.assert_not_called()
+
+@pytest.mark.parametrize("relation", ["equal", "ancestor", "descendant", "symlink"])
+def test_registered_workspace_overlap_refuses_before_read(native, tmp_path, monkeypatch, relation):
+    root=qman.ROOT
+    if relation == "equal":
+        workspace=root
+    elif relation == "ancestor":
+        workspace=root.parent
+    elif relation == "descendant":
+        workspace=root/"src"/"project"
+        workspace.mkdir()
+    else:
+        workspace=tmp_path/"workspace-link"
+        workspace.symlink_to(root, target_is_directory=True)
+    registry=SimpleNamespace(list_all=lambda: [{"path":str(workspace)}])
+    reader=Mock()
+    monkeypatch.setattr(qman,"_read",reader)
+    assert qman.qman_consult(workspace_registry=registry)["error"] == "qman_source_overlaps_workspace"
+    reader.assert_not_called()
+
+
+@pytest.mark.parametrize("registry", [None, SimpleNamespace(list_all=lambda: []),
+    SimpleNamespace(list_all=lambda: [{"path":""}]),
+    SimpleNamespace(list_all=lambda: [{"path":"/path/that/does/not/exist"}])])
+def test_missing_or_invalid_registry_refuses_before_read(native, monkeypatch, registry):
+    reader=Mock()
+    monkeypatch.setattr(qman,"_read",reader)
+    assert qman.qman_consult(workspace_registry=registry)["mode"] == "consultation_unavailable"
+    reader.assert_not_called()
+
+
+def test_all_registered_workspaces_are_checked(native, tmp_path, monkeypatch):
+    safe=tmp_path/"safe-workspace"
+    safe.mkdir()
+    registry=SimpleNamespace(list_all=lambda: [{"path":str(safe)}, {"path":str(qman.ROOT/"src")}])
+    reader=Mock()
+    monkeypatch.setattr(qman,"_read",reader)
+    assert qman.qman_consult(workspace_registry=registry)["error"] == "qman_source_overlaps_workspace"
+    reader.assert_not_called()
+
+
+def test_sanitized_projection_filters_private_malformed_and_nonfinite_values():
+    raw={"mode":"consultation", "execution_authorized":False, "dispatch_enabled":False,
+      "as_of_utc_epoch":float("nan"), "principal":"billing-secret", "prompt":"PRIVATE",
+      "resources":[{"provider":"codex", "profile":"private-profile", "identity_digest":"secret",
+       "quota_state":"headroom_reported", "quota_reason":"quota_only_not_execution_authorization",
+       "windows":[{"window":"primary", "remaining_percent_current":50,
+         "observed_at_utc_epoch":float("inf"), "observation_fresh":True,
+         "identity_digest":"secret", "principal":"billing-secret", "transcript":"private"},
+         "not-a-window"]}]}
+    result=qman._bounded_projection(raw)
+    encoded=json.dumps(result,allow_nan=False)
+    assert result["execution_authorized"] is False and result["dispatch_enabled"] is False
+    assert result["resources"][0]["quota_state"] == "headroom_reported"
+    assert result["resources"][0]["windows"][0]["remaining_percent_current"] == 50
+    assert "observed_at_utc_epoch" not in result["resources"][0]["windows"][0]
+    for private in ("billing-secret","PRIVATE","private-profile","identity_digest","transcript"):
+        assert private not in encoded
+
+
+def test_option_like_identifiers_rejected():
+    assert not qman._identifier("--help")
+    assert not qman._identifier("-profile")
+    assert qman._identifier("jax")
+
+
+def test_read_rejects_timeout_oversize_and_nonzero(monkeypatch, tmp_path):
+    import sys
+    monkeypatch.setattr(qman,"ROOT",tmp_path)
+    monkeypatch.setattr(qman,"TIMEOUT",0.05)
+    with pytest.raises(TimeoutError):
+        qman._read([sys.executable,"-c","import time; time.sleep(2)"])
+    monkeypatch.setattr(qman,"TIMEOUT",2)
+    monkeypatch.setattr(qman,"MAX_BYTES",32)
+    with pytest.raises(ValueError):
+        qman._read([sys.executable,"-c","print('x'*100)"])
+    with pytest.raises(RuntimeError):
+        qman._read([sys.executable,"-c","raise SystemExit(7)"])
+
+
+def test_read_timeout_kills_process_group_descendant(tmp_path, monkeypatch):
+    import sys
+    monkeypatch.setattr(qman,"ROOT",tmp_path)
+    marker=tmp_path/"descendant-survived"
+    code=("import subprocess,sys; "
+          f"subprocess.Popen([sys.executable,'-c',\"import time; time.sleep(.4); open('{marker}','w').write('alive')\"]); "
+          "print('started',flush=True); import time; time.sleep(2)")
+    monkeypatch.setattr(qman,"TIMEOUT",0.1)
+    with pytest.raises(TimeoutError):
+        qman._read([sys.executable,"-c",code])
+    import time
+    time.sleep(0.5)
+    assert not marker.exists()
+
+
+def test_shadow_overlap_refuses_qman_but_preserves_dispatch_advisory(native, monkeypatch, tmp_path):
+    monkeypatch.setenv("QMAN_PREFLIGHT_MODE", "shadow")
+    workspace=qman.ROOT/"src"
+    registry=SimpleNamespace(list_all=lambda: [{"path":str(workspace)}])
+    reader=Mock()
+    monkeypatch.setattr(qman,"_read",reader)
+    event=qman.shadow_consult("jax","gpt-6.1-sol",registry)
+    assert event["consultation_outcome"] == "unavailable"
+    reader.assert_not_called()
+
+
+def test_shadow_unexpected_consult_exception_is_advisory_and_does_not_log_private_text(gateway, monkeypatch, caplog):
+    broker,_,jobs=gateway
+    marker = "private-marker-7f9c"
+    def fail(*args, **kwargs):
+        raise RuntimeError(marker)
+    monkeypatch.setattr(qman,"qman_consult",fail)
+    result=broker.dispatch_agent(agent="jax",task="bounded task",workspace_id="unit")
+    assert result["job_id"] == "job-unit"
+    jobs.start_confined_agent_job.assert_called_once()
+    assert marker not in caplog.text
+    assert all(marker not in repr(record.args) for record in caplog.records)
+
+
+def test_shadow_logging_failure_is_advisory(gateway, monkeypatch):
+    broker,_,jobs=gateway
+    def fail(*args, **kwargs):
+        raise RuntimeError("synthetic consultation failure")
+    def fail_logging(*args, **kwargs):
+        raise OSError("synthetic logging failure")
+    monkeypatch.setattr(qman,"qman_consult",fail)
+    monkeypatch.setattr(qman.logger,"warning",fail_logging)
+
+    event = qman.shadow_consult("jax", "gpt-6.1-sol")
+    assert event["consultation_outcome"] == "unavailable"
+    result=broker.dispatch_agent(agent="jax",task="bounded task",workspace_id="unit")
+    assert result["job_id"] == "job-unit"
+    jobs.start_confined_agent_job.assert_called_once()

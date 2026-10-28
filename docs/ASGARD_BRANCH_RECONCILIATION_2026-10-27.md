@@ -18,6 +18,12 @@ This source reconciliation preserves the recovered Asgard work while retaining c
 - Archived credential-refresh offline tests: nine passed, one deliberately deselected external-baseline test; standalone offline verification passed. Other archived runners require external pinned runtimes/harnesses and were not executed.
 - Credential-shaped scan of introduced paths: no matches reported; no credential values published.
 
+## Independent review corrections
+
+The initial candidate `dd85a8d` was rejected by independent Ming review because a default-allowed consultation could execute an agent-writable Qman checkout outside confinement. The retained implementation now defaults `qman_consult` to LOCKED, refuses resolved interpreter/source overlap with every configured workspace on both MCP and shadow paths, and exports only a bounded sanitized advisory projection. It does not install an immutable runtime or a confined Qman bridge; future adoption remains separately reviewed work.
+
+The correction also restores fail-closed broker comments, reconciles all 54-action tables, rejects option-like scope identifiers, derives the import path from the configured source root, and adds subprocess timeout/size/exit/cleanup regressions. Advisory exception logging uses no exception text or traceback and cannot block confined dispatch if its handler fails. Focused correction coverage: 65 passed. The earlier full-suite figures above describe the initial reconciliation candidate, not a claim of final-revision CI success. The PR records final-revision local and Linux results and a fresh Ming verdict.
+
 ## Publication gates and limits
 
 The parent requires an independent Ming review of the exact candidate and terminal Linux GitHub Actions results before merging the PR or deleting backup refs. The PR records the review verdict, exact revision and CI evidence. Local macOS results do not establish Linux confinement or deployment acceptance. Original SSD-backed checkouts and their uncommitted/unpublished state are outside this isolated reconciliation and remain untouched.

@@ -37,7 +37,7 @@ def test_policy_has_exactly_one_explicit_entry_per_registered_mcp_operation():
 
 def test_publication_operations_are_locked_by_policy():
     matrix = dict(_policy_rows())
-    assert matrix["git_commit"] == matrix["git_push"] == "LOCKED"
+    assert matrix["git_commit"] == matrix["git_push"] == matrix["qman_consult"] == "LOCKED"
     assert matrix["scinet_inference_provision"] == "APPROVAL"
     assert matrix["list_agents"] == "ALLOW"
     assert matrix["dispatch_agent"] == "SCOPE"

@@ -92,8 +92,11 @@ closed while the confined launcher is missing.
   proof of owner approval.
 
 These are **initial configurable policy decisions**, not existing end-to-end enforcement.
-In this candidate only the dedicated direct `git_commit` and `git_push`
-tools are locked (MCP and REST). **This is not a global Git publication
+
+`qman_consult` is LOCKED by default because this integration invokes a mutable external Qman checkout. Adoption requires immutable operator-installed source or a read-only confined bridge; AgentPorter does not install or activate either runtime.
+In this candidate the dedicated direct `git_commit` and `git_push`
+tools are locked (MCP and REST); `qman_consult` is also locked because it
+invokes mutable external source. **This is not a global Git publication
 block:** general-purpose `exec_run`/`exec_start` tools and external services can still
 write workspace content and could indirectly change Git metadata without further
 OS hardening. Generic network-enabled execution and host-user agent dispatch
@@ -112,7 +115,7 @@ The mode column is the **initial configurable default**, not a permanent restric
 | `server_deploy_info` | **ALLOW** | Read live release provenance only. |
 | `list_workspaces` | **ALLOW** | Return IDs and status; no new access. |
 | `workspace_info` | **ALLOW** | Use registered workspace only. |
-| `qman_consult` | **ALLOW** | Read cached advisory quota evidence; grants no execution authority (MCP only). |
+| `qman_consult` | **LOCKED** | Mutable external Qman source remains unavailable until an immutable operator-installed source or read-only confined bridge is adopted (MCP only). |
 | `list_agents` | **ALLOW** | Expose seven named identities; never promise available. |
 | `list_files` | **ALLOW** | Registered workspace; existing sensitive-path protections. |
 | `search_text` | **ALLOW** | Sensitive-path filters remain mandatory. |

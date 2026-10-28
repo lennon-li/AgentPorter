@@ -2,7 +2,7 @@
 
 Status: **partial fail-closed implementation, not approved for deployment**. Candidate now blocks host-user delegated launches pending a kernel-enforced confined launcher, rejects all generic networked command execution, removes host SSH/GitHub credential binds, and makes repository root .git metadata read-only in generic Bubblewrap execution. Independent approval receipts, model egress broker, and complete OS isolation are NOT implemented.
 
-Original rollout plan: design specification, not implemented. The seven-agent registry and the 53-operation policy catalog are implemented in the current release candidate; only direct Git commit/push and existing adapter/workspace controls are additionally restricted. Do not claim full voice-granted privileges.
+Original rollout plan: design specification, not implemented. The seven-agent registry and the 54-operation policy catalog are implemented in the current release candidate; Qman consultation and direct Git commit/push are locked, alongside existing adapter/workspace controls. Do not claim full voice-granted privileges.
 
 ## Goal
 
@@ -21,11 +21,11 @@ AgentPorter runs under a host user with writeable repositories, model credential
 | APPROVAL | Require separate human-verifiable receipt bound to exact operation and target | remote fetch/pull, local HTTP POST, cluster submit |
 | LOCKED | Never execute until explicit authorization machinery and isolation exist; fail closed | Git commit/push and untrusted publication |
 
-The complete **53-operation mapping** in [agent-roster-action-policy.md](agent-roster-action-policy.md) defines overridable defaults. No unknown new action inherits ALLOW, and strictly excluded host capabilities have no public action ID.
+The complete **54-operation mapping** in [agent-roster-action-policy.md](agent-roster-action-policy.md) defines overridable defaults. No unknown new action inherits ALLOW, and strictly excluded host capabilities have no public action ID.
 
 ## Owner-configurable exposure and authorization policy
 
-The complete 53-action matrix defines **shipped defaults, not immutable owner
+The complete 54-action matrix defines **shipped defaults, not immutable owner
 preferences**. Every action that AgentPorter intentionally exposes through MCP
 may have its mode independently overridden by an authenticated operator:
 ALLOW, SCOPE, APPROVAL, or LOCKED. Overrides can further narrow to workspace,
@@ -130,9 +130,9 @@ The server verifies signature, audience, freshness, immutable target, permitted 
 
 ## Rollout
 
-**Phase 1 (this candidate):** seven-name public allowlist, live inventory, 53-action classification and regression coverage; dedicated Git commit/push endpoints locked; fix Git fetch read-only, pull fast-forward-only, bounded synchronous and asynchronous output and MCP ingress cap. No claim of full permission enforcement.
+**Phase 1 (this candidate):** seven-name public allowlist, live inventory, 54-action classification and regression coverage; dedicated Git commit/push endpoints locked; fix Git fetch read-only, pull fast-forward-only, bounded synchronous and asynchronous output and MCP ingress cap. No claim of full permission enforcement.
 
-**Phase 2:** protected operator-owned action-mode override store for all 53 exposed actions, trusted approval issuer and one-time signed receipt verification, explicit server audit ledger, centralized action evaluator. Keep publication technically locked until the publisher and approval backend exist, regardless of configured mode.
+**Phase 2:** protected operator-owned action-mode override store for all 54 exposed actions, trusted approval issuer and one-time signed receipt verification, explicit server audit ledger, centralized action evaluator. Keep publication technically locked until the publisher and approval backend exist, regardless of configured mode.
 
 **Phase 3:** OS-confined workers and generic execution with host credentials isolated. Only then enable receipt-gated commit/push; demonstrate negative tests under every runtime, including Wei and Argie.
 
