@@ -1,0 +1,417 @@
+--- a/agentporter/agents/development.py
++++ b/agentporter/agents/development.py
+@@ -33,6 +33,7 @@
+     command: list[str]
+     cleanup: Callable[[], None]
+     pass_fds: tuple[int, ...] = ()
++    model_evidence: object | None = None
+ 
+ 
+ class DevelopmentRuntime:
+@@ -609,6 +610,8 @@
+         proxy = None
+         headroom_proxy = None
+         descriptors: list[int] = []
++        from agentporter.provenance import ProviderModelEvidence
++        model_evidence = ProviderModelEvidence()
+         cleaned = False
+ 
+         def cleanup():
+@@ -824,7 +827,8 @@
+                 if policy == "provider_origin":
+                     from agentporter.agents.provider_egress import ProviderEgress
+                     proxy = ProviderEgress(root / "egress.sock", agent=agent,
+-                        parallel_search=config.get("parallel_search_enabled") is True).start()
++                        parallel_search=config.get("parallel_search_enabled") is True,
++                        model_evidence=model_evidence).start()
+                     ca_path = "/run/agentporter-provider-ca.pem"
+                     args += ["--ro-bind", str(proxy.ca_bundle), ca_path]
+                     environment.update(SSL_CERT_FILE=ca_path, CODEX_CA_CERTIFICATE=ca_path, REQUESTS_CA_BUNDLE=ca_path,
+@@ -850,7 +854,8 @@
+                     if route == "http://127.0.0.1:9787/v1":
+                         from agentporter.agents.development_egress import HeadroomEgress
+                         headroom_proxy = HeadroomEgress(root / "headroom.sock",
+-                            enforce_provider_tools=policy == "provider_origin").start()
++                            enforce_provider_tools=policy == "provider_origin",
++                            model_evidence=model_evidence).start()
+                         args += ["--ro-bind", str(root / "headroom.sock"), "/run/agentporter-headroom.sock"]
+                         worker = ["/usr/bin/python3", "/opt/agentporter/development_egress.py",
+                                   "headroom-bridge", "--socket", "/run/agentporter-headroom.sock",
+@@ -874,7 +879,7 @@
+             for key, value in environment.items():
+                 args += ["--setenv", key, value]
+             args += ["--chdir", "/workspace", "--", *worker]
+-            return PreparedLaunch(args, cleanup, tuple(descriptors))
++            return PreparedLaunch(args, cleanup, tuple(descriptors), model_evidence)
+         except BaseException:
+             cleanup()
+             raise
+--- a/agentporter/agents/development_egress.py
++++ b/agentporter/agents/development_egress.py
+@@ -341,7 +341,7 @@
+     return data, upgraded
+ 
+ 
+-def _headroom_response(client, upstream, stop):
++def _headroom_response(client, upstream, stop, observer=None):
+     """Drain a response after client write EOF; additional requests fail closed."""
+     client.settimeout(5)
+     upstream.settimeout(5)
+@@ -361,7 +361,11 @@
+                     continue
+                 data = upstream.recv(65536)
+                 if not data:
++                    if observer is not None:
++                        observer.finish()
+                     return
++                if observer is not None:
++                    observer.feed(data)
+                 client.sendall(data)
+                 last_activity = time.monotonic()
+ 
+@@ -369,9 +373,10 @@
+ class HeadroomEgress(PublicEgress):
+     """Fixed service and model endpoints; no general loopback or admin access."""
+ 
+-    def __init__(self, socket_path, *, enforce_provider_tools=False):
++    def __init__(self, socket_path, *, enforce_provider_tools=False, model_evidence=None):
+         super().__init__(socket_path)
+         self._enforce_provider_tools = enforce_provider_tools
++        self._model_evidence = model_evidence
+ 
+     def _handle(self, client: socket.socket) -> None:
+         upstream = None
+@@ -397,7 +402,11 @@
+                 else:
+                     _headroom_response(client, upstream, self._stop)
+             else:
+-                _headroom_response(client, upstream, self._stop)
++                observer = (self._model_evidence.response()
++                    if self._model_evidence is not None
++                    and request.split(b'\r\n', 1)[0].split(b' ')[:2] == [b'POST', b'/v1/responses']
++                    else None)
++                _headroom_response(client, upstream, self._stop, observer)
+         except (OSError, ValueError, PermissionError):
+             pass
+         finally:
+--- a/agentporter/agents/provider_egress.py
++++ b/agentporter/agents/provider_egress.py
+@@ -257,9 +257,10 @@
+ class ProviderEgress(PublicEgress):
+     """Exact-origin, operation-scoped TLS relay, never an opaque CONNECT tunnel."""
+ 
+-    def __init__(self, socket_path: Path, *, agent: str, parallel_search: bool = False):
++    def __init__(self, socket_path: Path, *, agent: str, parallel_search: bool = False, model_evidence=None):
+         super().__init__(socket_path)
+         self.rules = provider_rules(agent, parallel_search)
++        self._model_evidence = model_evidence
+         self._tls_directory = Path(socket_path).parent / 'provider-tls'
+         self._tls_directory.mkdir(mode=0o700)
+         key = self._tls_directory / 'key.pem'
+@@ -320,6 +321,7 @@
+     def _handle(self, client: socket.socket) -> None:
+         downstream = upstream = None
+         response_started = False
++        observer = None
+         try:
+             host, remainder = _read_connect(client)
+             host = host.lower()
+@@ -356,13 +358,24 @@
+             response_header, response_body = read_header(upstream, timeout=IDLE_TIMEOUT)
+             if response_header.startswith(b'HTTP/1.1 101 '):
+                 raise ValueError('Unexpected protocol upgrade')
++            # Feed only authenticated upstream Responses data, never request or worker text.
++            request_line = outgoing.split(b'\r\n', 1)[0].split(b' ')
++            if (self._model_evidence is not None and len(request_line) == 3
++                    and request_line[0] == b'POST'
++                    and request_line[1] in {b'/v1/responses', b'/backend-api/codex/responses', b'/responses'}):
++                observer = self._model_evidence.response()
++                observer.feed(response_header + b'\r\n\r\n' + response_body)
+             downstream.sendall(response_header + b'\r\n\r\n' + response_body)
+             response_started = True
+             while not self._stop.is_set():
+                 block = upstream.recv(65536)
+                 if not block:
+                     break
++                if observer is not None:
++                    observer.feed(block)
+                 downstream.sendall(block)
++            if observer is not None:
++                observer.finish()
+         except (OSError, ValueError, PermissionError, ssl.SSLError):
+             if not response_started:
+                 with contextlib.suppress(OSError):
+--- a/agentporter/provenance.py
++++ b/agentporter/provenance.py
+@@ -1,20 +1,216 @@
+-"""Trusted runtime provenance helpers for AgentPorter.
+-
+-Agent stdout/stderr are untrusted content. A worker can mention arbitrary model
+-names in normal prose, so AgentPorter must not infer runtime provenance from
+-those streams. Adapters may add a trusted side-channel in the future; until
+-then the actual model is reported as "unknown".
++"""Model provenance from host-owned provider response observers, never worker logs.
++
++The observer belongs to one prepared confined launch and has no worker-visible
++file/socket/descriptor. Only the existing exact-origin relay may feed upstream
++HTTP response bytes. This is provider/runtime-reported evidence, not a guarantee
++about a provider's private backend. Requested/configured models are never used.
+ """
+-
+-import logging
+-
+-logger = logging.getLogger("agentporter.provenance")
+-
+-
+-def extract_actual_model(stdout_path: str, stderr_path: str) -> str:
+-    """Return verified runtime model metadata, or unknown when unavailable.
+-
+-    stdout_path/stderr_path are intentionally ignored for model detection because
+-    worker-generated text is not a trustworthy provenance source.
++from __future__ import annotations
++
++import json
++import re
++import threading
++
++_MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/+-]{0,127}\Z")
++_MAX_HEADER = 8192
++_MAX_EVENT = 262144
++
++
++def _object(pairs):
++    result = {}
++    for key, value in pairs:
++        if key in result:
++            raise ValueError("duplicate member")
++        result[key] = value
++    return result
++
++
++class ProviderModelEvidence:
++    """One launch's in-memory, host-only completed-response evidence."""
++    def __init__(self):
++        self._lock = threading.Lock()
++        self._models = set()
++        self._ambiguous = False
++
++    def response(self):
++        return _ResponseObserver(self)
++
++    def _record(self, model):
++        with self._lock:
++            if not isinstance(model, str) or not _MODEL.fullmatch(model):
++                self._ambiguous = True
++            elif len(self._models) < 2:
++                self._models.add(model)
++
++    def actual_model(self):
++        with self._lock:
++            if self._ambiguous or len(self._models) != 1:
++                return "unknown"
++            return next(iter(self._models))
++
++
++class _ResponseObserver:
++    """Bounded best-effort HTTP/1 observer; never controls forwarding.
++
++    Supports uncompressed Responses SSE and JSON, including chunked HTTP. Any
++    unknown encoding, malformed framing, oversized event or incomplete response
++    provides no evidence. It retains at most one bounded event, never a transcript.
+     """
+-    return "unknown"
++    def __init__(self, evidence):
++        self._evidence = evidence
++        self._header = bytearray()
++        self._wire = bytearray()
++        self._body = bytearray()
++        self._data = []
++        self._event_size = 0
++        self._kind = None
++        self._chunked = False
++        self._chunk_left = None
++        self._ending = False
++        self._chunk_done = False
++        self._length = None
++        self._received = 0
++        self._disabled = False
++        self._done = False
++        self._models = []
++
++    def feed(self, block):
++        if self._disabled or self._done:
++            return
++        try:
++            self._feed(block)
++        except (ValueError, UnicodeError, TypeError, OverflowError, RecursionError):
++            self._disable()
++
++    def _disable(self):
++        self._disabled = True
++        self._header.clear(); self._wire.clear(); self._body.clear()
++        self._data.clear(); self._models.clear()
++
++    def _feed(self, block):
++        if self._kind is None:
++            self._header.extend(block)
++            boundary = self._header.find(b"\r\n\r\n")
++            if boundary < 0:
++                if len(self._header) > _MAX_HEADER:
++                    raise ValueError()
++                return
++            if boundary > _MAX_HEADER:
++                raise ValueError()
++            header = bytes(self._header[:boundary])
++            rest = bytes(self._header[boundary+4:]); self._header.clear()
++            lines = header.split(b"\r\n")
++            status = lines[0].split(b" ")
++            if len(status) < 2 or status[0] not in (b"HTTP/1.1", b"HTTP/1.0") or status[1] != b"200":
++                raise ValueError()
++            headers = {}
++            for line in lines[1:]:
++                key, value = line.split(b":", 1); key = key.lower()
++                if key in headers:
++                    raise ValueError()
++                headers[key] = value.strip().lower()
++            if headers.get(b"content-encoding", b"identity") != b"identity":
++                raise ValueError()
++            kind = headers.get(b"content-type", b"").split(b";", 1)[0]
++            if kind == b"text/event-stream": self._kind = "sse"
++            elif kind == b"application/json": self._kind = "json"
++            else: raise ValueError()
++            transfer = headers.get(b"transfer-encoding")
++            if transfer not in (None, b"chunked") or (transfer and b"content-length" in headers):
++                raise ValueError()
++            self._chunked = transfer == b"chunked"
++            if b"content-length" in headers:
++                self._length = int(headers[b"content-length"])
++                if self._length < 0: raise ValueError()
++            block = rest
++        if self._chunked:
++            self._wire.extend(block)
++            while self._wire:
++                if self._ending:
++                    if len(self._wire) < 2: break
++                    if self._wire != b"\r\n": raise ValueError()
++                    self._wire.clear(); self._chunk_done = True
++                    self.finish()
++                    return
++                if self._chunk_left is None:
++                    end = self._wire.find(b"\r\n")
++                    if end < 0:
++                        if len(self._wire) > 128: raise ValueError()
++                        break
++                    if end > 128: raise ValueError()
++                    token = bytes(self._wire[:end])
++                    if not re.fullmatch(rb"[0-9A-Fa-f]{1,16}", token): raise ValueError()
++                    self._chunk_left = int(token, 16)
++                    del self._wire[:end+2]
++                    if self._chunk_left == 0:
++                        self._ending = True
++                        continue
++                amount = min(self._chunk_left, len(self._wire))
++                if amount:
++                    self._content(bytes(self._wire[:amount])); del self._wire[:amount]
++                    self._chunk_left -= amount
++                if self._chunk_left:
++                    break
++                if len(self._wire) < 2: break
++                if self._wire[:2] != b"\r\n": raise ValueError()
++                del self._wire[:2]; self._chunk_left = None
++        else:
++            self._received += len(block)
++            if self._length is not None and self._received > self._length: raise ValueError()
++            self._content(block)
++            if self._length == self._received:
++                self.finish()
++
++    def _content(self, block):
++        self._body.extend(block)
++        if self._kind == "json":
++            if len(self._body) > _MAX_EVENT: raise ValueError()
++            return
++        while b"\n" in self._body:
++            line, _, rest = self._body.partition(b"\n"); self._body = bytearray(rest)
++            line = bytes(line).removesuffix(b"\r")
++            if not line:
++                if self._data:
++                    self._event(b"\n".join(self._data))
++                self._data.clear(); self._event_size = 0
++            elif line.startswith(b"data:"):
++                value = line[5:].removeprefix(b" ")
++                self._event_size += len(value)+1
++                if self._event_size > _MAX_EVENT: raise ValueError()
++                self._data.append(value)
++        if len(self._body) > _MAX_EVENT: raise ValueError()
++
++    def _event(self, raw):
++        if raw == b"[DONE]": return
++        data = json.loads(raw, object_pairs_hook=_object,
++                          parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
++        if not isinstance(data, dict): raise ValueError()
++        if self._kind == "sse":
++            if data.get("type") != "response.completed": return
++            response = data.get("response")
++        else:
++            response = data
++        if not isinstance(response, dict) or response.get("status") != "completed": return
++        model = response.get("model")
++        if not isinstance(model, str) or not _MODEL.fullmatch(model): raise ValueError()
++        self._models.append(model)
++        if len(self._models) > 128: raise ValueError()
++
++    def finish(self):
++        if self._disabled or self._done: return
++        try:
++            if self._kind is None: raise ValueError()
++            if self._chunked and not self._chunk_done: raise ValueError()
++            if self._length is not None and self._received != self._length: raise ValueError()
++            if self._kind == "json": self._event(bytes(self._body))
++            elif self._body or self._data: raise ValueError()
++            for model in self._models: self._evidence._record(model)
++            self._done = True
++            self._body.clear(); self._data.clear(); self._models.clear()
++        except (ValueError, UnicodeError, TypeError, OverflowError, RecursionError):
++            self._disable()
++
++
++def extract_actual_model(stdout_path, stderr_path, *, evidence=None):
++    """Logs remain ignored; only the job-bound trusted observer can supply evidence."""
++    return evidence.actual_model() if type(evidence) is ProviderModelEvidence else "unknown"
+--- a/agentporter/tools/jobs.py
++++ b/agentporter/tools/jobs.py
+@@ -48,6 +48,7 @@
+         self.active_processes: dict[str, subprocess.Popen] = {}
+         self.development_runtime = None
+         self._job_cleanups: dict[str, object] = {}
++        self._job_model_evidence: dict[str, object] = {}
+         self.lock = threading.Lock()
+         self._init_db()
+ 
+@@ -335,6 +336,7 @@
+             with self.lock:
+                 self.active_processes[job_id] = proc
+                 self._job_cleanups[job_id] = prepared.cleanup
++                self._job_model_evidence[job_id] = getattr(prepared, "model_evidence", None)
+             threading.Thread(
+                 target=self._monitor_proc,
+                 args=(job_id, proc, stdout_f, stderr_f, stdout_path, stderr_path,
+@@ -357,6 +359,7 @@
+             with self.lock:
+                 self.active_processes.pop(job_id, None)
+                 self._job_cleanups.pop(job_id, None)
++                self._job_model_evidence.pop(job_id, None)
+             try:
+                 prepared.cleanup()
+             finally:
+@@ -615,7 +618,9 @@
+ 
+             finished_at = time.time()
+             duration = finished_at - start_time
+-            actual_model = extract_actual_model(stdout_path, stderr_path)
++            with self.lock:
++                model_evidence = self._job_model_evidence.pop(job_id, None)
++            actual_model = extract_actual_model(stdout_path, stderr_path, evidence=model_evidence)
+ 
+             with self.lock:
+                 self.active_processes.pop(job_id, None)

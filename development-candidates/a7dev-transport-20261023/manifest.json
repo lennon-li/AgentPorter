@@ -1,0 +1,7 @@
+{
+  "source": "/opt/agentporter-development/versions/20261022T224004.423620Z/src/agentporter/agents/provider_egress.py",
+  "source_sha256": "a07743050b630dca2da4eb3a770eccbc52588cb5828062ecd4da74131fe2d434",
+  "candidate_sha256": "b8b18c0959dfc51678fc1da07f65f97a334821a69642c7a4938f0545f2be0b69",
+  "deployed": false,
+  "scope": "development-only source overlay; source patch only; no credentials or settings"
+}

@@ -73,6 +73,7 @@ APPROVAL_ACTIONS = frozenset({
 })
 
 LOCKED_ACTIONS = frozenset({
+    "qman_consult",
     "git_commit",
     "git_push",
 })

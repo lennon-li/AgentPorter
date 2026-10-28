@@ -1,0 +1,45 @@
+{
+  "candidate": "/home/yeli/repos/AgentPorter/development-candidates/a7dev-smoke-20261023",
+  "activated": false,
+  "test_command": "PYTHONDONTWRITEBYTECODE=1 /home/yeli/repos/AgentPorter/.venv/bin/python /home/yeli/repos/AgentPorter/development-candidates/a7dev-smoke-20261023/run_offline_tests.py",
+  "tests_passed": 155,
+  "test_seconds": 7.56,
+  "active_preimages_unchanged": true,
+  "candidate_files": {
+    "agentporter/agents/development.py": {
+      "baseline_sha256": "fee75deeedbb3dd0cd63b46da9cea22bfd1e0e96a03361a8249d4b11ceec317e",
+      "candidate_sha256": "b0d9d556d23e9e44f355dc37a50675106e9ed82c9a153ac3156ab767708bcaa2"
+    },
+    "agentporter/agents/development_egress.py": {
+      "baseline_sha256": "f1a52ee0fd387365bb32a6c4ccd39251846288afef713778aedcf44ed92ec872",
+      "candidate_sha256": "9722df4a12a912bdc2ee54da9e3af6cea6916df826bdf604ce59fe9754272ad8"
+    },
+    "agentporter/agents/provider_egress.py": {
+      "baseline_sha256": "a07743050b630dca2da4eb3a770eccbc52588cb5828062ecd4da74131fe2d434",
+      "candidate_sha256": "9178fbd50faf04d497b2b9bc901e8df3170295c3c198ff3a5665a8687c86041e"
+    },
+    "agentporter/provenance.py": {
+      "baseline_sha256": "df2b39cb9954992b80c5adf1059b643b29c30aa628eb9e8cdb4ebabe2bfaa712",
+      "candidate_sha256": "3b51e357500f103188717d88cefc7fa5c17a8376504f38a2e820c180ff0167fc"
+    },
+    "agentporter/tools/jobs.py": {
+      "baseline_sha256": "720e3a2679e83ab8d6593bcde0c03d543271a26243f1c7ff7fcf27adfcf45333",
+      "candidate_sha256": "934f87704ad01eb8aeddc3a8e0c1399587ded19af1d1f18630f566618f99fabb"
+    }
+  },
+  "artifacts": {
+    "README.md": "ce4fab6ec33737322bd5d61860cbbeadd2c162c67d2603e4a4042f9caa75426b",
+    "candidate.patch": "75177cb54b0fe7f9eda7f25bfd51617954b153c339fdb31608c3fed873a3dc6f",
+    "manifest.json": "c086aedae4197974bb2e6b8db6721529325a444eaed4b139072e6da72ff56789",
+    "run_offline_tests.py": "f77c99793f6b179b4e7e564160d2e3552919a657d08524590e1d91c59a4f599c",
+    "src/agentporter/agents/development.py": "b0d9d556d23e9e44f355dc37a50675106e9ed82c9a153ac3156ab767708bcaa2",
+    "src/agentporter/agents/development_egress.py": "9722df4a12a912bdc2ee54da9e3af6cea6916df826bdf604ce59fe9754272ad8",
+    "src/agentporter/agents/provider_egress.py": "9178fbd50faf04d497b2b9bc901e8df3170295c3c198ff3a5665a8687c86041e",
+    "src/agentporter/provenance.py": "3b51e357500f103188717d88cefc7fa5c17a8376504f38a2e820c180ff0167fc",
+    "src/agentporter/tools/jobs.py": "934f87704ad01eb8aeddc3a8e0c1399587ded19af1d1f18630f566618f99fabb",
+    "tests/test_existing_provenance.py": "264f759b5b304db3aaa57b4528f7d54735922d258918d8e20ed3249420c0fa15",
+    "tests/test_provenance_wiring.py": "58bf9a710dd9f14ad199b04a4c96636cc15c54cece46f0bcf3134fdbf9266440",
+    "tests/test_response_provenance.py": "04fd709f082c0d853ad2e0d5c7db1d48eae9b4660e80a55008d2db1b14946249",
+    "tests/test_transport.py": "4758e300e10bd64b970709704b13ad664d6523c88a0485283ade1bb7c131c4f0"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "source": "/opt/agentporter-development/versions/20261024T011308.040822Z/src/agentporter/agents/provider_egress.py",
+  "source_sha256": "9178fbd50faf04d497b2b9bc901e8df3170295c3c198ff3a5665a8687c86041e",
+  "candidate_sha256": "4bdaef30e9570c6abbabe7b77cfad7379f862dcecdb199a3cd2805c8532e2bf6",
+  "activated": false,
+  "network_rules_changed": false
+}

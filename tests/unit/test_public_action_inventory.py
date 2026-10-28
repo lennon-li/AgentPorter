@@ -26,7 +26,7 @@ def test_policy_has_exactly_one_explicit_entry_per_registered_mcp_operation():
     )
     rows = _policy_rows()
     names = [name for name, _ in rows]
-    assert len(registered) == 53
+    assert len(registered) == 54
     assert len(registered) == len(set(registered))
     assert len(rows) == len(set(names))
     assert set(registered) == set(names), {
@@ -37,14 +37,14 @@ def test_policy_has_exactly_one_explicit_entry_per_registered_mcp_operation():
 
 def test_publication_operations_are_locked_by_policy():
     matrix = dict(_policy_rows())
-    assert matrix["git_commit"] == matrix["git_push"] == "LOCKED"
+    assert matrix["git_commit"] == matrix["git_push"] == matrix["qman_consult"] == "LOCKED"
     assert matrix["scinet_inference_provision"] == "APPROVAL"
     assert matrix["list_agents"] == "ALLOW"
     assert matrix["dispatch_agent"] == "SCOPE"
 
 
 
-# These are outside the owner-overridable 53-action matrix. A privileged
+# These are outside the owner-overridable 54-action matrix. A privileged
 # operation must not become a public endpoint merely because it is LOCKED.
 _HARD_EXCLUDED_HOST_ACTIONS = {
     "sudo", "systemctl", "host_shell", "host_exec", "ssh_exec",
@@ -85,7 +85,7 @@ def test_matrix_distinguishes_operator_overrides_from_permanent_exclusions():
     """The policy catalog documents configurable defaults, not a runtime bypass."""
     policy = CATALOG.read_text()
     assert "Operator-overridable matrix" in policy
-    assert "all 53 public actions" in policy.lower()
+    assert "all 54 public actions" in policy.lower()
     assert "not yet implemented" in policy
     assert "Permanently excluded capabilities" in policy
     assert "not MCP/REST actions" in policy

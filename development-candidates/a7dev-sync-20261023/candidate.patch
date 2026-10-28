@@ -1,0 +1,73 @@
+--- a/scripts/refresh-development-worker-credentials.py
++++ b/scripts/refresh-development-worker-credentials.py
+@@ -232,27 +232,50 @@
+     if (DATA.parent.stat().st_uid != 0 or DATA.parent.stat().st_mode & 0o022
+             or DATA.stat().st_uid != destination.pw_uid or DATA.stat().st_mode & 0o077):
+         raise PermissionError("Development credential storage violates owner/mode boundary")
++    if any(agent not in SOURCES for agent in agents):
++        raise PermissionError("Unknown agent identity")
++    failures = []
+     for agent in agents:
+-        if agent not in SOURCES:
+-            raise PermissionError("Unknown agent identity")
+-        for relative, original in SOURCES[agent].items():
+-            target = DATA / agent / relative
+-            source = Path(original)
+-            _is_private_destination_dir(target.parent, destination.pw_uid)
+-            incoming = _validated_secret(source, source_uid, allow_absent=True, allow_public_read=relative.endswith("/config.toml"))
+-            deployed = _validated_secret(target, destination.pw_uid, allow_absent=True)
+-            if relative.endswith("/config.toml") and apply:
+-                print(f"{agent} {relative}: provider_config_not_auto_refreshed (review approved route)")
+-            elif incoming is None:
+-                print(f"{agent} {relative}: source_missing (renew/login on owner account)")
+-            elif deployed is not None and hmac.compare_digest(
+-                    hashlib.sha256(incoming).digest(), hashlib.sha256(deployed).digest()):
+-                print(f"{agent} {relative}: current")
+-            elif apply:
+-                _install_secret(target, incoming, destination.pw_uid, destination.pw_gid)
+-                print(f"{agent} {relative}: refreshed")
+-            else:
+-                print(f"{agent} {relative}: stale_or_absent")
++        stage = "destination_directory"
++        try:
++            for relative, original in SOURCES[agent].items():
++                # Apply never publishes route configuration. Do not open or validate
++                # an unrelated route file before synchronizing this identity's auth.
++                # Explicit --check/--routes retain all existing metadata checks.
++                if relative.endswith("/config.toml") and apply:
++                    print(f"{agent} {relative}: provider_config_not_auto_refreshed (review approved route)")
++                    continue
++                target = DATA / agent / relative
++                source = Path(original)
++                stage = "destination_directory"
++                _is_private_destination_dir(target.parent, destination.pw_uid)
++                stage = "source"
++                incoming = _validated_secret(source, source_uid, allow_absent=True, allow_public_read=relative.endswith("/config.toml"))
++                stage = "destination"
++                deployed = _validated_secret(target, destination.pw_uid, allow_absent=True)
++                if incoming is None:
++                    print(f"{agent}: credential_failed stage=source reason=missing")
++                    failures.append(agent)
++                elif deployed is not None and hmac.compare_digest(
++                        hashlib.sha256(incoming).digest(), hashlib.sha256(deployed).digest()):
++                    print(f"{agent} {relative}: current")
++                elif apply:
++                    stage = "publish"
++                    _install_secret(target, incoming, destination.pw_uid, destination.pw_gid)
++                    print(f"{agent} {relative}: refreshed")
++                else:
++                    print(f"{agent} {relative}: stale_or_absent")
++        except (OSError, ValueError) as error:
++            # Profiles are independent. Reject this profile without starving later
++            # identities; retain a nonzero overall result. Never print exception
++            # messages, paths, credential values, hashes or server responses.
++            reason = ("missing" if isinstance(error, FileNotFoundError) else
++                      "metadata_rejected" if isinstance(error, PermissionError) else
++                      "io_failure" if isinstance(error, OSError) else "invalid_value")
++            print(f"{agent}: credential_failed stage={stage} reason={reason}")
++            failures.append(agent)
++    if failures:
++        raise PermissionError("Credential sync failed for profiles: " + ",".join(dict.fromkeys(failures))) from None
+ 
+ 
+ def main():

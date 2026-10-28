@@ -39,7 +39,7 @@ reports enforced read-only delegation.
 
 ## Operator-overridable matrix; non-exposed host capabilities
 
-**All 53 public actions have operator-overridable *default policy modes*.**
+**All 54 public actions have operator-overridable *default policy modes*.**
 The ALLOW / SCOPE / APPROVAL / LOCKED entries below are shipped defaults,
 not an immutable list of owner permissions. An authenticated operator may
 configure a stricter or more permissive mode for any exposed action, including
@@ -92,8 +92,11 @@ closed while the confined launcher is missing.
   proof of owner approval.
 
 These are **initial configurable policy decisions**, not existing end-to-end enforcement.
-In this candidate only the dedicated direct `git_commit` and `git_push`
-tools are locked (MCP and REST). **This is not a global Git publication
+
+`qman_consult` is LOCKED by default because this integration invokes a mutable external Qman checkout. Adoption requires immutable operator-installed source or a read-only confined bridge; AgentPorter does not install or activate either runtime.
+In this candidate the dedicated direct `git_commit` and `git_push`
+tools are locked (MCP and REST); `qman_consult` is also locked because it
+invokes mutable external source. **This is not a global Git publication
 block:** general-purpose `exec_run`/`exec_start` tools and external services can still
 write workspace content and could indirectly change Git metadata without further
 OS hardening. Generic network-enabled execution and host-user agent dispatch
@@ -102,7 +105,7 @@ with OS-enforced restrictions or isolated execution identities. The current
 ChatGPT `Always ask` connector setting is a separate, client-side layer.
 This candidate must not be represented as voice-approval-ready.
 
-## Exhaustive live action inventory (53 MCP tools)
+## Exhaustive live action inventory (54 MCP tools)
 
 The mode column is the **initial configurable default**, not a permanent restriction. The protected operator control plane (not yet implemented) will own overrides.
 
@@ -112,6 +115,7 @@ The mode column is the **initial configurable default**, not a permanent restric
 | `server_deploy_info` | **ALLOW** | Read live release provenance only. |
 | `list_workspaces` | **ALLOW** | Return IDs and status; no new access. |
 | `workspace_info` | **ALLOW** | Use registered workspace only. |
+| `qman_consult` | **LOCKED** | Mutable external Qman source remains unavailable until an immutable operator-installed source or read-only confined bridge is adopted (MCP only). |
 | `list_agents` | **ALLOW** | Expose seven named identities; never promise available. |
 | `list_files` | **ALLOW** | Registered workspace; existing sensitive-path protections. |
 | `search_text` | **ALLOW** | Sensitive-path filters remain mandatory. |
@@ -169,7 +173,7 @@ changes, account and package administration, credential or token disclosure,
 workspace traversal, installing hidden MCP servers, inherited privileged
 plugin execution, `git push --force`, destructive branch rewrites, bypassing
 model/account policy, and manufacturing human approvals must **never be public
-MCP/REST operations**. They are not among the 53 public action names, and no
+MCP/REST operations**. They are not among the 54 public action names, and no
 operator override may turn an excluded capability into a new public action.
 
 Absence from discovery alone does not guarantee containment: a generic shell,
@@ -201,7 +205,7 @@ turn this classification into enforceable voice-driven permissions.
    and forged approval/commit/push requests. Independent audit required.
 7. Activate with the trusted immutable deployment gate, and compare live
    release fingerprint, actual agent roster, and operation behavior.
-8. Build the protected operator-owned override policy store; cover all 53
+8. Build the protected operator-owned override policy store; cover all 54
    actions, default to the shipped modes, reject unknown action IDs, and deny
    attempts to introduce hard-excluded host operations into MCP or REST.
 9. Test both policy overrides and runtime invariant gates; a more permissive
@@ -209,9 +213,9 @@ turn this classification into enforceable voice-driven permissions.
 
 ### Catalog integrity
 
-Derived from the actual 53 registered AgentPorter tools available to the
+Derived from the actual 54 registered AgentPorter tools available to the
 connected a7 client on 2026-10-19. The condensed `get_capabilities` list
 advertises fewer tools and is **not** a reliable exhaustive action catalog.
-Maintain this document from a live schema export, and make the 53-name
+Maintain this document from a live schema export, and make the 54-name
 inventory a regression fixture so tool additions cannot silently become
 authorized by default.

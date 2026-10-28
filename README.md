@@ -38,7 +38,7 @@ agent, a chat prompt, or a writable project file.
 | **APPROVAL** | Remote, publication, transfer or high-impact actions with an exact one-time signed owner approval | Review operation details and confirm through a trusted channel |
 | **LOCKED** | Owner-selectable temporary disable for *any exposed action* | Reject until the owner changes policy and backend prerequisites are met |
 
-The desired initial modes for all **53 exposed MCP actions** are below.
+The desired initial modes for all **54 exposed MCP actions** are below.
 These are *recommended defaults*, not permanent privilege ceilings.
 
 | MCP action | Desired default | Scope or approval boundary |
@@ -48,6 +48,7 @@ These are *recommended defaults*, not permanent privilege ceilings.
 | `list_workspaces` | **ALLOW** | Return IDs and status; no new access. |
 | `workspace_info` | **ALLOW** | Use registered workspace only. |
 | `list_agents` | **ALLOW** | Expose seven named identities; never promise available. |
+| `qman_consult` | **LOCKED** | Mutable external Qman source remains unavailable until an immutable operator-installed source or read-only confined bridge is adopted. |
 | `list_files` | **ALLOW** | Registered workspace; existing sensitive-path protections. |
 | `search_text` | **ALLOW** | Sensitive-path filters remain mandatory. |
 | `read_file` | **ALLOW** | Sensitive-path filters and file-size caps apply. |

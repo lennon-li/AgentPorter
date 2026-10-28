@@ -16,6 +16,7 @@ from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter, WeiAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
 from agentporter.agents.policy import ExecutionPolicy
+from agentporter.qman import shadow_consult, record_shadow
 from agentporter.workspaces.registry import WorkspaceRegistry
 
 if TYPE_CHECKING:
@@ -198,6 +199,8 @@ class AgentBroker:
         ws = self.workspace_registry.get(workspace_id)
         if not ws.allow_agent_dispatch:
             raise PermissionError(f"Workspace '{workspace_id}' does not allow agent dispatch")
+        # Never downgrade to start_raw_job if a backend is missing or errors.
+        # The future backend must enforce this exact policy.
         # The host-user Popen path has no kernel-enforced boundary; CLI flags
         # and prompt policy cannot prevent publication or reading host secrets.
         # Re-enable only via a verified, broker-owned confined launch method.
@@ -328,25 +331,26 @@ class AgentBroker:
         else:
             launch_env = None
 
-        # Launch only via a backend owned by AgentPorter that provides
-        # kernel-enforced workspace, network and credential confinement.
-        # Never downgrade to start_raw_job if a backend is missing or errors.
-        job_id = self.job_manager.start_confined_agent_job(
-            workspace_id=workspace_id,
-            workspace_path=ws.path,
-            cmd=cmd,
-            agent=agent_key,
-            provider=provider,
-            model=configured_model,
-            requested_model=requested_model,
-            reasoning_level=requested_reasoning or configured_reasoning,
-            cli_version=cli_ver,
-            timeout_seconds=900,
-            # The future backend must enforce this exact policy, not just
-            # trust the caller's textual task packet or agent name.
-            policy=policy,
-            env=launch_env,
-        )
+        qman_shadow = shadow_consult(agent_key, effective_model, self.workspace_registry)
+        try:
+            job_id = self.job_manager.start_confined_agent_job(
+                workspace_id=workspace_id,
+                workspace_path=ws.path,
+                cmd=cmd,
+                agent=agent_key,
+                provider=provider,
+                model=configured_model,
+                requested_model=requested_model,
+                reasoning_level=requested_reasoning or configured_reasoning,
+                cli_version=cli_ver,
+                timeout_seconds=900,
+                policy=policy,
+                env=launch_env,
+            )
+        except Exception:
+            record_shadow(qman_shadow)
+            raise
+        record_shadow(qman_shadow, job_id=job_id, launched=True)
 
         return {
             "worker_cli": runtime,
