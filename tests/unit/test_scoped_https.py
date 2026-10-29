@@ -291,6 +291,7 @@ def test_pinned_https_uses_vetted_ip_and_original_tls_hostname(monkeypatch):
 
     class FakeTLSContext:
         check_hostname = True
+        verify_mode = module.ssl.CERT_REQUIRED
         calls = []
         def wrap_socket(self, socket_object, server_hostname):
             self.calls.append((socket_object, server_hostname))
