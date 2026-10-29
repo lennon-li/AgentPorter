@@ -35,6 +35,7 @@ def test_broker_refuses_host_worker_without_kernel_confinement(tmp_path, read_on
     )
     adapter = broker.adapters["jax"]
     adapter.detect = lambda: {"is_installed": True, "provider": "OpenAI", "configured_model": "gpt-6.1-sol"}
+    adapter.executable_override = "/usr/bin/true"
     with pytest.raises(PermissionError, match="OS-confined agent launcher"):
         broker.dispatch_agent("jax", "No host launch", "demo", read_only=read_only)
 

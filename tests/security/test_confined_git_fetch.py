@@ -2,6 +2,7 @@
 from pathlib import Path
 import subprocess
 import pytest
+from tests._support import BWRAP_USABLE
 from agentporter import confined_git_fetch as fetch
 
 @pytest.fixture
@@ -36,6 +37,7 @@ def test_external_gitdir_denied(tmp_path):
     (root / '.git').write_text('gitdir: ../private\n')
     assert fetch.fetch_repository(root, state_dir=tmp_path / 'state')['status'] == 'denied'
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_success_imports_only_pack_and_remote_refs(repo, tmp_path, monkeypatch):
     source = tmp_path / 'source'
     subprocess.run(['/usr/bin/git', 'init', '-q', str(source)], check=True)

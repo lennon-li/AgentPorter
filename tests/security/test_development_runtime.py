@@ -10,6 +10,7 @@ import shutil
 import subprocess
 
 import pytest
+from tests._support import BWRAP_USABLE
 import yaml
 
 from agentporter.agents.development import DevelopmentRuntime
@@ -429,6 +430,7 @@ def test_status_reports_only_authoritatively_admitted_workspaces(runtime_factory
     assert status["runtime_dispatch_workspaces"] == ["child", "other", "selected"]
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_real_nested_readonly_workspace_cannot_write_parent_or_descendants(runtime_factory, monkeypatch):
     runtime, config, config_path, workspace, _ = runtime_factory()
     child = workspace / "child"
@@ -624,6 +626,7 @@ def test_git_source_pinned_against_later_symlink_swap(runtime_factory, monkeypat
         launch.cleanup()
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_real_workspace_root_swap_before_mask_scan_keeps_git_readonly(runtime_factory, monkeypatch):
     runtime, _, _, workspace, _ = runtime_factory()
     assert runtime.status("jax")["delegatable"]
@@ -748,6 +751,7 @@ def test_unreadable_mask_path_cannot_be_replaced_by_symlink(runtime_factory, mon
         runtime.prepare('jax', str(workspace), False, ['/usr/bin/python3', '--version'])
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_real_readonly_unreadable_subtree_is_opaque_without_host_permission_changes(runtime_factory, monkeypatch):
     runtime, _, _, workspace, _ = runtime_factory()
     no_probe(monkeypatch, runtime)
@@ -786,6 +790,7 @@ print('OPAQUE_SUBTREE_OK')
     assert not list(runtime.state_dir.glob('development-*'))
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_real_readonly_external_worktree_hides_control_file_and_external_configuration(runtime_factory, monkeypatch):
     runtime, _, _, workspace, other = runtime_factory()
     no_probe(monkeypatch, runtime)
@@ -857,6 +862,7 @@ def test_broad_or_privileged_tool_mounts_rejected(runtime_factory, monkeypatch, 
         runtime.prepare("jax", str(workspace), True, ["/usr/bin/python3", "--version"])
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_real_synthetic_worker_boundaries(runtime_factory):
     """Run on the host when tool-level sandbox blocks namespace/netlink setup."""
     runtime, _, _, workspace, other = runtime_factory()
@@ -910,6 +916,7 @@ print('fixture worker completed')
 
 
 @pytest.mark.parametrize("agent", sorted(PUBLIC_AGENT_IDS))
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_real_all_seven_confined_executable_probes(runtime_factory, agent):
     runtime, *_ = runtime_factory()
     status = runtime.status(agent)
@@ -1105,6 +1112,7 @@ def test_codex_helper_readonly_mount_uses_pinned_fd(runtime_factory, monkeypatch
         os.fstat(fd)
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_real_bundled_codex_helper_admin_launch_inside_boundary(runtime_factory, monkeypatch):
     helper = Path('/home/operator/.codex/packages/standalone/releases/0.163.0-x86_64-unknown-linux-musl/bin/codex-code-mode-host')
     if not helper.is_file():

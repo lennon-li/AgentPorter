@@ -2,6 +2,7 @@
 import subprocess
 
 import pytest
+from tests._support import BWRAP_USABLE
 
 from agentporter.sandbox.bubblewrap import BubblewrapSandbox
 from agentporter.tools.git import create_git_tools
@@ -31,6 +32,7 @@ def without_scoped_trust(args):
 
 
 @pytest.mark.parametrize('cwd', ['', 'subdir'])
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_native_git_owner_check_is_reproduced_and_fixed_only_for_mounted_root(tmp_path, repo, cwd):
     sandbox = BubblewrapSandbox(tmp_path / 'state')
     # This installed Git's own test switch exercises ownership rejection
@@ -47,6 +49,7 @@ def test_native_git_owner_check_is_reproduced_and_fixed_only_for_mounted_root(tm
     assert not (repo / '.git' / 'config.lock').exists()
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_native_other_nested_repository_stays_untrusted(tmp_path, repo):
     child = repo / 'child'
     child.mkdir()
@@ -107,6 +110,7 @@ def test_dedicated_git_keeps_exact_root_trust_and_helper_restrictions(tmp_path, 
         assert '--no-textconv' in call['argv']
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_native_dedicated_git_works_under_assumed_owner_mismatch(tmp_path, repo, monkeypatch):
     sandbox = BubblewrapSandbox(tmp_path / 'state')
     original = sandbox.run
@@ -123,6 +127,7 @@ def test_native_dedicated_git_works_under_assumed_owner_mismatch(tmp_path, repo,
     assert 'visible.txt' in result
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_native_dedicated_diff_does_not_execute_repository_diff_helpers(tmp_path, repo):
     tracked = repo / 'tracked.txt'
     tracked.write_text('before\n')

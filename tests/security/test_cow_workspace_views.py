@@ -8,6 +8,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
+from tests._support import BWRAP_USABLE
 
 from agentporter.workspace_view_service import WorkspaceViewServer
 from agentporter.workspace_views import CowWorkspaceTransaction
@@ -186,6 +187,7 @@ def test_cancel_discards_all_changes(cow):
     assert (root / 'file.txt').read_text() == 'before'
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_hidden_view_mount_never_runs_model_against_empty_backing_directory(cow, tmp_path):
     from agentporter.agents.development import DevelopmentRuntime
     root, create, _ = cow
@@ -215,6 +217,7 @@ def test_hidden_view_mount_never_runs_model_against_empty_backing_directory(cow,
 
 
 @pytest.mark.parametrize('control', ['external', 'invalid', 'missing'])
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_private_code_edits_hide_external_and_inert_git_control_files(cow, tmp_path, control):
     from agentporter.agents.development import DevelopmentRuntime
     root, create, _ = cow
@@ -248,6 +251,7 @@ Path('file.txt').write_text('after')
         launch.cleanup(); tx.cleanup()
 
 
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_real_delegation_namespace_edits_view_and_preserves_git_and_secrets(cow, monkeypatch, tmp_path):
     from agentporter.agents.development import DevelopmentRuntime
     from agentporter.scoped_approvals import VerifiedGrant
@@ -304,6 +308,7 @@ Path('file.txt').write_text('after')
 
 
 @pytest.mark.parametrize('asynchronous', [False, True])
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Bubblewrap network namespaces unavailable on this host")
 def test_actual_direct_execution_uses_private_view_and_publishes_after_exit(cow, monkeypatch, tmp_path, asynchronous):
     from agentporter.sandbox.bubblewrap import BubblewrapSandbox
     from agentporter.tools.execution import create_execution_tools
