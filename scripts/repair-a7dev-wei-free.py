@@ -145,8 +145,8 @@ def main():
     if not args.apply:
         print('Proposal only. No files changed or commands executed. No restart required.')
         return
-    if os.getuid() != pwd.getpwnam('yeli').pw_uid or not os.isatty(0):
-        raise PermissionError('Apply as yeli in an independently authorized local terminal')
+    if os.getuid() != pwd.getpwnam('operator').pw_uid or not os.isatty(0):
+        raise PermissionError('Apply as operator in an independently authorized local terminal')
     if Path('/opt/agentporter-development/current').resolve() != RELEASE:
         raise PermissionError('Installed release changed; review proposal again')
     runtime = RELEASE / 'src/agentporter/agents/development.py'

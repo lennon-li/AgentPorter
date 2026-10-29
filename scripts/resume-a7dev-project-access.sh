@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Reactivate the existing reviewed release after the acceptance-only rollback.
-# Run as yeli. No repository code executes as root; no ACLs or datasets change.
+# Run as operator. No repository code executes as root; no ACLs or datasets change.
 set -euo pipefail
 set +x
 umask 077
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
-cd /home/yeli/agent-work/agentporter-dev
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 [[ $(id -u) != 0 ]]
 old=/opt/agentporter-development/versions/20261021T212000.000019Z
 release=/opt/agentporter-development/versions/20261021T232414.837654Z
@@ -19,7 +19,7 @@ runtime_template=docs/evidence/a7dev-project-access-20261021/retry-runtime-templ
 runtime_sha=fa33ac76062ce50e333a71d21310808bf6ea64658117da6224c6b4dab484a3fe
 plan_sha=2c4b78429001d4a3f3e5acdfa074d2a0ea5987a3980b04e6d378177d5f9c196c
 fingerprint=099b88c95f0fb23e33554e85a426e1b25b9fbba9ca3fe4fffd1ab4869b5da315
-preflight_sha=b4e11649a4f2275b2d1dc9ed14bac514629b5ff17bdf5f4e8ffdcfab170ba709
+preflight_sha=f70f1f79987bc34edc2e56c718245fd852c42be43175c06d02355b9ce1449542
 stopped=0
 policy_attempted=0
 runtime_temp=$config/.runtime-project-access-reactivation
@@ -39,7 +39,7 @@ c.close()
 preflight() {
   sudo -u agentporter-dev -- "$release/venv/bin/python" -I -B -c '
 import hashlib,pathlib,sys
-p=pathlib.Path("/home/yeli/agent-work/agentporter-dev/scripts/preflight-a7dev-project-access-retry.py")
+p=pathlib.Path("/home/operator/agent-work/agentporter-dev/scripts/preflight-a7dev-project-access-retry.py")
 b=p.read_bytes()
 assert hashlib.sha256(b).hexdigest()==sys.argv.pop(1),"Retry preflight changed"
 exec(compile(b,str(p),"exec"))
@@ -54,9 +54,9 @@ policy() {
 acceptance() {
   sudo -u agentporter-dev -- "$release/venv/bin/python" -I -B -c '
 import hashlib,pathlib
-p=pathlib.Path("/home/yeli/agent-work/agentporter-dev/scripts/verify-a7dev-project-access.py")
+p=pathlib.Path("/home/operator/agent-work/agentporter-dev/scripts/verify-a7dev-project-access.py")
 b=p.read_bytes()
-assert hashlib.sha256(b).hexdigest()=="0c85c0548797076ef71faba9a8c276abefcb6c659c9d1d693be69fa79c49c39b","Corrected acceptance changed"
+assert hashlib.sha256(b).hexdigest()=="08bcdd7413589045d40823cb652f2bb09c1b414445464c584c6fd48a42db674a","Corrected acceptance changed"
 exec(compile(b,str(p),"exec"))
 ' --after --public-key-file "$config/secrets.env" --expected-fingerprint "$fingerprint" "$@"
 }
@@ -144,7 +144,7 @@ recover() {
 printf '%s  %s\n' c47044f4ca5bcd1558c8abe355dea949df7d571e370f162d51db1d118f619716 review-artifacts/a7dev-project-access-release-files.json | sha256sum --check --status
 /usr/bin/python3 -I -B -c '
 import hashlib,pathlib
-p=pathlib.Path("/home/yeli/agent-work/agentporter-dev/scripts/verify-existing-project-access-release.py")
+p=pathlib.Path("/home/operator/agent-work/agentporter-dev/scripts/verify-existing-project-access-release.py")
 b=p.read_bytes()
 assert hashlib.sha256(b).hexdigest()=="0f71edb8aae7c5c3ffbd207f3ccfb44e3bab679dfda598ddad267e6b9071fbeb","Installed-payload checker changed"
 exec(compile(b,str(p),"exec"),{"__name__":"__main__","__file__":str(p)})
@@ -152,7 +152,7 @@ exec(compile(b,str(p),"exec"),{"__name__":"__main__","__file__":str(p)})
 printf '%s  %s\n' "$runtime_sha" "$runtime_template" | sha256sum --check --status
 sudo -v
 printf '%s  %s\n' 84a53fbfcfe55668a2edda208b0990acf5fd98a6a105a73fb90cc51252e01c58 "$installer" | sudo /usr/bin/sha256sum --check --status
-printf '%s  %s\n' b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b "$release/operator-plan/authorize-a7dev-project-delegation.py" | sudo /usr/bin/sha256sum --check --status
+printf '%s  %s\n' e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0 "$release/operator-plan/authorize-a7dev-project-delegation.py" | sudo /usr/bin/sha256sum --check --status
 sudo /usr/bin/cat "$evidence/rollback.json" | /usr/bin/python3 -I -c '
 import json,sys
 assert json.load(sys.stdin)=={"release":"/opt/agentporter-development/versions/20261021T212000.000019Z","candidate":"20261021T232414.837654Z"},"Wrong installation rollback receipt"
@@ -170,14 +170,14 @@ sudo /usr/bin/test ! -L "$link_temp"
 quiet
 preflight --plan
 production_before=$(systemctl --user show agentporter.service -p MainPID -p ActiveState -p NRestarts)
-production_release=$(readlink /home/yeli/.local/share/agentporter/current)
+production_release=$(readlink /home/operator/.local/share/agentporter/current)
 sudo /usr/bin/install -d -o root -g root -m 0700 "$backup"
 for name in development-runtime.yaml workspaces.yaml public-client-policy.yaml public-https.yaml; do
   sudo /usr/bin/cp --archive --no-dereference "$config/$name" "$backup/$name"
 done
 /usr/bin/python3 -I -B -c '
 import hashlib,os,stat,sys
-p="/home/yeli/agent-work/agentporter-dev/docs/evidence/a7dev-project-access-20261021/retry-runtime-template.json"
+p="/home/operator/agent-work/agentporter-dev/docs/evidence/a7dev-project-access-20261021/retry-runtime-template.json"
 fd=os.open(p,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
 try:
     s=os.fstat(fd)
@@ -212,7 +212,7 @@ done
 [[ $ready == 1 ]]
 acceptance | sudo /usr/bin/tee "$backup/public-access-acceptance.log"
 [[ $(systemctl --user show agentporter.service -p MainPID -p ActiveState -p NRestarts) == "$production_before" ]]
-[[ $(readlink /home/yeli/.local/share/agentporter/current) == "$production_release" ]]
+[[ $(readlink /home/operator/.local/share/agentporter/current) == "$production_release" ]]
 stopped=0
 trap - ERR INT TERM
 echo "A7Dev project access/scope/negative checks passed. Evidence: $backup"

@@ -12,19 +12,25 @@ logger = logging.getLogger("agentporter.workspaces.registry")
 class WorkspaceRegistry:
     """Registry managing registered workspaces and runtime inspection."""
 
-    def __init__(self, workspaces: Optional[dict[str, dict[str, Any]]] = None):
+    def __init__(self, workspaces: Optional[dict[str, dict[str, Any]]] = None, *, workspace_policy=None):
         self._workspaces: dict[str, WorkspaceDefinition] = {}
+        self.workspace_policy = workspace_policy
+        self.defaults = {"writable": True, "allow_execute": True, "allow_git": True, "allow_artifacts": True, "allow_agent_dispatch": False}
+        if workspace_policy is not None:
+            from agentporter.workspace_policy import CAPABILITIES
+            self.defaults.update({field: value for cap, value in workspace_policy.defaults.items() if (field := CAPABILITIES[cap]) is not None})
+            self.defaults["allow_agent_dispatch"] &= workspace_policy.delegation["enabled_by_default"]
         if workspaces:
             for ws_id, data in workspaces.items():
                 self.register(
                     ws_id=ws_id,
                     path=data.get("path", ""),
-                    writable=data.get("writable", True),
+                    writable=data.get("writable"),
                     description=data.get("description", ""),
-                    allow_execute=data.get("allow_execute", True),
-                    allow_git=data.get("allow_git", True),
-                    allow_artifacts=data.get("allow_artifacts", True),
-                    allow_agent_dispatch=data.get("allow_agent_dispatch", False),
+                    allow_execute=data.get("allow_execute"),
+                    allow_git=data.get("allow_git"),
+                    allow_artifacts=data.get("allow_artifacts"),
+                    allow_agent_dispatch=data.get("allow_agent_dispatch"),
                     local_http_ports=data.get("local_http_ports", []),
                     auto_discover=data.get("auto_discover", False),
                     allow_venkata_ssh=data.get("allow_venkata_ssh", False),
@@ -57,12 +63,12 @@ class WorkspaceRegistry:
         self,
         ws_id: str,
         path: str,
-        writable: bool = True,
+        writable: Optional[bool] = None,
         description: str = "",
-        allow_execute: bool = True,
-        allow_git: bool = True,
-        allow_artifacts: bool = True,
-        allow_agent_dispatch: bool = False,
+        allow_execute: Optional[bool] = None,
+        allow_git: Optional[bool] = None,
+        allow_artifacts: Optional[bool] = None,
+        allow_agent_dispatch: Optional[bool] = None,
         local_http_ports: Optional[list[int]] = None,
         auto_discover: bool = False,
         allow_venkata_ssh: bool = False,
@@ -75,12 +81,12 @@ class WorkspaceRegistry:
         self._workspaces[ws_id] = WorkspaceDefinition(
             id=ws_id,
             path=real_path,
-            writable=writable,
+            writable=self.defaults["writable"] if writable is None else writable,
             description=description,
-            allow_execute=allow_execute,
-            allow_git=allow_git,
-            allow_artifacts=allow_artifacts,
-            allow_agent_dispatch=allow_agent_dispatch,
+            allow_execute=self.defaults["allow_execute"] if allow_execute is None else allow_execute,
+            allow_git=self.defaults["allow_git"] if allow_git is None else allow_git,
+            allow_artifacts=self.defaults["allow_artifacts"] if allow_artifacts is None else allow_artifacts,
+            allow_agent_dispatch=self.defaults["allow_agent_dispatch"] if allow_agent_dispatch is None else allow_agent_dispatch,
             auto_discover=auto_discover,
             local_http_ports=ports,
             allow_venkata_ssh=allow_venkata_ssh,
@@ -125,18 +131,17 @@ class WorkspaceRegistry:
         if not os.path.isdir(ws_path):
             return {"error": f"Workspace directory does not exist on host: {ws_path}"}
 
-        # Git details
+        # Do not run Git on the host against a workspace controlled by a
+        # collaborator. Even `git status` can execute repository configured
+        # clean filters. Detailed Git inspection is available through the
+        # confined Git tools; workspace_info reports unknown until it can use
+        # that same boundary.
         git_branch = None
-        git_dirty = False
+        git_dirty = None
+        git_error = None
         git_dir = os.path.join(ws_path, ".git")
         if os.path.exists(git_dir):
-            try:
-                b_res = subprocess.run(["git", "branch", "--show-current"], cwd=ws_path, capture_output=True, text=True, timeout=5)
-                git_branch = b_res.stdout.strip()
-                s_res = subprocess.run(["git", "status", "--short"], cwd=ws_path, capture_output=True, text=True, timeout=5)
-                git_dirty = bool(s_res.stdout.strip())
-            except Exception:
-                pass
+            git_error = "Git inspection unavailable (use confined Git status)"
 
         # Language detection
         languages = []
@@ -198,6 +203,8 @@ class WorkspaceRegistry:
                 "is_repo": os.path.exists(git_dir),
                 "branch": git_branch,
                 "dirty": git_dirty,
+                **({"error": git_error} if git_error else {}),
+                **({"detached": git_branch is None} if git_dirty is not None else {}),
             },
             "languages": languages,
             "marker_files": markers,

@@ -49,8 +49,8 @@ def main():
     pins = json.loads(args.source_manifest.read_text())
     if set(pins) != MODULES:
         raise ValueError('Only the three cancellation modules may change')
-    overlay = load('prepare-development-overlay', 'bc49c16bae77964779aa8e2a7e39d7d69ad2df9551ed77cd9de2172e60f126fc')
-    canonical = load('prepare-closeout-candidate', '1ce0f50ca4179901123975334c175b7d1cd3ca84c2c7d44ddfe2fd2f195d70fc')
+    overlay = load('prepare-development-overlay', '69bf234a1b8d1732daf2179823ab93a92a6a3a9f29e00ec1c4edd01b87c02ec0')
+    canonical = load('prepare-closeout-candidate', 'eb36970fe8e734ef46a7b49ba12465ccaa5200634cc4eaa2e1acb98a62a170be')
     builder = overlay.helper('build-development-candidate')
     installer = overlay.helper('install-development-artifact')
     changes = {name: overlay.pinned_bytes(REPO / name, digest) for name, digest in pins.items()}

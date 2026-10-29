@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+# Human-run, one-time knowhere setup. Review and install this file outside the
+# AgentPorter checkout before running --install. See docs/openai-tunnel-setup.md.
+set -Eeuo pipefail
+
+readonly PORTER_SHA=65dbf445bcd16f8e6961a5d5eef4d9f76c084cf8
+readonly PORTER_SOURCE="$HOME/repos/AgentPorter"
+readonly PORTER_TRUSTED_DIR="$HOME/.local/libexec/agentporter"
+readonly PORTER_SETUP_DIR="$HOME/.local/libexec/agentporter-setup"
+readonly PORTER_UNIT_DIR="$HOME/.config/systemd/user"
+readonly PORTER_CONFIG_DIR="$HOME/.config/agentporter-chatgpt"
+readonly PORTER_RELEASE_ROOT="$HOME/.local/share/agentporter"
+readonly PORTER_MAIN_UNIT="$PORTER_UNIT_DIR/agentporter.service"
+readonly PORTER_MAIN_BACKUP="$PORTER_UNIT_DIR/agentporter.service.pre-release.bak"
+
+PORTER_STAGE=""
+PORTER_MAIN_PENDING=0
+
+say() { printf '[knowhere-setup] %s\n' "$*"; }
+fail() { say "REFUSED: $*" >&2; exit 2; }
+
+cleanup() {
+    if [[ -n "$PORTER_STAGE" && -d "$PORTER_STAGE" ]]; then
+        rm -rf -- "$PORTER_STAGE"
+    fi
+}
+trap cleanup EXIT
+
+restore_main() {
+    local original_status="$1"
+    trap - ERR
+    if [[ "$PORTER_MAIN_PENDING" == 1 ]]; then
+        say "Release activation failed; restoring the backed-up service unit."
+        if install -m 0644 "$PORTER_MAIN_BACKUP" "$PORTER_MAIN_UNIT" &&
+           systemctl --user daemon-reload &&
+           systemctl --user restart agentporter.service &&
+           systemctl --user is-active --quiet agentporter.service; then
+            say "Previous editable service restarted. Its health still needs inspection."
+        else
+            say "RESTORE FAILED: inspect $PORTER_MAIN_BACKUP and agentporter.service now." >&2
+        fi
+    fi
+    exit "$original_status"
+}
+trap 'restore_main "$?"' ERR
+
+asset_hash() {
+    case "$1" in
+        agentporter-knowhere.service) printf '%s' 0c412d0e6278545f4f6e8fcfdbc6a4550868e3bb6d59df9dd292f1e5f0739e5d ;;
+        agentporter-chatgpt.service) printf '%s' 78adf7015883de43c4d61ac82027d36a560dec60d9f79000bb373d92a770411f ;;
+        agentporter-openai-tunnel.service) printf '%s' 97a5f608d67774f782d1bfc90ca96b74418f15849109706276840b3316c11129 ;;
+        knowhere-chatgpt-config.yaml) printf '%s' de1aab73bda244d6860dfb69c5dd9e088aea54ea3de68b43fd0771136037fe47 ;;
+        knowhere-chatgpt-workspaces.yaml) printf '%s' 1dbf71cdc1e3a9e66721a96117beefe100678a5b17562ec822c12c04454eb9f2 ;;
+        *) fail "Unexpected asset: $1" ;;
+    esac
+}
+
+check_asset() {
+    local name="$1" path="$2" actual
+    [[ -f "$path" && ! -L "$path" ]] || fail "Missing or linked asset: $path"
+    actual="$(sha256sum "$path")"
+    [[ "${actual%% *}" == "$(asset_hash "$name")" ]] || fail "Asset changed since review: $path"
+}
+
+preflight() {
+    local name triggers
+    [[ "$(hostname -s)" == knowhere ]] || fail "This setup targets knowhere only"
+    [[ -d "$PORTER_SOURCE/.git" && -f "$PORTER_SOURCE/pyproject.toml" ]] || fail "AgentPorter checkout missing"
+    git -C "$PORTER_SOURCE" cat-file -e "$PORTER_SHA^{commit}" || fail "Reviewed commit is missing"
+    [[ -f "$PORTER_MAIN_UNIT" && ! -L "$PORTER_MAIN_UNIT" ]] || fail "Existing agentporter.service is missing or linked"
+    [[ ! -e "$PORTER_MAIN_BACKUP" ]] || fail "Backup already exists; inspect the earlier setup attempt"
+    [[ ! -e "$PORTER_RELEASE_ROOT/current" ]] || fail "An immutable release is already active; use the release procedure"
+    [[ ! -e "$PORTER_CONFIG_DIR" ]] || fail "Dedicated ChatGPT config already exists; inspect it first"
+    [[ ! -e "$PORTER_UNIT_DIR/agentporter-chatgpt.service" ]] || fail "Dedicated service already exists"
+    [[ ! -e "$PORTER_UNIT_DIR/agentporter-openai-tunnel.service" ]] || fail "Tunnel service already exists"
+    [[ -x "$HOME/.local/bin/tunnel-client" ]] || fail "Verified tunnel-client is missing"
+    [[ -x "$HOME/.local/bin/uv" || -x "$HOME/bin/uv" || -x /usr/local/bin/uv ]] || fail "uv is missing"
+    [[ -n "${XDG_RUNTIME_DIR:-}" && -d "${XDG_RUNTIME_DIR:-}" ]] || fail "Private XDG_RUNTIME_DIR is required"
+    [[ "$(stat -c '%u %a' "$XDG_RUNTIME_DIR")" == "$(id -u) 700" ]] || fail "XDG_RUNTIME_DIR must be user-owned with mode 0700"
+    systemctl --user is-active --quiet agentporter.service || fail "Existing AgentPorter service is not active"
+    triggers="$(systemctl --user list-unit-files 'agentporter*.path' --no-legend 2>/dev/null || true)"
+    [[ -z "$triggers" ]] || fail "AgentPorter path-triggered unit is present"
+    compgen -G "$PORTER_UNIT_DIR/agentporter*.path" >/dev/null && fail "AgentPorter path-triggered unit file is present"
+    /usr/bin/python3 -I -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 8776)); s.close()' || fail "Port 8776 is in use"
+
+    for name in agentporter-knowhere.service agentporter-chatgpt.service agentporter-openai-tunnel.service \
+                knowhere-chatgpt-config.yaml knowhere-chatgpt-workspaces.yaml; do
+        check_asset "$name" "$PORTER_SOURCE/examples/$name"
+    done
+    say "Preflight passed for knowhere, commit $PORTER_SHA, port 8776, and reviewed assets."
+}
+
+require_trusted_copy() {
+    local self dir
+    self="$(realpath "${BASH_SOURCE[0]}")"
+    dir="$(dirname "$self")"
+    [[ "$self" == "$PORTER_SETUP_DIR/agentporter-knowhere-install" ]] || fail "Install this script in $PORTER_SETUP_DIR before --install"
+    [[ ! -w "$self" && ! -w "$dir" ]] || fail "Setup script and directory must be read-only"
+    [[ "$(stat -c '%u' "$self")" == "$(id -u)" ]] || fail "Setup script must be owned by the operator"
+}
+
+stage_assets() {
+    local name
+    PORTER_STAGE="$(mktemp -d "$XDG_RUNTIME_DIR/agentporter-setup.XXXXXXXX")"
+    for name in agentporter-knowhere.service agentporter-chatgpt.service agentporter-openai-tunnel.service \
+                knowhere-chatgpt-config.yaml knowhere-chatgpt-workspaces.yaml; do
+        cp -- "$PORTER_SOURCE/examples/$name" "$PORTER_STAGE/$name"
+        check_asset "$name" "$PORTER_STAGE/$name"
+    done
+    git -C "$PORTER_SOURCE" show "$PORTER_SHA:scripts/agentporter-deploy" > "$PORTER_STAGE/agentporter-deploy"
+    [[ -s "$PORTER_STAGE/agentporter-deploy" ]] || fail "Trusted deploy script missing from commit"
+}
+
+install_deployer() {
+    [[ ! -L "$HOME/.local/libexec" ]] || fail "Local libexec directory must not be a symlink"
+    install -d -m 0755 "$HOME/.local/libexec"
+    if [[ -e "$PORTER_TRUSTED_DIR" ]]; then
+        [[ -d "$PORTER_TRUSTED_DIR" && ! -L "$PORTER_TRUSTED_DIR" ]] || fail "Trusted deploy directory is invalid"
+        [[ -f "$PORTER_TRUSTED_DIR/agentporter-deploy" ]] || fail "Trusted deploy directory is incomplete"
+        cmp -s "$PORTER_STAGE/agentporter-deploy" "$PORTER_TRUSTED_DIR/agentporter-deploy" || fail "Installed deploy script differs from reviewed commit"
+        [[ ! -w "$PORTER_TRUSTED_DIR" && ! -w "$PORTER_TRUSTED_DIR/agentporter-deploy" ]] || fail "Installed deploy script is writable"
+    else
+        mkdir -m 0755 "$PORTER_TRUSTED_DIR"
+        install -m 0555 "$PORTER_STAGE/agentporter-deploy" "$PORTER_TRUSTED_DIR/agentporter-deploy"
+        chmod 0555 "$PORTER_TRUSTED_DIR"
+    fi
+}
+
+verify_chatgpt_release() {
+    local release="$PORTER_RELEASE_ROOT/current" expected_fp expected_path pid
+    read -r expected_fp expected_path < <(/usr/bin/python3 -I -c \
+        'import json,sys; m=json.load(open(sys.argv[1])); print(m["fingerprint"],m["package_path"])' \
+        "$release/RELEASE.json")
+    pid="$(systemctl --user show agentporter-chatgpt.service -p MainPID --value)"
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail "Dedicated service has no live MainPID"
+    "$release/venv/bin/python" -I -m agentporter.cli deploy-check \
+        --config-dir "$PORTER_CONFIG_DIR" --url http://127.0.0.1:8776 --wait 30 \
+        --expect-fingerprint "$expected_fp" --expect-path "$expected_path" --expect-pid "$pid"
+}
+
+install_setup() {
+    require_trusted_copy
+    preflight
+    stage_assets
+    install_deployer
+
+    cp -p "$PORTER_MAIN_UNIT" "$PORTER_MAIN_BACKUP"
+    PORTER_MAIN_PENDING=1
+    install -m 0644 "$PORTER_STAGE/agentporter-knowhere.service" "$PORTER_MAIN_UNIT"
+    systemctl --user daemon-reload
+    "$PORTER_TRUSTED_DIR/agentporter-deploy" deploy "$PORTER_SHA"
+    PORTER_MAIN_PENDING=0
+    say "Existing AgentPorter service runs the verified immutable release."
+
+    install -d -m 0700 "$PORTER_CONFIG_DIR"
+    install -m 0600 "$PORTER_STAGE/knowhere-chatgpt-config.yaml" "$PORTER_CONFIG_DIR/config.yaml"
+    install -m 0600 "$PORTER_STAGE/knowhere-chatgpt-workspaces.yaml" "$PORTER_CONFIG_DIR/workspaces.yaml"
+    install -m 0644 "$PORTER_STAGE/agentporter-chatgpt.service" "$PORTER_UNIT_DIR/agentporter-chatgpt.service"
+    install -m 0644 "$PORTER_STAGE/agentporter-openai-tunnel.service" "$PORTER_UNIT_DIR/agentporter-openai-tunnel.service"
+    systemctl --user daemon-reload
+    systemctl --user enable --now agentporter-chatgpt.service
+    verify_chatgpt_release
+    say "Dedicated read-only AgentPorter service is verified on 127.0.0.1:8776."
+    say "Tunnel unit is installed but disabled until Platform tunnel ID and private runtime key are configured."
+}
+
+case "${1:-}" in
+    --check) [[ $# == 1 ]] || fail "Usage: $0 --check|--install"; preflight ;;
+    --install) [[ $# == 1 ]] || fail "Usage: $0 --check|--install"; install_setup ;;
+    *) fail "Usage: $0 --check|--install" ;;
+esac

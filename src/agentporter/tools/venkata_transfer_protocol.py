@@ -10,8 +10,8 @@ import signal
 import stat
 import sys
 
-SOURCE_ROOT = "/home/yeli/repos/cranary/data-raw/cran-history/cache/mechanical-v1-ready"
-DESTINATION_ROOT = "/home/yeli/laya-training/transfers"
+SOURCE_ROOT = "/home/operator/repos/cranary/data-raw/cran-history/cache/mechanical-v1-ready"
+DESTINATION_ROOT = "/home/operator/laya-training/transfers"
 DATA_FILES = frozenset({"dataset.jsonl", "inputs.jsonl", "manifest.json"})
 ALLOWED_FILES = DATA_FILES | {"synthetic-test.txt"}
 MAX_FILES = 3

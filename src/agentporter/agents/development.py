@@ -20,12 +20,15 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
+import logging
 from typing import Callable
 
 import yaml
 
 from agentporter.agents.isolated_codex import _clean_profile_data
 from agentporter.agents.roster import PUBLIC_AGENT_IDS
+from agentporter.resources import WORKER_RELEASE_ROOTS, worker_service_unit
 
 
 @dataclass
@@ -33,6 +36,8 @@ class PreparedLaunch:
     command: list[str]
     cleanup: Callable[[], None]
     pass_fds: tuple[int, ...] = ()
+    model_evidence: object | None = None
+    finalize: Callable[[bool], None] | None = None
 
 
 class DevelopmentRuntime:
@@ -57,7 +62,14 @@ class DevelopmentRuntime:
     }
     _GO_MODEL = "opencode-go/glm-5.3-flash"
     _GO_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
-    _RELEASES = Path("/opt/agentporter-development/versions")
+    _RELEASES = Path(WORKER_RELEASE_ROOTS["agentporter-development.service"])
+
+    @staticmethod
+    def _release_root(config: dict, development_root: Path = _RELEASES) -> Path:
+        unit = worker_service_unit(config)
+        if unit == "agentporter-development.service":
+            return development_root
+        return Path(WORKER_RELEASE_ROOTS[unit])
 
     def __init__(self, config_dir: Path, state_dir: Path, workspace_registry):
         self.config_dir = Path(config_dir).resolve()
@@ -68,6 +80,24 @@ class DevelopmentRuntime:
         self._probe_lock = threading.Lock()
         self._toolkit_lock = threading.Lock()
         self._toolkit_cache: tuple | None = None
+
+    def _shared_mode(self, config: dict) -> bool:
+        return (getattr(self.workspace_registry, "workspace_policy", None) is not None
+                and worker_service_unit(config) == "agentporter-worker.service")
+
+    def _shared_config(self, config: dict) -> dict:
+        if not self._shared_mode(config):
+            return config
+        from agentporter.workspace_policy import SHARED_POLICY_PATH
+        if config.get("workspace_policy_file") != str(SHARED_POLICY_PATH):
+            raise PermissionError("Production runtime requires the shared workspace policy file")
+        config = dict(config)
+        config["allowed_workspace_roots"] = [
+            {"path": row["path"], "writable": bool(row["writable"])}
+            for row in self.workspace_registry.list_all()]
+        config["production_relay_agents"] = sorted(
+            set(config.get("workers", {})) & set(PUBLIC_AGENT_IDS))
+        return config
 
     def _config(self) -> dict:
         try:
@@ -92,6 +122,7 @@ class DevelopmentRuntime:
             raise PermissionError(f"development gateway must run as configured account: {user}")
         if account.pw_uid == 0:
             raise PermissionError("development workers cannot run as root")
+        value = self._shared_config(value)
         self._allowed_workspace_roots(value)
         if not Path("/usr/bin/bwrap").is_file() or not os.access("/usr/bin/bwrap", os.X_OK):
             raise PermissionError("required OS confinement executable /usr/bin/bwrap is unavailable")
@@ -267,6 +298,7 @@ class DevelopmentRuntime:
         path = Path(workspace_path).resolve(strict=True)
         if not path.is_dir():
             raise PermissionError("development workspace must be a directory")
+        config = self._shared_config(config)
         allowed = self._allowed_workspace_roots(config)
         if path not in allowed:
             raise PermissionError("workspace is outside the operator development allowlist")
@@ -286,7 +318,7 @@ class DevelopmentRuntime:
         # the operator has denied writes for the entire approved subtree.
         # Keep checking all descendants, including grandchildren: admitting a
         # writable leaf through a read-only parent would bypass that boundary.
-        if descendants and (writable or allowed[path] or any(allowed[other] for other in descendants)):
+        if not self._shared_mode(config) and descendants and (writable or allowed[path] or any(allowed[other] for other in descendants)):
             raise PermissionError("workspace is a broad parent of another approved workspace")
         protected = [self.config_dir, self.state_dir]
         for worker in config.get("workers", {}).values():
@@ -307,20 +339,33 @@ class DevelopmentRuntime:
             descriptors.append(fd)
             return fd
         current = root_fd
-        for index, component in enumerate(path.parts):
-            fd = os.open(component, flags, dir_fd=current)
-            descriptors.append(fd)
-            info = os.fstat(fd)
-            if stat.S_ISLNK(info.st_mode) or (index < len(path.parts) - 1 and not stat.S_ISDIR(info.st_mode)):
-                raise PermissionError("worker-controlled mount path changed to a symlink")
-            current = fd
-        return current
+        owned = None
+        try:
+            for index, component in enumerate(path.parts):
+                fd = os.open(component, flags, dir_fd=current)
+                try:
+                    info = os.fstat(fd)
+                    if stat.S_ISLNK(info.st_mode) or (index < len(path.parts) - 1 and not stat.S_ISDIR(info.st_mode)):
+                        raise PermissionError("worker-controlled mount path changed to a symlink")
+                except BaseException:
+                    os.close(fd)
+                    raise
+                if owned is not None:
+                    os.close(owned)
+                owned = current = fd
+            if owned is not None:
+                descriptors.append(owned)
+                owned = None  # Only the final pinned inode is needed for mounting.
+            return current
+        finally:
+            if owned is not None:
+                os.close(owned)
 
     @staticmethod
     def _secret_name(name: str) -> bool:
         return name.endswith(".env") or name == ".env" or name.startswith(".env.")
 
-    def _masks(self, workspace: Path, writable: bool) -> list[tuple[Path, bool, bool, bool]]:
+    def _masks(self, workspace: Path, writable: bool, *, private_writes: bool = False) -> list[tuple[Path, bool, bool, bool]]:
         masks: list[tuple[Path, bool, bool, bool]] = []
         real_root = workspace.resolve(strict=True)
         def failed(error):
@@ -360,21 +405,31 @@ class DevelopmentRuntime:
                     if name == ".git" and not writable:
                         masks.append((source.relative_to(workspace), False, False, False))
                         continue
-                    masks.append((source.relative_to(workspace), False, name == ".git", False))
+                    masks.append((source.relative_to(workspace), False, name == ".git" and not private_writes, False))
                     if name == ".git" and not source.is_symlink():
                         text = source.read_text()
                         if not text.startswith("gitdir: "):
+                            if private_writes:
+                                continue  # Inert test/stale control file stays masked.
                             raise PermissionError("invalid Git worktree control file")
                         target = (source.parent / text[8:].strip()).resolve()
                         if target == real_root or target in real_root.parents:
                             raise PermissionError("Git control directory cannot be a workspace ancestor")
+                        if private_writes and not target.is_relative_to(real_root):
+                            # A private job can edit the worktree's code while
+                            # its external Git control file stays blank and
+                            # read-only, exactly as for a read-only worktree.
+                            # Never mount or publish the external metadata.
+                            continue
                         if not target.is_relative_to(real_root) or not target.is_dir():
+                            if private_writes and not target.exists():
+                                continue  # A missing control target grants no access.
                             raise PermissionError("external Git worktree metadata is not authorized for delegation")
                         common = target / "commondir"
-                        if common.is_file() and not (target / common.read_text().strip()).resolve().is_relative_to(real_root):
+                        if not private_writes and common.is_file() and not (target / common.read_text().strip()).resolve().is_relative_to(real_root):
                             raise PermissionError("external Git worktree common directory is not authorized for delegation")
                         masks.append((target.relative_to(real_root), True, True, False))
-                elif writable and not source.is_symlink() and source.stat().st_nlink > 1:
+                elif writable and not private_writes and not source.is_symlink() and source.stat().st_nlink > 1:
                     raise PermissionError(f"writable workspace contains hardlinked file: {source.relative_to(workspace)}")
         return masks
 
@@ -420,7 +475,7 @@ class DevelopmentRuntime:
         if not isinstance(value, str):
             raise PermissionError("Invalid shared Obsidian snapshot configuration")
         path = Path(value)
-        expected_prefix = Path("/opt/agentporter-development/versions")
+        expected_prefix = DevelopmentRuntime._release_root(config)
         if not path.is_absolute() or path.name != "obsidian" or path.parent.name != "shared":
             raise PermissionError("Shared Obsidian data must be a named release snapshot")
         if not path.is_relative_to(expected_prefix) or len(path.relative_to(expected_prefix).parts) != 3:
@@ -505,7 +560,7 @@ class DevelopmentRuntime:
         if not isinstance(value, str):
             raise PermissionError("Invalid shared tool release configuration")
         path = Path(value)
-        prefix = self._RELEASES
+        prefix = self._release_root(config, self._RELEASES)
         if (not path.is_absolute() or path.name != "toolkit"
                 or path.parent.name != "shared"
                 or not path.is_relative_to(prefix)
@@ -602,13 +657,15 @@ class DevelopmentRuntime:
         return immutable
 
     def _build(self, agent: str, config: dict, spec: dict, workspace: Path,
-               writable: bool, cmd: list[str], *, probe: bool = False, launch_env: dict | None = None) -> PreparedLaunch:
+               writable: bool, cmd: list[str], *, probe: bool = False, launch_env: dict | None = None, source_workspace: Path | None = None, workspace_descriptor: int | None = None) -> PreparedLaunch:
         self.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         root = Path(tempfile.mkdtemp(prefix=f"development-{agent}-", dir=self.state_dir))
         os.chmod(root, 0o700)
         proxy = None
         headroom_proxy = None
         descriptors: list[int] = []
+        from agentporter.provenance import ProviderModelEvidence
+        model_evidence = ProviderModelEvidence()
         cleaned = False
 
         def cleanup():
@@ -676,10 +733,11 @@ class DevelopmentRuntime:
                     if self._shared_obsidian_source(config) is not None else []
                 )
                 permissions = {
-                    "allow": ["read_file(/workspace)", *shared_reads],
+                    "allow": ["read_file(/workspace)", *shared_reads,
+                              *(["write_file(/workspace)"] if writable else [])],
                 "deny": [
                         "command(*)",
-                        "write_file(*)",
+                        *([] if writable else ["write_file(*)"]),
                         "read_url(*)",
                         "execute_url(*)",
                         "mcp(*)",
@@ -703,7 +761,15 @@ class DevelopmentRuntime:
             for path in ("/usr", "/lib", "/lib64", "/bin", "/sbin", "/etc/alternatives", "/etc/ssl/certs"):
                 if Path(path).exists():
                     args += ["--ro-bind", path, path]
-            workspace_fd = self._pin(workspace, descriptors)
+            if workspace_descriptor is None:
+                workspace_fd = self._pin(workspace, descriptors)
+            else:
+                workspace_fd = os.dup(workspace_descriptor)
+                descriptors.append(workspace_fd)
+                if not stat.S_ISDIR(os.fstat(workspace_fd).st_mode):
+                    raise PermissionError('Workspace view descriptor is not a directory')
+            source_fd = (self._pin(source_workspace, descriptors)
+                         if source_workspace is not None else workspace_fd)
             args += ["--ro-bind", str(root / "passwd"), "/etc/passwd",
                      "--ro-bind", str(root / "group"), "/etc/group",
                      "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
@@ -713,12 +779,14 @@ class DevelopmentRuntime:
             # Scan the same pinned directory that will actually be mounted;
             # re-reading the host pathname after a concurrent root rename can
             # otherwise omit Git/secret masks from the original source tree.
-            for relative, directory, metadata, inaccessible in self._masks(Path(f"/proc/self/fd/{workspace_fd}"), writable):
+            for relative, directory, metadata, inaccessible in self._masks(
+                    Path(f"/proc/self/fd/{source_fd}"), writable,
+                    **({'private_writes': True} if workspace_descriptor is not None else {})):
                 if inaccessible:
                     # O_PATH does not read denied contents; reject symlinked
                     # components before placing the opaque denied mount.
-                    self._pin(relative, descriptors, workspace_fd)
-                metadata_fd = self._pin(relative, descriptors, workspace_fd) if metadata else None
+                    self._pin(relative, descriptors, source_fd)
+                metadata_fd = self._pin(relative, descriptors, source_fd) if metadata else None
                 source = (str(opaque) if inaccessible else f"/proc/self/fd/{metadata_fd}" if metadata
                           else str(empty if directory else empty_file))
                 args += ["--ro-bind", str(source), f"/workspace/{relative}"]
@@ -824,7 +892,8 @@ class DevelopmentRuntime:
                 if policy == "provider_origin":
                     from agentporter.agents.provider_egress import ProviderEgress
                     proxy = ProviderEgress(root / "egress.sock", agent=agent,
-                        parallel_search=config.get("parallel_search_enabled") is True).start()
+                        parallel_search=config.get("parallel_search_enabled") is True,
+                        model_evidence=model_evidence).start()
                     ca_path = "/run/agentporter-provider-ca.pem"
                     args += ["--ro-bind", str(proxy.ca_bundle), ca_path]
                     environment.update(SSL_CERT_FILE=ca_path, CODEX_CA_CERTIFICATE=ca_path, REQUESTS_CA_BUNDLE=ca_path,
@@ -850,7 +919,8 @@ class DevelopmentRuntime:
                     if route == "http://127.0.0.1:9787/v1":
                         from agentporter.agents.development_egress import HeadroomEgress
                         headroom_proxy = HeadroomEgress(root / "headroom.sock",
-                            enforce_provider_tools=policy == "provider_origin").start()
+                            enforce_provider_tools=policy == "provider_origin",
+                            model_evidence=model_evidence).start()
                         args += ["--ro-bind", str(root / "headroom.sock"), "/run/agentporter-headroom.sock"]
                         worker = ["/usr/bin/python3", "/opt/agentporter/development_egress.py",
                                   "headroom-bridge", "--socket", "/run/agentporter-headroom.sock",
@@ -870,11 +940,23 @@ for item in os.listdir('/proc/self/fd'):
             pass
 os.execvpe(sys.argv[1], sys.argv[1:], os.environ)
 """
+            if workspace_descriptor is not None:
+                identity = os.fstat(workspace_fd)
+                # Bubblewrap canonicalizes bind sources, including procfs fd
+                # paths. A view hidden in another mount namespace can resolve
+                # to an empty backing directory. Refuse before model code runs.
+                close_descriptors = (
+                    "import os\n"
+                    "workspace = os.stat('/workspace')\n"
+                    f"if (workspace.st_dev, workspace.st_ino) != {(identity.st_dev, identity.st_ino)!r}:\n"
+                    "    raise PermissionError('Private workspace mount identity mismatch')\n"
+                    + close_descriptors
+                )
             worker = ["/usr/bin/python3", "-I", "-S", "-c", close_descriptors, *worker]
             for key, value in environment.items():
                 args += ["--setenv", key, value]
             args += ["--chdir", "/workspace", "--", *worker]
-            return PreparedLaunch(args, cleanup, tuple(descriptors))
+            return PreparedLaunch(args, cleanup, tuple(descriptors), model_evidence)
         except BaseException:
             cleanup()
             raise
@@ -1091,4 +1173,91 @@ print('AGENTPORTER_OS_CONFINEMENT_OK')
                 cmd: list[str], env: dict | None = None) -> PreparedLaunch:
         config, spec = self._verified(agent)
         workspace = self._workspace(workspace_path, writable, config)
-        return self._build(agent, config, spec, workspace, writable, cmd, launch_env=env)
+        if not writable or not self._shared_mode(config):
+            return self._build(agent, config, spec, workspace, writable, cmd, launch_env=env)
+        self._shared_config(config)  # Explicit production role fence, even with custom verifiers.
+        from agentporter.task_authorization import ACTIVE_GRANT
+        from agentporter.scoped_approvals import VerifiedGrant
+        from agentporter.workspace_views import CowWorkspaceTransaction as WorkspaceTransaction
+        grant = ACTIVE_GRANT.get()
+        if (not isinstance(grant, VerifiedGrant)
+                or grant.claims.get("workspace_root") != str(workspace)
+                or grant.claims.get("agent") != agent
+                or type(grant.claims.get("expires_at")) is not int
+                or grant.claims["expires_at"] <= time.time()
+                or "write" not in grant.claims.get("operations", ())):
+            raise PermissionError("Verified task grant required for this workspace and agent")
+        policy = self.workspace_registry.workspace_policy
+        protected = []
+        for path in policy.protected_paths:
+            if path == workspace:
+                raise PermissionError("Workspace is protected")
+            if path.is_relative_to(workspace):
+                protected.append(path.relative_to(workspace).as_posix())
+        for name, row in policy.workspaces.items():
+            path = Path(row["path"])
+            if path != workspace and path.is_relative_to(workspace) and not policy.capabilities(name)["writable"]:
+                protected.append(path.relative_to(workspace).as_posix())
+        # Preserve every metadata/credential mask as a publication restriction too.
+        masks = self._masks(workspace, True, private_writes=True)
+        protected.extend(relative.as_posix() for relative, *_ in masks if ".git" not in relative.parts)
+        metadata_targets = [relative for relative, _, metadata, _ in masks
+                            if metadata and relative.name == ".git"]
+        self.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        transaction = WorkspaceTransaction(workspace, self.state_dir / "transactions",
+            "task_" + uuid.uuid4().hex, allow_delete="delete" in grant.claims["operations"],
+            protected_paths=protected)
+        try:
+            stage = transaction.prepare()
+            prepared = self._build(agent, config, spec, stage, True, cmd,
+                                   launch_env=env, source_workspace=workspace,
+                                   **({'workspace_descriptor': transaction.view_descriptor}
+                                      if hasattr(transaction, 'view_descriptor') else {}))
+        except BaseException:
+            transaction.cleanup()
+            raise
+        original_cleanup = prepared.cleanup
+        finalized = False
+        def finalize(success):
+            nonlocal finalized
+            if finalized:
+                return
+            finalized = True
+            try:
+                if success:
+                    # bwrap creates empty mount targets in the private stage.
+                    # Original Git metadata was mounted over them read-only;
+                    # remove only those verified empty placeholders after exit.
+                    for relative in (() if getattr(transaction, 'contains_git_metadata', False) else metadata_targets):
+                        parents = []
+                        try:
+                            parent = os.open(stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                            parents.append(parent)
+                            for component in relative.parts[:-1]:
+                                parent = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+                                parents.append(parent)
+                            try:
+                                info = os.stat(relative.name, dir_fd=parent, follow_symlinks=False)
+                            except FileNotFoundError:
+                                continue
+                            if stat.S_ISDIR(info.st_mode):
+                                os.rmdir(relative.name, dir_fd=parent)
+                            elif stat.S_ISREG(info.st_mode) and info.st_size == 0 and info.st_nlink == 1:
+                                os.unlink(relative.name, dir_fd=parent)
+                            else:
+                                raise PermissionError("Unexpected staged Git metadata placeholder")
+                        finally:
+                            for descriptor in reversed(parents):
+                                os.close(descriptor)
+                    summary = transaction.apply()
+                    logging.getLogger(__name__).info("Workspace publication paths: %s", summary)
+            finally:
+                transaction.cleanup()
+        def cleanup():
+            try:
+                original_cleanup()
+            finally:
+                finalize(False)
+        prepared.finalize = finalize
+        prepared.cleanup = cleanup
+        return prepared

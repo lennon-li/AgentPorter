@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """Human-run, pinned A7Dev policy installation; never restarts a service.
 
-Default is a read-only proposal. --apply-policy requires yeli's local terminal
+Default is a read-only proposal. --apply-policy requires operator's local terminal
 and sudo approval. Root executes only the fixed stdlib bootstrap below, never
 this mutable repository file or package code as root. Existing differing policy
 is preserved and rejected. A separate, explicitly approved restart is required.
@@ -42,7 +42,7 @@ VALIDATE=r"""
 import json,os
 from agentporter.scoped_https import ScopedPublicHTTPSPolicy
 assert os.getuid()==os.geteuid()!=0
-p=ScopedPublicHTTPSPolicy('/var/lib/agentporter-dev/config',workspace_roots=['/home/yeli/repos/cranary','/home/yeli/agent-work/agentporter-dev'])
+p=ScopedPublicHTTPSPolicy('/var/lib/agentporter-dev/config',workspace_roots=['/home/operator/repos/cranary','/home/operator/agent-work/agentporter-dev'])
 assert set(p.scopes)=={'cranary'}
 s=p.scopes['cranary']
 assert s['hosts']==frozenset({'api.github.com','cran.r-project.org','cran-archive.r-project.org','bioconductor.org'})
@@ -108,7 +108,7 @@ def main():
         raise PermissionError('Operator sudo authorization required')
     os.umask(0o077)
     account=pwd.getpwnam(ACCOUNT)
-    if account.pw_uid in (0,pwd.getpwnam('yeli').pw_uid):
+    if account.pw_uid in (0,pwd.getpwnam('operator').pw_uid):
         raise PermissionError('Separate development service UID required')
     install=root_directory('/opt/agentporter-development')
     try:
@@ -178,8 +178,8 @@ def main():
         print(POLICY, end='')
         print('Proposal only. No policy installed; no service restarted.')
         return
-    if os.getuid() != pwd.getpwnam('yeli').pw_uid or not os.isatty(0):
-        raise PermissionError('Apply only as yeli in an independently authorized local terminal')
+    if os.getuid() != pwd.getpwnam('operator').pw_uid or not os.isatty(0):
+        raise PermissionError('Apply only as operator in an independently authorized local terminal')
     subprocess.run(['/usr/bin/sudo', '--', '/usr/bin/python3', '-I', '-c', BOOTSTRAP], check=True)
 
 

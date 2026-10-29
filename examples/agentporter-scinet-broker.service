@@ -19,7 +19,7 @@ ExecStart=%h/repos/AgentPorter/.venv/bin/python -m agentporter.tools.scinet_brok
   --socket %t/agentporter/scinet.sock \
   --control-socket %t/agentporter/scinet-control \
   --host trillium-gpu.alliancecan.ca \
-  --user yeli
+  --user operator
 Restart=always
 RestartSec=3
 UMask=0077

@@ -15,13 +15,19 @@ def https_download(workspace_id: str, req: HTTPSDownloadRequest, request: Reques
 @router.post("/run", response_model=ExecResponse)
 def exec_run(workspace_id: str, req: ExecRunRequest, request: Request):
     return request.app.state.tools["exec_run"](
-        workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds, network_access=req.network_access
+        workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds, network_access=req.network_access,
+        **({"read_only": req.read_only} if req.read_only is not None else {}),
+        **({"approval_token": req.approval_token} if req.approval_token is not None else {}),
+        **({"request_id": req.request_id} if req.request_id is not None else {})
     )
 
 @router.post("/start", response_model=JobStartResponse)
 def exec_start(workspace_id: str, req: ExecStartRequest, request: Request):
     return request.app.state.tools["exec_start"](
-        workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds, network_access=req.network_access
+        workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds, network_access=req.network_access,
+        **({"read_only": req.read_only} if req.read_only is not None else {}),
+        **({"approval_token": req.approval_token} if req.approval_token is not None else {}),
+        **({"request_id": req.request_id} if req.request_id is not None else {})
     )
 
 @jobs_router.get("/{job_id}/status", response_model=JobStatusResponse)

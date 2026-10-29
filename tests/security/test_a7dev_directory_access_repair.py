@@ -82,7 +82,7 @@ def test_data_guard_rejects_unexpected_mode_owner_group_and_acl(bootstrap, mode,
 @pytest.mark.parametrize('unexpected', ['explicit_member', 'primary_member', 'supplementary_group'])
 def test_service_group_must_be_exclusive(bootstrap, unexpected):
     service = account()
-    owner = SimpleNamespace(pw_name='yeli', pw_uid=1000, pw_gid=1000)
+    owner = SimpleNamespace(pw_name='operator', pw_uid=1000, pw_gid=1000)
     rows = [service, owner]
     if unexpected == 'primary_member':
         rows.append(SimpleNamespace(pw_name='other', pw_gid=981))

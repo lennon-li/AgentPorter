@@ -6,7 +6,7 @@ from agentporter.sandbox.bubblewrap import BubblewrapSandbox
 MAX_GIT_OUTPUT = 200_000
 
 
-def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
+def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox, *, state_dir=None):
     def _workspace(workspace_id: str):
         ws = registry.get(workspace_id)
         if not ws.allow_git:
@@ -48,7 +48,9 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
 
     def git_status(workspace_id: str) -> str:
         ws = _workspace(workspace_id)
-        out = _run_git(ws.path, ["status", "--short", "--branch"])
+        # Repository configuration may hide untracked files. Make the status
+        # contract explicit at the command line.
+        out = _run_git(ws.path, ["status", "--short", "--branch", "--untracked-files=all"])
         return out if out.strip() else "Clean working tree."
 
     def git_diff(workspace_id: str, staged: bool = False) -> str:
@@ -73,6 +75,19 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
 
     def git_fetch(workspace_id: str, remote: str = "origin") -> str:
         ws = _workspace(workspace_id)
+        if getattr(registry, 'workspace_policy', None) is not None:
+            if state_dir is None:
+                raise PermissionError('Dedicated Git-fetch state is unavailable')
+            from pathlib import Path
+            from agentporter.confined_git_fetch import fetch_repository
+            import json
+            target = Path(state_dir) / 'git-fetch'
+            target.mkdir(mode=0o700, exist_ok=True)
+            result = fetch_repository(ws.path, remote, state_dir=target, resources=getattr(sandbox,'resources',None))
+            if result.get('status') != 'ok':
+                raise PermissionError('Confined Git fetch could not complete: ' + str(result.get('status')))
+            return json.dumps(result, sort_keys=True)
+
         if not ws.writable:
             raise PermissionError(f"Workspace '{workspace_id}' is read-only")
         # Network-enabled generic Bubblewrap execution is forbidden. Until a

@@ -19,7 +19,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
 
-PUBLIC = 'https://1xs4h6qn-8876.use.devtunnels.ms/mcp'
+PUBLIC = 'https://gateway.example.invalid/mcp'
 MODEL = 'opencode/glm-5.3-flash-free'
 
 
@@ -59,7 +59,7 @@ async def verify(execute, key, output):
                     return
                 assert wei['provider'] == 'opencode' and wei['configured_model'] == MODEL
                 assert wei['default_model'] == MODEL and wei['delegatable']
-                readme = Path('/home/yeli/agent-work/agentporter-dev/README.md')
+                readme = Path('/home/operator/agent-work/agentporter-dev/README.md')
                 expected = hashlib.sha256(readme.read_bytes()).hexdigest()
                 task = ('Read-only Wei free-default acceptance. Use a native local tool to compute '
                         'the SHA256 of /workspace/README.md and return the full hexadecimal digest. '

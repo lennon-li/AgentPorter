@@ -1,6 +1,6 @@
 """Atomic workspace writes preserving effective POSIX ACLs.
 
-The registered workspace's owner is its human collaborator (yeli on A7Dev).
+The registered workspace's owner is its human collaborator (operator on A7Dev).
 This does not chown files, grant world access, or operate on service secrets.
 ACL tools must be installed; failures abort before publishing a replacement.
 """

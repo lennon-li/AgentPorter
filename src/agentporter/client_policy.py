@@ -25,11 +25,24 @@ OPERATIONS = {
     **dict.fromkeys(('write_file', 'apply_patch', 'mkdir', 'move_path', 'trash_path'), 'write'),
     **dict.fromkeys(('git_status', 'git_diff', 'git_log', 'git_show', 'git_branch'), 'git_read'),
     **dict.fromkeys(('git_add', 'git_checkout'), 'git_write'),
-    'dispatch_agent': 'dispatch', 'exec_run': 'exec', 'exec_start': 'exec',
+    'dispatch_agent': 'dispatch', 'git_fetch': 'git_fetch', 'exec_run': 'exec', 'exec_start': 'exec',
     'https_download': 'https',
 }
 JOB_READ = {'job_status', 'job_output', 'job_result'}
-SCOPES = {'read', 'write', 'exec', 'https', 'git_read', 'git_write', 'dispatch', 'dispatch_write'}
+SCOPES = {'read', 'write', 'exec', 'https', 'git_read', 'git_write', 'dispatch', 'dispatch_write', 'git_fetch'}
+# Production-only compatibility for the existing owner-approved Cranary backend.
+# New SciNet actions are denied until explicitly added/reviewed here.
+PRODUCTION_SCINET_OPERATIONS = {
+    'scinet_diagnostic': 'scinet_diagnostic', 'scinet_login': 'scinet_diagnostic',
+    **dict.fromkeys((
+        'scinet_stage', 'scinet_submit', 'scinet_job_status', 'scinet_job_logs',
+        'scinet_setup', 'scinet_setup_status', 'scinet_inference_preflight',
+        'scinet_inference_stage', 'scinet_inference_provision', 'scinet_inference_approve',
+        'scinet_inference_submit', 'scinet_inference_results', 'scinet_preflight',
+        'scinet_record_approvals', 'scinet_environment_check'), 'scinet_training'),
+}
+PRODUCTION_SCINET_SCOPES = frozenset(PRODUCTION_SCINET_OPERATIONS.values())
+
 
 
 class PublicDispatchDenied(PermissionError, ToolError):
@@ -37,8 +50,14 @@ class PublicDispatchDenied(PermissionError, ToolError):
 
 
 class PublicClientPolicy:
-    def __init__(self, config_dir, state_dir, registry, *, required=False):
+    def __init__(self, config_dir, state_dir, registry, *, required=False,
+                 allow_owned_job_cancel=False, allow_production_scinet=False):
+        if type(allow_owned_job_cancel) is not bool or type(allow_production_scinet) is not bool:
+            raise ValueError('Public-client compatibility flags must be boolean')
+        self.allow_owned_job_cancel = allow_owned_job_cancel
+        self.allow_production_scinet = allow_production_scinet
         self.registry = registry
+        self.workspace_policy = None
         self.state_dir = Path(state_dir)
         self.scopes = None
         self.internal_key = None
@@ -49,15 +68,27 @@ class PublicClientPolicy:
             return  # Legacy profile compatibility; never hardened clearance.
         self._private(path)
         document = yaml.load(read_regular(config_dir, path.name, 65536), Loader=_NoAliasOwnerPolicyLoader)
+        from agentporter.workspace_policy import shared_policy_reference
+        shared = shared_policy_reference(document)
+        if shared is not None:
+            registered_policy = getattr(registry, 'workspace_policy', None)
+            if registered_policy is None or registered_policy.workspaces != shared.workspaces:
+                raise PermissionError('Public-client policy does not match shared workspace policy')
+            self.workspace_policy = shared
+            document = {'version': 1, 'workspaces': {
+                name: {'path': registry.get(name).path, 'operations': sorted(operations)}
+                for name, operations in self._shared_scopes().items()}}
+
         if (not isinstance(document, dict) or set(document) != {'version', 'workspaces'}
                 or type(document['version']) is not int or document['version'] != 1
                 or not isinstance(document['workspaces'], dict)):
             raise ValueError('Invalid public-client policy')
+        allowed_scopes = SCOPES | (PRODUCTION_SCINET_SCOPES if allow_production_scinet else set())
         scopes = {}
         for name, row in document['workspaces'].items():
             if (not isinstance(row, dict) or set(row) != {'path', 'operations'}
                     or not isinstance(row['path'], str) or not isinstance(row['operations'], list)
-                    or not all(isinstance(x, str) and x in SCOPES for x in row['operations'])
+                    or not all(isinstance(x, str) and x in allowed_scopes for x in row['operations'])
                     or len(set(row['operations'])) != len(row['operations'])):
                 raise ValueError('Invalid public-client workspace scope')
             ws = registry.get(name)
@@ -104,6 +135,27 @@ class PublicClientPolicy:
             connection.close()
 
     @property
+    def scopes(self):
+        if self.workspace_policy is not None:
+            return self._shared_scopes()
+        return self._scopes
+
+    def _shared_scopes(self):
+        scopes = self.workspace_policy.public_scopes(self.registry)
+        if self.allow_production_scinet:
+            return scopes
+        # The separate worker consumes the same registrations as the gateway,
+        # but does not expose the production gateway's specialized backends.
+        # Preserve those explicit grants in the shared policy without trying
+        # to enable unsupported public operations on this service.
+        return {name: operations - PRODUCTION_SCINET_SCOPES
+                for name, operations in scopes.items()}
+
+    @scopes.setter
+    def scopes(self, value):
+        self._scopes = value
+
+    @property
     def public(self):
         return self.scopes is not None and PRINCIPAL.get() != 'internal'
 
@@ -117,14 +169,24 @@ class PublicClientPolicy:
                     and args['workspace_id'] not in self.scopes):
                 raise PermissionError('Workspace outside public-client scope')
             return
-        if action in JOB_READ:
+        if action in JOB_READ or (action == 'job_cancel' and self.allow_owned_job_cancel):
             with self._db() as db:
                 row = db.execute('SELECT workspace_id FROM public_jobs WHERE job_id=?', (args.get('job_id'),)).fetchone()
             if row is None or row[0] not in self.scopes:
                 raise PermissionError('Job is outside public-client ownership/scope')
+            if action == 'job_cancel' and (
+                    'exec' not in self.scopes[row[0]] or not self.registry.get(row[0]).allow_execute):
+                raise PermissionError('Cancellation requires an owned executable workspace job')
             return
         workspace = args.get('workspace_id')
         operation = OPERATIONS.get(action)
+        if self.allow_production_scinet and action in PRODUCTION_SCINET_OPERATIONS:
+            operation = PRODUCTION_SCINET_OPERATIONS[action]
+            if workspace != 'cranary' or workspace not in self.scopes:
+                raise PermissionError('SciNet requires the approved Cranary workspace')
+            ws = self.registry.get(workspace)
+            if not ws.allow_execute or not getattr(ws, 'allow_' + operation):
+                raise PermissionError('SciNet workspace capability is not authorized')
         if action in {'exec_run', 'exec_start'} and args.get('network_access') is True:
             operation = 'https'
         if not operation or operation not in self.scopes.get(workspace, ()):
@@ -198,7 +260,11 @@ class PublicClientPolicy:
             return self._workspace_result(result, args['workspace_id'])
         if action in {'dispatch_agent', 'exec_start'} and isinstance(result, dict) and result.get('job_id'):
             with self._db() as db:
-                db.execute('INSERT INTO public_jobs VALUES (?,?)', (result['job_id'], args['workspace_id']))
+                previous = db.execute('SELECT workspace_id FROM public_jobs WHERE job_id=?',
+                                      (result['job_id'],)).fetchone()
+                if previous is not None and previous[0] != args['workspace_id']:
+                    raise PermissionError('Job ownership does not match this workspace')
+                db.execute('INSERT OR IGNORE INTO public_jobs VALUES (?,?)', (result['job_id'], args['workspace_id']))
         return result
 
     def _workspace_result(self, row, workspace):

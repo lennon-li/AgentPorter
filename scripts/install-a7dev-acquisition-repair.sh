@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Run as yeli only after the final archive/runner independent review.
+# Run as operator only after the final archive/runner independent review.
 # Root executes only existing immutable installer and standard OS programs.
 set -euo pipefail
 set +x
 umask 077
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
-cd /home/yeli/agent-work/agentporter-dev
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 [[ $(id -u) != 0 ]]
 version=20261022T015212.581522Z
 archive_sha=e0c709af0251d5725057c6d24f960ed1b58e262a2efa923b4b9bec9dd99126f5
@@ -108,7 +108,7 @@ recover() {
 [[ ! -L $artifact ]]
 printf '%s  %s\n' "$archive_sha" "$artifact" | sha256sum --check --status
 production_before=$(systemctl --user show agentporter.service -p MainPID -p ActiveState -p NRestarts)
-production_release=$(readlink /home/yeli/.local/share/agentporter/current)
+production_release=$(readlink /home/operator/.local/share/agentporter/current)
 sudo -v
 printf '%s  %s\n' "$installer_sha" "$installer" | sudo /usr/bin/sha256sum --check --status
 runtime_is "$old_runtime_sha"
@@ -164,7 +164,7 @@ sudo -u agentporter-dev -- "$release/venv/bin/python" -I -B \
 policies_unchanged
 runtime_is "$runtime_sha"
 [[ $(systemctl --user show agentporter.service -p MainPID -p ActiveState -p NRestarts) == "$production_before" ]]
-[[ $(readlink /home/yeli/.local/share/agentporter/current) == "$production_release" ]]
+[[ $(readlink /home/operator/.local/share/agentporter/current) == "$production_release" ]]
 stopped=0
 trap - ERR INT TERM
 echo "Acquisition repair passed public/local acceptance; production A7 unchanged. Evidence: $backup"

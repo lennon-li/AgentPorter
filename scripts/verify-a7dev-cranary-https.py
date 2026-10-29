@@ -17,7 +17,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
 
-PUBLIC = 'https://1xs4h6qn-8876.use.devtunnels.ms/mcp'
+PUBLIC = 'https://gateway.example.invalid/mcp'
 LOCAL = 'http://127.0.0.1:8876/mcp'
 GITHUB = 'https://api.github.com/repos/ropensci/software-review/issues/1'
 HOSTS = {'api.github.com', 'cran.r-project.org', 'cran-archive.r-project.org', 'bioconductor.org'}
@@ -108,7 +108,7 @@ async def verify(after, key, output):
                 isolation = await execute(['python3', '-I', '-c',
                     'import os,json; print(json.dumps({"cwd":os.getcwd(),'
                     '"config_visible":os.path.exists("/var/lib/agentporter-dev/config"),'
-                    '"production_visible":os.path.exists("/home/yeli/repos/AgentPorter")}))'], network=False)
+                    '"production_visible":os.path.exists("/home/operator/repos/AgentPorter")}))'], network=False)
                 assert not isolation['is_error'] and isolation['data']['exit_code'] == 0
                 assert json.loads(isolation['data']['stdout']) == {
                     'cwd': '/workspace', 'config_visible': False, 'production_visible': False}

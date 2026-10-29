@@ -1,0 +1,21 @@
+# Read-only workspaces exposed to the dedicated ChatGPT instance.
+workspaces:
+  agentporter:
+    path: /home/operator/repos/AgentPorter
+    writable: false
+    description: "Read-only knowhere repository access for ChatGPT"
+    allow_execute: false
+    allow_git: true
+    allow_artifacts: false
+    allow_agent_dispatch: false
+    local_http_ports: []
+
+  repos:
+    path: /home/operator/repos
+    writable: false
+    description: "Read-only access to repositories and nested folders on knowhere"
+    allow_execute: false
+    allow_git: false
+    allow_artifacts: false
+    allow_agent_dispatch: false
+    local_http_ports: []

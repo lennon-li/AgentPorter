@@ -30,7 +30,7 @@ INSTALLED = '/opt/agentporter-autodiscovery/autodiscover-a7dev.py'
 CONFIG = '/var/lib/agentporter-dev/config'
 STATE = '/var/lib/agentporter-dev-autodiscovery'
 JOBS = '/var/lib/agentporter-dev/state/jobs.db'
-REPOS = '/home/yeli/repos'
+REPOS = '/home/operator/repos'
 SERVICE = 'agentporter-development.service'
 FILES = ('workspaces.yaml', 'public-client-policy.yaml', 'development-runtime.yaml')
 LIMIT = 65536
@@ -713,7 +713,7 @@ def installed_identity():
 
 def run(apply):
     uid = pwd.getpwnam('agentporter-dev').pw_uid
-    owner = pwd.getpwnam('yeli').pw_uid
+    owner = pwd.getpwnam('operator').pw_uid
     if apply:
         require(os.geteuid() == 0, '--apply requires root')
         installed_identity()

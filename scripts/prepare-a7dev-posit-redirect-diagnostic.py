@@ -11,7 +11,7 @@ from pathlib import Path
 import types
 
 SOURCE = Path(__file__).with_name('prepare-a7dev-cranary-source-repair.py')
-SOURCE_SHA256 = '9843dfd5ca081eeee7beeb908f9542255aea50c810855a049e3d29d161680eee'
+SOURCE_SHA256 = '2115ab2f12bc43cb63b94ab53897d63c7d4a5886577959161067b74681452f8e'
 BASE_SHA256 = 'a3af98891bb7d9660676656fe8a6c62388e3853710bba23dae965f51ea14a048'
 BASE_VERSION = '20261022T204324.626687Z'
 MODULES = {'src/agentporter/https_download.py'}

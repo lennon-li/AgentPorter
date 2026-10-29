@@ -11,13 +11,13 @@ import tempfile
 if len(sys.argv) != 2 or sys.argv[1] not in {"on", "off", "status"}:
     raise SystemExit("Usage: venkata-access on|off|status")
 user = pwd.getpwuid(os.getuid())
-if user.pw_name != "yeli":
-    raise SystemExit("Run as yeli")
+if user.pw_name != "operator":
+    raise SystemExit("Run as operator")
 directory = Path(user.pw_dir) / ".config" / "agentporter"
 marker = directory / "venkata-access.enabled"
 if sys.argv[1] == "on":
     if directory.is_symlink() or directory.stat().st_uid != os.getuid() or directory.stat().st_mode & 0o022:
-        raise SystemExit("AgentPorter config directory must be owned by yeli and not group/world writable")
+        raise SystemExit("AgentPorter config directory must be owned by operator and not group/world writable")
     fd, name = tempfile.mkstemp(prefix=".venkata-access-", dir=directory)
     try:
         os.close(fd)

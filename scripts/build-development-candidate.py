@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Build an inspectable A7Dev artifact as yeli. Never run this under sudo.
+"""Build an inspectable A7Dev artifact as operator. Never run this under sudo.
 
 --inventory creates a candidate admission manifest, not an authorization.
 The independent reviewer must inspect that manifest and the frozen artifact.
@@ -19,16 +19,16 @@ import tarfile
 import tempfile
 
 REPO = Path(__file__).resolve().parents[1]
-CANONICAL = Path('/home/yeli/repos/obsidian')
+CANONICAL = Path('/home/operator/repos/obsidian')
 MOUNT = '/opt/agentporter/tools'
 INSTALL = Path('/opt/agentporter-development')
 PACKAGES = {
-    'codegraph': '/home/yeli/.npm-global/lib/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-linux-x64',
-    'repomix': '/home/yeli/.npm-global/lib/node_modules/repomix',
-    'npm': '/home/yeli/.nvm/versions/node/v24.15.0/lib/node_modules/npm',
-    'quarto': '/home/yeli/.local/quarto-1.5.56',
-    'nox': '/home/yeli/.local/share/uv/tools/nox/lib/python3.12/site-packages',
-    'tox': '/home/yeli/.local/share/uv/tools/tox/lib/python3.12/site-packages',
+    'codegraph': '/home/operator/.npm-global/lib/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-linux-x64',
+    'repomix': '/home/operator/.npm-global/lib/node_modules/repomix',
+    'npm': '/home/operator/.nvm/versions/node/v24.15.0/lib/node_modules/npm',
+    'quarto': '/home/operator/.local/quarto-1.5.56',
+    'nox': '/home/operator/.local/share/uv/tools/nox/lib/python3.12/site-packages',
+    'tox': '/home/operator/.local/share/uv/tools/tox/lib/python3.12/site-packages',
     'tldr': '/tmp/agentporter-tldr-runtime/node_modules',
     'Rscript': '/etc/R',
 }
@@ -128,13 +128,13 @@ def inventory():
     for name, spec in runtime['workers'].items():
         source = Path(spec['executable']).resolve(strict=True)
         if name == 'phil':
-            source = Path('/home/yeli/.nvm/versions/node/v24.15.0/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64/copilot')
+            source = Path('/home/operator/.nvm/versions/node/v24.15.0/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64/copilot')
         files = {'executable': {'source': str(source), 'sha256': digest(source)}}
         if name in {'jax', 'liz', 'prof'}:
             helper = source.with_name('codex-code-mode-host')
             files['code_mode_host'] = {'source': str(helper), 'sha256': digest(helper)}
         workers[name] = files
-    production_config = yaml.safe_load(Path('/home/yeli/.config/agentporter/config.yaml').read_text())
+    production_config = yaml.safe_load(Path('/home/operator/.config/agentporter/config.yaml').read_text())
     approved_services = {'parallel_search': production_config.get('parallel_search', {}).get('enabled') is True}
     return {'schema': 1, 'shared_files': shared, 'omitted_private_resources': omitted,
             'tools': tools, 'packages': packages,

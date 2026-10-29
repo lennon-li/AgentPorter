@@ -24,7 +24,7 @@ import sys
 import time
 
 INSTALLED = Path('/opt/agentporter-development/activation-tools/directory-defaults/repair-a7dev-shared-directory-defaults.py')
-STORAGE_SHA = 'b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b'
+STORAGE_SHA = 'e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0'
 STATE = Path('/var/lib/agentporter-dev-directory-defaults')
 DEFAULT = 'system.posix_acl_default'
 ACCESS = 'system.posix_acl_access'
@@ -436,7 +436,7 @@ def main():
     parser.add_argument('--list-workspaces', action='store_true', help='Read-only scope enumeration without traversing project trees')
     args = parser.parse_args()
     storage = trusted_storage()
-    human, service = pwd.getpwnam('yeli').pw_uid, pwd.getpwnam('agentporter-dev').pw_uid
+    human, service = pwd.getpwnam('operator').pw_uid, pwd.getpwnam('agentporter-dev').pw_uid
     require((human, service) == (1000, 994), 'Unexpected human/service identity')
     config = storage.open_directory(storage.CONFIG, service)
     try: inputs = {name: storage.private_read(config, name, service) for name in storage.FILES}

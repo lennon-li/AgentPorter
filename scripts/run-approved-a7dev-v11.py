@@ -5,6 +5,6 @@ from pathlib import Path
 
 launcher = Path(__file__).resolve().with_name("install-approved-a7dev-v11.py")
 source = launcher.read_bytes()
-if hashlib.sha256(source).hexdigest() != "610846cff654ebacf81d357c06ee25a0adbbcb38fc1f6f4485247a1df719751f":
+if hashlib.sha256(source).hexdigest() != "4400068bc6c3be0f59c0485792515ff77d811d339fb78c0e7bfb4c615e468484":
     raise SystemExit("Launcher changed: stop")
 exec(compile(source, str(launcher), "exec"))

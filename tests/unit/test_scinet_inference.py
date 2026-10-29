@@ -404,7 +404,7 @@ def test_template_digest_resources_and_walltime_are_fixed(monkeypatch):
 
 def test_approval_payload_binds_stage_runtime_destination_reviewer_and_nonce():
     payload = inference._approval_payload(
-        "a" * 32, "b" * 64, RUNTIME_DIGEST, SCRATCH, "acct", "gpu", "lennon", "c" * 64,
+        "a" * 32, "b" * 64, RUNTIME_DIGEST, SCRATCH, "acct", "gpu", "the operator", "c" * 64,
         context={"test": "context"}, issued_at=100, not_after=3700,
     )
     assert payload == {
@@ -414,7 +414,7 @@ def test_approval_payload_binds_stage_runtime_destination_reviewer_and_nonce():
         "runtime_catalog_sha256": RUNTIME_DIGEST,
         "destination": {"scratch": SCRATCH, "account": "acct", "partition": "gpu"},
         "resources": {"gpu_count": 1, "gpu_type": "H100", "max_walltime": "00:30:00"},
-        "reviewer": "lennon", "nonce": "c" * 64,
+        "reviewer": "the operator", "nonce": "c" * 64,
         "context": {"test": "context"}, "issued_at": 100, "not_after": 3700,
     }
     assert inference._canonical_json(payload).endswith(b"\n")
@@ -424,7 +424,7 @@ def test_approval_refuses_forged_reviewer_and_bad_signature(monkeypatch, tmp_pat
     stage_id = "3" * 32
     workspace = SimpleNamespace(path=tmp_path, allow_execute=True, allow_scinet_training=True)
     registry = SimpleNamespace(get=lambda _: workspace)
-    settings = SimpleNamespace(inference_approval_reviewer="lennon",
+    settings = SimpleNamespace(inference_approval_reviewer="the operator",
                                training_account="acct", training_partition="gpu",
                                training_bootstrap_python="/usr/bin/python3",
                                inference_runtime_catalog_sha256=RUNTIME_DIGEST)
@@ -434,7 +434,7 @@ def test_approval_refuses_forged_reviewer_and_bad_signature(monkeypatch, tmp_pat
     issued_at = int(time.time())
     payload = inference._approval_payload(
         stage_id, inference.MANIFEST_SHA256, RUNTIME_DIGEST,
-        SCRATCH, "acct", "gpu", "lennon", nonce,
+        SCRATCH, "acct", "gpu", "the operator", nonce,
         context=context, issued_at=issued_at, not_after=issued_at + 3600,
     )
     digest = hashlib.sha256(inference._canonical_json(payload)).hexdigest()
@@ -449,7 +449,7 @@ def test_approval_refuses_forged_reviewer_and_bad_signature(monkeypatch, tmp_pat
             "manifest_sha256": inference.MANIFEST_SHA256, "state": "staged",
             "bundle": f"{SCRATCH}/stages/{stage_id}", **runtime_metadata(),
             "scratch": SCRATCH, "account": "acct", "partition": "gpu",
-            "approval_nonce": nonce, "approval_reviewer": "lennon",
+            "approval_nonce": nonce, "approval_reviewer": "the operator",
             "approval_payload_sha256": digest,
             "approval_context": context, "approval_issued_at": issued_at,
             "approval_not_after": issued_at + 3600,
@@ -458,17 +458,17 @@ def test_approval_refuses_forged_reviewer_and_bad_signature(monkeypatch, tmp_pat
     with pytest.raises(PermissionError, match="reviewer"):
         tools["scinet_inference_approve"]("cranary", stage_id, "agentporter", valid_signature)
     with pytest.raises(PermissionError, match="signature verification"):
-        tools["scinet_inference_approve"]("cranary", stage_id, "lennon", base64.b64encode(b"x" * 64).decode())
+        tools["scinet_inference_approve"]("cranary", stage_id, "the operator", base64.b64encode(b"x" * 64).decode())
     wrong_stage_payload = inference._approval_payload(
         "4" * 32, inference.MANIFEST_SHA256, RUNTIME_DIGEST,
-        SCRATCH, "acct", "gpu", "lennon", nonce,
+        SCRATCH, "acct", "gpu", "the operator", nonce,
         context=context, issued_at=issued_at, not_after=issued_at + 3600,
     )
     wrong_stage_signature = base64.b64encode(
         private_key.sign(inference._canonical_json(wrong_stage_payload))
     ).decode("ascii")
     with pytest.raises(PermissionError, match="signature verification"):
-        tools["scinet_inference_approve"]("cranary", stage_id, "lennon", wrong_stage_signature)
+        tools["scinet_inference_approve"]("cranary", stage_id, "the operator", wrong_stage_signature)
     with ledger.locked() as data:
         assert data["stages"][stage_id].get("approval") is None
 
@@ -480,7 +480,7 @@ def test_submit_rejects_missing_approval_and_prevents_replay(monkeypatch, tmp_pa
     settings = SimpleNamespace(training_account="acct", training_partition="gpu",
                                inference_runtime_catalog_sha256=RUNTIME_DIGEST,
                                training_bootstrap_python="/usr/bin/python3",
-                               inference_approval_reviewer="lennon")
+                               inference_approval_reviewer="the operator")
     _test_signer(settings)
     monkeypatch.setattr(inference, "_inference_settings", lambda *_: (
         "user", workspace, "/scratch/root", "/scratch/user/run",
@@ -495,7 +495,7 @@ def test_submit_rejects_missing_approval_and_prevents_replay(monkeypatch, tmp_pa
             "bundle": f"/scratch/user/run/stages/{stage_id}",
             "scratch": "/scratch/user/run", "account": "acct", "partition": "gpu",
             "files": {}, "state": "staged", **runtime_metadata(),
-            "approval_reviewer": "lennon", "approval_nonce": "c" * 64,
+            "approval_reviewer": "the operator", "approval_nonce": "c" * 64,
             "approval_payload_sha256": "d" * 64,
         }}
     with pytest.raises(PermissionError, match="signed stage-scoped"):
@@ -513,7 +513,7 @@ def setup_flow(monkeypatch, tmp_path):
     registry = SimpleNamespace(get=lambda _: workspace)
     settings = SimpleNamespace(training_account='acct', training_partition='gpu',
                                inference_runtime_catalog_sha256=RUNTIME_DIGEST,
-                               inference_approval_reviewer='lennon',
+                               inference_approval_reviewer='the operator',
                                training_bootstrap_python='/usr/bin/python3')
     _test_signer(settings)
     monkeypatch.setattr(inference, '_inference_settings', lambda *_: (
@@ -569,10 +569,10 @@ def test_v2_stage_approval_submit_exports_and_no_replay(monkeypatch, tmp_path):
     assert staged['trusted_retrieval_available'] is False
     assert 'approval_confirmation' not in staged
     approval = tools['scinet_inference_approve'](
-        'cranary', stage, 'lennon', _sign_challenge(staged, settings))
+        'cranary', stage, 'the operator', _sign_challenge(staged, settings))
     assert approval['success']
     with pytest.raises(PermissionError, match='already recorded'):
-        tools['scinet_inference_approve']('cranary', stage, 'lennon', _sign_challenge(staged, settings))
+        tools['scinet_inference_approve']('cranary', stage, 'the operator', _sign_challenge(staged, settings))
     result = tools['scinet_inference_submit']('cranary', stage)
     assert result['job_id'] == '123456'
     assert len(calls) == 3
@@ -601,7 +601,7 @@ def test_v2_stage_approval_submit_exports_and_no_replay(monkeypatch, tmp_path):
 def test_bad_runtime_preflight_never_reaches_sbatch(monkeypatch, tmp_path, preflight_result):
     tools, settings, calls, remote = setup_flow(monkeypatch, tmp_path)
     staged = tools['scinet_inference_stage']('cranary')
-    tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', _sign_challenge(staged, settings))
+    tools['scinet_inference_approve']('cranary', staged['stage_id'], 'the operator', _sign_challenge(staged, settings))
     attempted = []
     monkeypatch.setattr(inference, '_call', lambda *a, **k: attempted.append(a[2]) or preflight_result)
     assert not tools['scinet_inference_submit']('cranary', staged['stage_id'])['success']
@@ -616,7 +616,7 @@ def test_changed_stage_contract_blocks_all_remote_calls(monkeypatch, tmp_path, c
     tools, settings, calls, _ = setup_flow(monkeypatch, tmp_path)
     staged = tools['scinet_inference_stage']('cranary')
     stage = staged['stage_id']
-    tools['scinet_inference_approve']('cranary', stage, 'lennon', _sign_challenge(staged, settings))
+    tools['scinet_inference_approve']('cranary', stage, 'the operator', _sign_challenge(staged, settings))
     if change == 'digest':
         settings.inference_runtime_catalog_sha256 = 'e' * 64
     elif change == 'missing_catalog':
@@ -721,16 +721,16 @@ def test_rest_requires_bounded_signature_for_inference_approval():
     stage = 'a' * 32
     signature = base64.b64encode(b'x' * 64).decode('ascii')
     request = ScinetSetupRequest(action='inference_approve', stage_id=stage,
-                                 reviewer='lennon', signature=signature)
+                                 reviewer='the operator', signature=signature)
     assert request.signature == signature
     with pytest.raises(ValidationError):
         ScinetSetupRequest(action='inference_approve', stage_id=stage,
-                           reviewer='lennon', confirmation='I approve')
+                           reviewer='the operator', confirmation='I approve')
     with pytest.raises(ValidationError):
         ScinetSetupRequest(action='inference_approve', stage_id=stage,
-                           reviewer='lennon', signature=signature + 'x')
+                           reviewer='the operator', signature=signature + 'x')
     with pytest.raises(ValidationError):
-        ScinetSetupRequest(action='record_approvals', reviewer='lennon',
+        ScinetSetupRequest(action='record_approvals', reviewer='the operator',
                            confirmation='I approve', approved_fields=['x'], signature=signature)
 
 
@@ -814,7 +814,7 @@ def test_wrong_key_and_config_env_substitution_do_not_authorize(monkeypatch, tmp
     monkeypatch.setenv('AGENTPORTER_SCINET_INFERENCE_APPROVAL_PUBLIC_KEY_PATH', '/agent/writable/key')
     signature = base64.b64encode(attacker.sign(base64.b64decode(staged['approval_payload_base64']))).decode()
     with pytest.raises(PermissionError, match='signature verification'):
-        tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', signature)
+        tools['scinet_inference_approve']('cranary', staged['stage_id'], 'the operator', signature)
     assert len(calls) == 1
 
 
@@ -926,7 +926,7 @@ def test_signed_approval_binds_context_and_validity(monkeypatch, tmp_path, chang
     staged = tools['scinet_inference_stage']('cranary')
     signature = _sign_challenge(staged, settings)
     if phase == 'submit':
-        tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', signature)
+        tools['scinet_inference_approve']('cranary', staged['stage_id'], 'the operator', signature)
     if change in ('host', 'user'):
         setattr(settings, change, 'attacker.example')
     elif change == 'bootstrap':
@@ -948,7 +948,7 @@ def test_signed_approval_binds_context_and_validity(monkeypatch, tmp_path, chang
                 context['python' if change == 'python' else 'hf_cache'] += '/changed'
     with pytest.raises((PermissionError, ValueError)):
         if phase == 'approve':
-            tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', signature)
+            tools['scinet_inference_approve']('cranary', staged['stage_id'], 'the operator', signature)
         else:
             tools['scinet_inference_submit']('cranary', staged['stage_id'])
     assert len(calls) == 1
@@ -957,7 +957,7 @@ def test_signed_approval_binds_context_and_validity(monkeypatch, tmp_path, chang
 def test_expiry_during_preflight_prevents_sbatch(monkeypatch, tmp_path):
     tools, settings, calls, remote = setup_flow(monkeypatch, tmp_path)
     staged = tools['scinet_inference_stage']('cranary')
-    tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', _sign_challenge(staged, settings))
+    tools['scinet_inference_approve']('cranary', staged['stage_id'], 'the operator', _sign_challenge(staged, settings))
     def slow_remote(*args, **kwargs):
         result = remote(*args, **kwargs)
         monkeypatch.setattr(inference.time, 'time', lambda: staged['approval_payload']['not_after'])
@@ -972,7 +972,7 @@ def test_bootstrap_drift_during_preflight_prevents_sbatch(monkeypatch, tmp_path)
     tools, settings, calls, remote = setup_flow(monkeypatch, tmp_path)
     staged = tools['scinet_inference_stage']('cranary')
     assert staged['approval_payload']['context']['bootstrap_python'] == '/usr/bin/python3'
-    tools['scinet_inference_approve']('cranary', staged['stage_id'], 'lennon', _sign_challenge(staged, settings))
+    tools['scinet_inference_approve']('cranary', staged['stage_id'], 'the operator', _sign_challenge(staged, settings))
     def changed_remote(*args, **kwargs):
         result = remote(*args, **kwargs)
         settings.training_bootstrap_python = '/scratch/attacker/python'
@@ -1025,7 +1025,7 @@ def test_signature_cannot_replay_between_stages(monkeypatch, tmp_path):
     second = tools['scinet_inference_stage']('cranary')
     assert first['approval_payload']['nonce'] != second['approval_payload']['nonce']
     with pytest.raises(PermissionError, match='signature verification'):
-        tools['scinet_inference_approve']('cranary', second['stage_id'], 'lennon', _sign_challenge(first, settings))
+        tools['scinet_inference_approve']('cranary', second['stage_id'], 'the operator', _sign_challenge(first, settings))
     assert len(calls) == 2
 
 
@@ -1076,9 +1076,9 @@ def test_actual_system_python_remote_reader_scheduler_gate(tmp_path, state, exit
 
 @pytest.mark.parametrize("suffix", ["/custom/bin/python", "/inference-env/bin/python3"])
 def test_stage_settings_refuse_interpreter_path_mismatch(monkeypatch, suffix):
-    scratch = "/scratch/yeli/cranary-laya"
+    scratch = "/scratch/operator/cranary-laya"
     settings = SimpleNamespace(
-        training_remote_root="/scratch/yeli/training", training_account="acct",
+        training_remote_root="/scratch/operator/training", training_account="acct",
         training_partition="gpu", inference_scratch_root=scratch,
         inference_python=scratch + suffix, inference_hf_cache=scratch + "/model-cache",
         inference_runtime_catalog_sha256=RUNTIME_DIGEST)

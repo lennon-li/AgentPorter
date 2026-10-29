@@ -1,6 +1,7 @@
 """Asynchronous job execution, SQLite tracking, bounded log capture, and cancellation."""
 
 import os
+import stat
 import time
 import json
 import uuid
@@ -48,6 +49,8 @@ class JobManager:
         self.active_processes: dict[str, subprocess.Popen] = {}
         self.development_runtime = None
         self._job_cleanups: dict[str, object] = {}
+        self._job_finalizers: dict[str, object] = {}
+        self._job_model_evidence: dict[str, object] = {}
         self.lock = threading.Lock()
         self._init_db()
 
@@ -114,7 +117,7 @@ class JobManager:
         return os.fdopen(fd, "wb")
 
     @staticmethod
-    def _validate_sandbox_command(cmd: list[str], workspace_path: str) -> str:
+    def _validate_sandbox_command(cmd: list[str], workspace_path: str, *, workspace_descriptor=None) -> str:
         """Raw async jobs may only launch an offline Bubblewrap process.
 
         Do not treat an absent agent label as proof of authorization.
@@ -132,7 +135,14 @@ class JobManager:
         launcher_args = cmd[:boundary]
         if not required.issubset(launcher_args) or "--share-net" in launcher_args:
             raise PermissionError("Untrusted sandbox invocation or network permissions")
-        real_path = os.path.realpath(workspace_path)
+        if workspace_descriptor is not None:
+            if type(workspace_descriptor) is not int or not stat.S_ISDIR(os.fstat(workspace_descriptor).st_mode):
+                raise PermissionError('Invalid prepared workspace descriptor')
+            real_path = f'/proc/self/fd/{workspace_descriptor}'
+            if workspace_path != real_path:
+                raise PermissionError('Prepared workspace descriptor mismatch')
+        else:
+            real_path = os.path.realpath(workspace_path)
         if not any(
             launcher_args[i:i+3] == [flag, real_path, "/workspace"]
             for flag in ("--bind", "--ro-bind")
@@ -184,7 +194,7 @@ class JobManager:
 
     def _start_process_job(self, *, command, workspace_id, workspace_path, receipt,
                            timeout_seconds, provider='', model='', requested_model='',
-                           reasoning_level='', cli_version=''):
+                           reasoning_level='', cli_version='', finalize=None, cleanup=None, pass_fds=()):
         job_id = f'job_{uuid.uuid4().hex[:24]}'
         stdout_path = str(self.jobs_dir / f'{job_id}.stdout.log')
         stderr_path = str(self.jobs_dir / f'{job_id}.stderr.log')
@@ -196,7 +206,7 @@ class JobManager:
             proc = self._popen(command, cwd='/', stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8', 'HOME': '/nonexistent'},
-                process_group=0)
+                process_group=0, **({'pass_fds': pass_fds} if pass_fds else {}))
             db = self._get_db()
             try:
                 with db:
@@ -210,21 +220,33 @@ class JobManager:
                 db.close()
             with self.lock:
                 self.active_processes[job_id] = proc
+                self._job_finalizers[job_id] = finalize
+                self._job_cleanups[job_id] = cleanup
             threading.Thread(target=self._monitor_proc,
                 args=(job_id,proc,stdout_f,stderr_f,stdout_path,stderr_path,timeout_seconds,now),daemon=True).start()
             return job_id
         except BaseException:
-            if proc is not None:
-                self._terminate_process_tree(proc)
-                proc.wait(timeout=2)
-                for pipe in (proc.stdout, proc.stderr):
-                    if pipe: pipe.close()
-                self._drop_lease(proc)
-                self._close_pidfd(proc)
-            for stream in (stdout_f, stderr_f):
-                if stream: stream.close()
-            with self.lock:
-                self.active_processes.pop(job_id, None)
+            try:
+                if proc is not None:
+                    self._terminate_process_tree(proc)
+                    proc.wait(timeout=2)
+                    for pipe in (proc.stdout, proc.stderr):
+                        if pipe: pipe.close()
+                    self._drop_lease(proc)
+                    self._close_pidfd(proc)
+            finally:
+                for stream in (stdout_f, stderr_f):
+                    if stream: stream.close()
+                with self.lock:
+                    self.active_processes.pop(job_id, None)
+                    self._job_finalizers.pop(job_id, None)
+                    self._job_cleanups.pop(job_id, None)
+                try:
+                    if finalize is not None:
+                        finalize(False)
+                finally:
+                    if cleanup is not None:
+                        cleanup()
             db = self._get_db()
             try:
                 with db:
@@ -335,6 +357,8 @@ class JobManager:
             with self.lock:
                 self.active_processes[job_id] = proc
                 self._job_cleanups[job_id] = prepared.cleanup
+                self._job_finalizers[job_id] = getattr(prepared, "finalize", None)
+                self._job_model_evidence[job_id] = getattr(prepared, "model_evidence", None)
             threading.Thread(
                 target=self._monitor_proc,
                 args=(job_id, proc, stdout_f, stderr_f, stdout_path, stderr_path,
@@ -343,33 +367,41 @@ class JobManager:
             ).start()
             return job_id
         except BaseException:
-            if proc is not None:
-                self._terminate_process_tree(proc)
-                proc.wait()
-                for pipe in (proc.stdout, proc.stderr):
-                    if pipe is not None:
-                        pipe.close()
-                self._drop_lease(proc)
-                self._close_pidfd(proc)
-            for stream in (stdout_f, stderr_f):
-                if stream is not None:
-                    stream.close()
-            with self.lock:
-                self.active_processes.pop(job_id, None)
-                self._job_cleanups.pop(job_id, None)
             try:
-                prepared.cleanup()
+                if proc is not None:
+                    self._terminate_process_tree(proc)
+                    proc.wait()
+                    for pipe in (proc.stdout, proc.stderr):
+                        if pipe is not None:
+                            pipe.close()
+                    self._drop_lease(proc)
+                    self._close_pidfd(proc)
             finally:
-                if recorded:
-                    conn = self._get_db()
+                for stream in (stdout_f, stderr_f):
+                    if stream is not None:
+                        stream.close()
+                with self.lock:
+                    self.active_processes.pop(job_id, None)
+                    self._job_cleanups.pop(job_id, None)
+                    self._job_finalizers.pop(job_id, None)
+                    self._job_model_evidence.pop(job_id, None)
+                try:
                     try:
-                        with conn:
-                            conn.execute(
-                                "UPDATE jobs SET status = 'failed', exit_code = 1, finished_at = ?, duration = ? WHERE job_id = ?",
-                                (time.time(), time.time() - now, job_id),
-                            )
+                        if getattr(prepared, "finalize", None) is not None:
+                            prepared.finalize(False)
                     finally:
-                        conn.close()
+                        prepared.cleanup()
+                finally:
+                    if recorded:
+                        conn = self._get_db()
+                        try:
+                            with conn:
+                                conn.execute(
+                                    "UPDATE jobs SET status = 'failed', exit_code = 1, finished_at = ?, duration = ? WHERE job_id = ?",
+                                    (time.time(), time.time() - now, job_id),
+                                )
+                        finally:
+                            conn.close()
             raise
 
     @admitted_job
@@ -386,6 +418,9 @@ class JobManager:
         cli_version: str = "",
         timeout_seconds: int = 300,
         env: Optional[dict] = None,
+        finalize=None,
+        cleanup=None,
+        workspace_descriptor=None,
     ) -> str:
         if agent:
             raise PermissionError(
@@ -393,13 +428,16 @@ class JobManager:
             )
         if not cmd or not all(isinstance(x, str) and x for x in cmd):
             raise ValueError("cmd must be a non-empty list of non-empty strings")
-        trusted_bwrap = self._validate_sandbox_command(cmd, workspace_path)
+        trusted_bwrap = self._validate_sandbox_command(cmd, workspace_path,
+            **({'workspace_descriptor': workspace_descriptor} if workspace_descriptor is not None else {}))
         timeout_seconds = max(1, int(timeout_seconds))
 
         return self._start_process_job(command=[trusted_bwrap, *cmd[1:]],
             workspace_id=workspace_id, workspace_path=workspace_path, receipt=cmd,
             timeout_seconds=min(900, timeout_seconds), provider=provider, model=model,
-            requested_model=requested_model, reasoning_level=reasoning_level, cli_version=cli_version)
+            requested_model=requested_model, reasoning_level=reasoning_level, cli_version=cli_version,
+            finalize=finalize, cleanup=cleanup,
+            **({'pass_fds': (workspace_descriptor,)} if workspace_descriptor is not None else {}))
 
     @admitted_job
     def start_scoped_https_job(
@@ -603,6 +641,28 @@ class JobManager:
                     cleanup_ok = False
                     status, exit_code = 'cleanup_failed', 1
                     logger.exception('Resource cleanup failed for %s', job_id)
+            # Serialize publication with cancellation's conditional state transition.
+            # A cancelled request must never publish; a finalizer that already owns
+            # this write transaction completes before cancellation can be accepted.
+            conn = None
+            with self.lock:
+                finalizer = self._job_finalizers.pop(job_id, None)
+            if finalizer is not None:
+                conn = self._get_db()
+                conn.execute("BEGIN IMMEDIATE")
+                row = conn.execute("SELECT status FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+                success = (cleanup_ok and lease is not None and status == "completed"
+                           and exit_code == 0 and not proc._agentporter_stop.is_set()
+                           and row is not None and row["status"] == "running")
+                try:
+                    finalizer(success)
+                    if not success and status == "completed" and exit_code == 0:
+                        status, exit_code = "failed", 1
+                except Exception:
+                    # Validation/publication failure is terminal after verified OS
+                    # cleanup. It must not strand capacity as cleanup_failed.
+                    status, exit_code = ("failed" if cleanup_ok else "cleanup_failed"), 1
+                    logger.exception("Workspace publication failed for %s", job_id)
             with self.lock:
                 cleanup = self._job_cleanups.pop(job_id, None)
             if cleanup is not None:
@@ -615,12 +675,15 @@ class JobManager:
 
             finished_at = time.time()
             duration = finished_at - start_time
-            actual_model = extract_actual_model(stdout_path, stderr_path)
+            with self.lock:
+                model_evidence = self._job_model_evidence.pop(job_id, None)
+            actual_model = extract_actual_model(stdout_path, stderr_path, evidence=model_evidence)
 
             with self.lock:
                 self.active_processes.pop(job_id, None)
 
-            conn = self._get_db()
+            if conn is None:
+                conn = self._get_db()
             with conn:
                 row = conn.execute(
                     "SELECT status, actual_model FROM jobs WHERE job_id = ?", (job_id,)

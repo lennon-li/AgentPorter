@@ -284,6 +284,43 @@ def test_rollback_restores_exact_pair_and_only_restarts_development(installer, r
     assert calls[0][1]["check"] is True
 
 
+def test_rollback_pointer_failure_compensates_runtime_and_active_pointer(
+        installer, rollback_pair, monkeypatch):
+    install, config, evidence, _, candidate, _ = rollback_pair
+    original_replace = installer.replace_symlink
+    attempts = 0
+
+    def fail_target_pointer_once(base, name, target):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("synthetic pointer replacement failure")
+        return original_replace(base, name, target)
+
+    monkeypatch.setattr(installer, "replace_symlink", fail_target_pointer_once)
+    with pytest.raises(OSError, match="synthetic pointer replacement failure"):
+        installer.rollback(evidence.name)
+
+    assert attempts == 2  # target transition, then compensation
+    assert (install / "current").readlink() == candidate
+    assert (config / "development-runtime.yaml").read_bytes() == b"candidate synthetic runtime"
+
+
+def test_rollback_activation_failure_compensates_runtime_and_active_pointer(
+        installer, rollback_pair, monkeypatch):
+    install, config, evidence, _, candidate, _ = rollback_pair
+
+    def failed_restart(*_args, **_kwargs):
+        raise installer.subprocess.CalledProcessError(1, "synthetic restart")
+
+    monkeypatch.setattr(installer.subprocess, "run", failed_restart)
+    with pytest.raises(installer.subprocess.CalledProcessError):
+        installer.rollback(evidence.name, activate=True)
+
+    assert (install / "current").readlink() == candidate
+    assert (config / "development-runtime.yaml").read_bytes() == b"candidate synthetic runtime"
+
+
 @pytest.mark.parametrize("mutation", ["stale", "outside_release"])
 def test_rollback_rejects_stale_or_external_pairs_before_changes(installer, rollback_pair, mutation):
     import json
@@ -383,7 +420,7 @@ def test_builder_archive_extract_install_and_rollback_round_trip(builder, instal
     monkeypatch.setattr(installer, "DATA", data)
     operator = SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())
     account = SimpleNamespace(pw_uid=42424, pw_gid=42424)
-    monkeypatch.setattr(installer.pwd, "getpwnam", lambda name: operator if name == "yeli" else account)
+    monkeypatch.setattr(installer.pwd, "getpwnam", lambda name: operator if name == "operator" else account)
     original_fstat = os.fstat
 
     def synthetic_ownership(fd):

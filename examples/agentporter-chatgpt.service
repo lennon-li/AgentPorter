@@ -1,0 +1,19 @@
+[Unit]
+Description=Dedicated AgentPorter MCP service for ChatGPT on knowhere
+After=network.target
+
+[Service]
+Type=simple
+Environment=AGENTPORTER_STATE_DIR=%h/.local/state/agentporter-chatgpt
+Environment=AGENTPORTER_CACHE_DIR=%h/.cache/agentporter-chatgpt
+UnsetEnvironment=PYTHONPATH PYTHONHOME PYTHONSTARTUP VIRTUAL_ENV
+Environment=PYTHONNOUSERSITE=1
+ExecStart=%h/.local/share/agentporter/current/venv/bin/python -I -m agentporter.cli serve --host 127.0.0.1 --port 8776 --config-dir %h/.config/agentporter-chatgpt
+Restart=always
+RestartSec=5
+KillMode=process
+TimeoutStopSec=15
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

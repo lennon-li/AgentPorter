@@ -12,8 +12,8 @@ installer=/usr/local/libexec/agentporter/install-development-artifact.py
 installer_sha=84a53fbfcfe55668a2edda208b0990acf5fd98a6a105a73fb90cc51252e01c58
 gate=/opt/agentporter-development/activation-tools/runtime-install-gate.py
 gate_sha=9d57de9d99ea9b6e619a5542a92fecda52a4e0e0f7ab778d9272bf5380099c92
-storage_sha=b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b
-policy_sha=35ab27a480d4a53b810773f016fd5de8bfc205dcf5fae5dd7401844513ee7166
+storage_sha=e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0
+policy_sha=3f12d62c8dbd52dc7c0ba1afd499d145541353d32b42244e88e6402e2624f12a
 unit=agentporter-development.service
 timer_unit=agentporter-dev-autodiscovery.timer
 discovery_unit=agentporter-dev-autodiscovery.service
@@ -111,7 +111,7 @@ activation_failed() {
 # Tests source only these functions; no privileged command runs while sourcing.
 if [[ ${BASH_SOURCE[0]} != "$0" ]]; then return 0; fi
 trap activation_failed ERR
-[[ $# == 0 && $(id -un) == yeli ]] || { echo 'Run as yeli with no arguments, never root.' >&2; exit 1; }
+[[ $# == 0 && $(id -un) == operator ]] || { echo 'Run as operator with no arguments, never root.' >&2; exit 1; }
 [[ "$artifact_sha" =~ ^[0-9a-f]{64}$ && "$policy_sha" =~ ^[0-9a-f]{64}$ && "${new##*/}" =~ ^[0-9]{8}T[0-9]{6}\.[0-9]{6}Z$ ]] || {
   echo 'Candidate pins are not finalized; refuse activation.' >&2; exit 1;
 }

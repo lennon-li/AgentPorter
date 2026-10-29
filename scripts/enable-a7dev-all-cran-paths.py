@@ -26,7 +26,7 @@ from agentporter.scoped_https import ScopedPublicHTTPSPolicy, _NoAliasOwnerPolic
 CONFIG = Path('/var/lib/agentporter-dev/config')
 STATE = Path('/var/lib/agentporter-dev/state/cran-download-policy')
 POLICY = 'public-https.yaml'
-STORAGE_SHA = 'b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b'
+STORAGE_SHA = 'e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0'
 
 
 def require(ok, message):

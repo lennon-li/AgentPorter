@@ -1,7 +1,7 @@
 [Unit]
 Description=Reconcile A7Dev ordinary project discovery
 After=agentporter-development.service
-ConditionPathIsDirectory=/home/yeli/repos
+ConditionPathIsDirectory=/home/operator/repos
 
 [Service]
 Type=oneshot
@@ -12,8 +12,8 @@ UMask=0077
 TimeoutStartSec=5min
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/yeli/repos /var/lib/agentporter-dev/config /var/lib/agentporter-dev/state /var/lib/agentporter-dev-autodiscovery
-ReadOnlyPaths=-/home/yeli/repos/AgentPorter -/home/yeli/repos/obsidian -/home/yeli/repos/asgard-hermes-review
+ReadWritePaths=/home/operator/repos /var/lib/agentporter-dev/config /var/lib/agentporter-dev/state /var/lib/agentporter-dev-autodiscovery
+ReadOnlyPaths=-/home/operator/repos/AgentPorter -/home/operator/repos/obsidian -/home/operator/repos/asgard-hermes-review
 PrivateTmp=true
 PrivateDevices=true
 ProtectKernelTunables=true

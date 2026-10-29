@@ -9,8 +9,8 @@ def test_explicit_service_environment_grants_only_registered_workspace():
     config.workspaces = {"cranary": {}, "other": {}}
     with patch.dict("os.environ", {
         "AGENTPORTER_SCINET_HOST": "trillium-gpu.alliancecan.ca",
-        "AGENTPORTER_SCINET_USER": "yeli",
-        "AGENTPORTER_SCINET_CONTROL_SOCKET": "/home/yeli/.ssh/cm-yeli@trillium-gpu.alliancecan.ca:22",
+        "AGENTPORTER_SCINET_USER": "operator",
+        "AGENTPORTER_SCINET_CONTROL_SOCKET": "/home/operator/.ssh/cm-operator@trillium-gpu.alliancecan.ca:22",
         "AGENTPORTER_SCINET_MACHINE": "asgard",
         "AGENTPORTER_SCINET_WORKSPACE": "cranary",
     }, clear=True):

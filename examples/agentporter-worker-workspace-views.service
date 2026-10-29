@@ -1,0 +1,40 @@
+# Production view helper only. The worker/job service keeps NoNewPrivileges=true.
+[Unit]
+Description=AgentPorter production worker private workspace views
+Before=agentporter-worker.service
+
+[Service]
+Type=simple
+User=agentporter-worker
+Group=agentporter-worker
+WorkingDirectory=/
+RuntimeDirectory=agentporter-workspace-views
+RuntimeDirectoryMode=0700
+ExecStart=/opt/agentporter-worker/current/venv/bin/python -I -m agentporter.workspace_view_service --state-dir /var/lib/agentporter-worker/state/workspace-views
+Environment=PATH=/usr/bin:/bin
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+# Only this credential-free, fixed-function helper uses the existing setuid
+# fusermount3 executable. It never launches model code or publishes workspace data.
+NoNewPrivileges=false
+PrivateUsers=false
+# The view must be visible by pathname in the worker's mount namespace:
+# Bubblewrap canonicalizes even descriptor-based bind sources. Filesystem
+# namespace directives here silently substitute the empty backing directory.
+# This fixed-function helper runs as the worker UID; each view directory and
+# socket remains mode 0700/0600, outside every authorized workspace. Model jobs
+# still receive only the merged view inside their separate Bubblewrap namespace.
+PrivateMounts=false
+# Do not add seccomp directives that can imply NoNewPrivileges here: this
+# fixed-function helper must invoke fusermount3. Model execution retains the
+# separate worker service's NoNewPrivileges and namespace confinement.
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SETUID CAP_SETGID CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH
+MemoryMax=1G
+TasksMax=32
+KillMode=control-group
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

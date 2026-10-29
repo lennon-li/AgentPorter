@@ -72,6 +72,8 @@ class BubblewrapSandbox(SandboxBackend):
         sub_cwd: str = "",
         network_access: bool = False,
         git_metadata_writable: bool = False,
+        workspace_descriptor: int | None = None,
+        source_workspace_path: str | None = None,
     ) -> list[str]:
         # Until a separate trusted approval issuer and constrained egress broker
         # exist, generic execution is deliberately offline. An API Boolean is
@@ -82,7 +84,15 @@ class BubblewrapSandbox(SandboxBackend):
                 "Networked generic execution requires independently verified "
                 "approval and scoped egress; unavailable"
             )
-        real_workspace = os.path.realpath(workspace_path)
+        if workspace_descriptor is not None:
+            import stat
+            if type(workspace_descriptor) is not int or not stat.S_ISDIR(os.fstat(workspace_descriptor).st_mode):
+                raise PermissionError('Invalid private workspace view')
+            real_workspace = f'/proc/self/fd/{workspace_descriptor}'
+            if workspace_path != real_workspace:
+                raise PermissionError('Workspace view descriptor does not match the prepared view')
+        else:
+            real_workspace = os.path.realpath(workspace_path)
         if not os.path.isdir(real_workspace):
             raise ValueError(f"Workspace path does not exist: {real_workspace}")
         self._ensure_synthetic_identity()
@@ -94,9 +104,19 @@ class BubblewrapSandbox(SandboxBackend):
             rel_sub = os.path.normpath(sub_cwd)
             if rel_sub == ".." or rel_sub.startswith("../"):
                 raise ValueError(f"Invalid sub_cwd: {sub_cwd}")
-            full_sub = os.path.realpath(os.path.join(real_workspace, rel_sub))
-            if not (full_sub == real_workspace or full_sub.startswith(real_workspace + os.sep)):
-                raise ValueError(f"sub_cwd escapes workspace: {sub_cwd}")
+            if workspace_descriptor is None:
+                full_sub = os.path.realpath(os.path.join(real_workspace, rel_sub))
+                if not (full_sub == real_workspace or full_sub.startswith(real_workspace + os.sep)):
+                    raise ValueError(f"sub_cwd escapes workspace: {sub_cwd}")
+            else:
+                descriptor = os.dup(workspace_descriptor)
+                try:
+                    for part in rel_sub.split('/'):
+                        if part == '.': continue
+                        child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+                        os.close(descriptor); descriptor = child
+                finally:
+                    os.close(descriptor)
             target_cwd = os.path.join("/workspace", rel_sub)
 
         args = [
@@ -135,7 +155,7 @@ class BubblewrapSandbox(SandboxBackend):
         # Overmount a Git repository's control directory/file as read-only.
         # This is defense in depth, not an authorization boundary for nested
         # repositories, hardlinks, worker CLI access or external publishers.
-        git_metadata = os.path.join(real_workspace, ".git")
+        git_metadata = os.path.join(source_workspace_path or real_workspace, ".git")
         if os.path.islink(git_metadata):
             raise PermissionError("Symlinked .git metadata unsupported in generic execution")
         if os.path.lexists(git_metadata) and not git_metadata_writable:
@@ -182,6 +202,8 @@ class BubblewrapSandbox(SandboxBackend):
         max_output_bytes: int | None = None,
         network_access: bool = False,
         git_metadata_writable: bool = False,
+        workspace_descriptor: int | None = None,
+        source_workspace_path: str | None = None,
     ) -> dict:
         """Run a bounded command without ever accumulating unbounded pipe output.
 
@@ -201,6 +223,8 @@ class BubblewrapSandbox(SandboxBackend):
             workspace_path, writable=writable, sub_cwd=cwd,
             network_access=network_access,
             git_metadata_writable=git_metadata_writable,
+            **({'workspace_descriptor': workspace_descriptor,
+                'source_workspace_path': source_workspace_path} if workspace_descriptor is not None else {}),
         ) + ["--"] + argv
 
         t0 = time.time()
@@ -241,6 +265,7 @@ class BubblewrapSandbox(SandboxBackend):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 process_group=0,
+                **({'pass_fds': (workspace_descriptor,)} if workspace_descriptor is not None else {}),
             )
             pidfd = open_handle(proc.pid)
             selector = selectors.DefaultSelector()

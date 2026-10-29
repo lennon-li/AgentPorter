@@ -74,8 +74,8 @@ def host_identity(registry, workspace_id: str):
     if not ws.allow_execute or not ws.allow_venkata_ssh:
         raise PermissionError("Venkata SSH requires explicit workspace opt-in and execution permission")
     user = pwd.getpwuid(os.getuid())
-    if user.pw_name != "yeli" or socket.gethostname().split(".")[0] not in {"bcc", "pho-rdpdl-23"}:
-        raise PermissionError("Venkata operations require the BCC yeli host identity")
+    if user.pw_name != "operator" or socket.gethostname().split(".")[0] not in {"bcc", "pho-rdpdl-23"}:
+        raise PermissionError("Venkata operations require the BCC operator host identity")
     if not access_enabled(user.pw_dir):
         raise PermissionError("Venkata access is OFF; enable locally with venkata-access on")
     return user
@@ -91,7 +91,7 @@ def ssh_argv(target: str, remote: list[str]) -> list[str]:
 
 def run_host_bytes(argv: list[str], home: str, *, input_bytes: bytes | None = None,
                    max_output: int = MAX_OUTPUT, timeout: float = TIMEOUT) -> dict:
-    env = {"HOME": home, "USER": "yeli", "LOGNAME": "yeli",
+    env = {"HOME": home, "USER": "operator", "LOGNAME": "operator",
            "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
     with tempfile.TemporaryFile() as request:
         if input_bytes is not None:

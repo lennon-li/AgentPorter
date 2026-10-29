@@ -225,7 +225,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FileResponse"
+                  "$ref": "#/components/schemas/ReadFileResponse"
                 }
               }
             }
@@ -1647,7 +1647,17 @@
             "description": "Workspaces admitted by public policy and registry for read-only delegation; runtime restrictions still apply."
           },
           "public_writable_dispatch_workspaces": {
-            "anyOf": [{"items": {"type": "string"}, "type": "array"}, {"type": "null"}],
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Public Writable Dispatch Workspaces",
             "description": "Workspaces admitted for local edits by public policy, registry, and development runtime; commit and push remain denied."
           },
@@ -2061,6 +2071,32 @@
       },
       "DispatchAgentRequest": {
         "properties": {
+          "approval_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8192
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Token",
+            "description": "Independent owner approval for this exact writable task."
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id",
+            "description": "Stable request identity supplied by the approval issuer."
+          },
           "agent": {
             "type": "string",
             "title": "Agent",
@@ -2350,6 +2386,42 @@
       },
       "ExecRunRequest": {
         "properties": {
+          "approval_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8192
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Token"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "read_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read Only",
+            "description": "Shared production defaults to read-only execution; edits require a scoped grant."
+          },
           "argv": {
             "items": {
               "type": "string"
@@ -2385,6 +2457,42 @@
       },
       "ExecStartRequest": {
         "properties": {
+          "approval_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8192
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Token"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "read_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read Only",
+            "description": "Shared production defaults to read-only execution; edits require a scoped grant."
+          },
           "argv": {
             "items": {
               "type": "string"
@@ -3092,6 +3200,30 @@
       },
       "PatchFileRequest": {
         "properties": {
+          "approval_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8192
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Token"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
           "patch": {
             "type": "string",
             "title": "Patch",
@@ -3104,6 +3236,24 @@
         ],
         "title": "PatchFileRequest"
       },
+      "ReadFileRange": {
+        "properties": {
+          "start_line": {
+            "type": "integer",
+            "title": "Start Line"
+          },
+          "end_line": {
+            "type": "integer",
+            "title": "End Line"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_line",
+          "end_line"
+        ],
+        "title": "ReadFileRange"
+      },
       "ReadFileRequest": {
         "properties": {
           "path": {
@@ -3114,26 +3264,28 @@
           "start_line": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "exclusiveMinimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
             "title": "Start Line",
-            "description": "Start line (1-indexed)."
+            "description": "Start line (1-indexed, positive)."
           },
           "end_line": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "exclusiveMinimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
             "title": "End Line",
-            "description": "End line (inclusive)."
+            "description": "End line (inclusive, positive)."
           }
         },
         "type": "object",
@@ -3141,6 +3293,45 @@
           "path"
         ],
         "title": "ReadFileRequest"
+      },
+      "ReadFileResponse": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "total_lines": {
+            "type": "integer",
+            "title": "Total Lines"
+          },
+          "range": {
+            "$ref": "#/components/schemas/ReadFileRange",
+            "description": "Inclusive line bounds. Ranged reads report normalized requested bounds; total_lines reports available decoded lines. Full reads use 1..total_lines (an empty file uses 1..0)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "content",
+          "sha256",
+          "size_bytes",
+          "total_lines",
+          "range"
+        ],
+        "title": "ReadFileResponse",
+        "description": "Text with hash/size of original bytes; line boundaries use Unicode splitlines."
       },
       "ScinetDiagnosticRequest": {
         "properties": {
@@ -3448,6 +3639,30 @@
       },
       "TrashPathRequest": {
         "properties": {
+          "approval_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8192
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Token"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
           "path": {
             "type": "string",
             "title": "Path",
@@ -3743,7 +3958,8 @@
   ],
   "servers": [
     {
-      "url": "https://5mvx3k0t-8765.use.devtunnels.ms"
+      "url": "https://gateway.example.invalid",
+      "description": "Replace with your authenticated gateway endpoint"
     }
   ]
 }

@@ -12,7 +12,7 @@ import types
 
 
 SOURCE = Path(__file__).with_name('prepare-a7dev-shared-access-repair.py')
-SOURCE_SHA256 = 'ce6f32944a9c307efe10a97a19eb50233c22f883f133282077b7728d78dbe8c9'
+SOURCE_SHA256 = 'ba4663accdc404a8ae5934bc7c1a5ce304a05b7e89683d7109a2c6394d3dd127'
 BASE_SHA256 = 'ce546675f17f6e6e70a39d196ac763b3bbe155de67ad39f24af057e95e22d5b9'
 BASE_VERSION = '20261022T181133.685266Z'
 MODULES = {'src/agentporter/scoped_https.py'}

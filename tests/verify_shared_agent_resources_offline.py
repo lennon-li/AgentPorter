@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory() as basedir:
         command = launcher.command
         assert "--unshare-all" in command
         assert "--clearenv" in command
-        assert "HOME=/home/yeli" not in str(command)
+        assert "HOME=/home/operator" not in str(command)
         for path in ("/opt/agentporter/shared/obsidian",
                      "/opt/agentporter/tools"):
             assert path in command

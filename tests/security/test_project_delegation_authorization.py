@@ -96,7 +96,7 @@ def test_malformed_registry_refused(helper, baseline, mutation):
     elif mutation == 'path':
         registry['workspaces']['Qman']['path'] = '/etc'
     elif mutation == 'traversal':
-        registry['workspaces']['Qman']['path'] = '/home/yeli/repos/Qman/../Qman'
+        registry['workspaces']['Qman']['path'] = '/home/operator/repos/Qman/../Qman'
     elif mutation == 'bool':
         registry['workspaces']['Qman']['allow_execute'] = 'true'
     else:

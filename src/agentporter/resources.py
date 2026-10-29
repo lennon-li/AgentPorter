@@ -20,20 +20,41 @@ class ResourceCleanupError(RuntimeError):
     pass
 
 
+WORKER_RELEASE_ROOTS = {
+    "agentporter-development.service": "/opt/agentporter-development/versions",
+    "agentporter-worker.service": "/opt/agentporter-worker/versions",
+}
+
+
+def worker_service_unit(config):
+    """Owner-installed runtime config selects one of two fixed worker identities."""
+    unit = config.get("service_unit", "agentporter-development.service")
+    if type(unit) is not str or unit not in WORKER_RELEASE_ROOTS:
+        raise PermissionError("Unsupported worker service identity")
+    return unit
+
+
+def validate_job_resource_settings(settings):
+    if not isinstance(settings, dict) or set(settings) != {'memory_bytes', 'pids', 'cpu_quota_us', 'cpu_period_us'}:
+        raise ValueError('Explicit CPU, memory and process budgets required')
+    bounds = {'memory_bytes': (512 * 1024**2, 16 * 1024**3), 'pids': (16, 512),
+              'cpu_quota_us': (10000, 400000), 'cpu_period_us': (100000, 100000)}
+    for name, (low, high) in bounds.items():
+        if type(settings[name]) is not int or not low <= settings[name] <= high:
+            raise ValueError('Invalid job resource budget: ' + name)
+    return dict(settings)
+
+
 class JobResources:
-    def __init__(self, settings):
-        if set(settings) != {'memory_bytes', 'pids', 'cpu_quota_us', 'cpu_period_us'}:
-            raise ValueError('Explicit CPU, memory and process budgets required')
-        bounds = {'memory_bytes': (512 * 1024**2, 16 * 1024**3), 'pids': (16, 512),
-                  'cpu_quota_us': (10000, 400000), 'cpu_period_us': (100000, 100000)}
-        for name, (low, high) in bounds.items():
-            if type(settings[name]) is not int or not low <= settings[name] <= high:
-                raise ValueError('Invalid job resource budget: ' + name)
+    def __init__(self, settings, *, expected_unit="agentporter-development.service"):
+        validate_job_resource_settings(settings)
+        if type(expected_unit) is not str or expected_unit not in {*WORKER_RELEASE_ROOTS, "agentporter.service"}:
+            raise PermissionError("Unsupported gateway resource service identity")
         current = Path('/proc/self/cgroup').read_text().strip()
         if not current.startswith('0::/') or '\n' in current:
             raise PermissionError('Unified cgroup v2 is required')
         relative = Path(current[3:])
-        if relative.name != 'supervisor' or relative.parent.name != 'agentporter-development.service':
+        if relative.name != 'supervisor' or relative.parent.name != expected_unit:
             raise PermissionError('Owner-installed DelegateSubgroup=supervisor is required')
         self.root = Path('/sys/fs/cgroup') / str(relative.parent).lstrip('/')
         if self.root.is_symlink() or self.root.stat().st_uid != os.getuid():

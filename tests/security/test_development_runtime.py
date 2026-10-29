@@ -657,6 +657,27 @@ else:
         launch.cleanup()
 
 
+def test_deep_metadata_pins_keep_only_final_descriptors(tmp_path):
+    from agentporter.agents.development import DevelopmentRuntime
+    import resource
+    root = tmp_path / 'root'; root.mkdir()
+    for index in range(180):
+        (root / str(index) / 'nested' / 'deep' / '.git').mkdir(parents=True)
+    descriptors = []
+    root_fd = os.open(root, os.O_PATH | os.O_DIRECTORY)
+    before = resource.getrlimit(resource.RLIMIT_NOFILE)
+    try:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (256, before[1]))
+        for index in range(180):
+            fd = DevelopmentRuntime._pin(Path(str(index)) / 'nested/deep/.git', descriptors, root_fd)
+            assert os.fstat(fd).st_ino == (root / str(index) / 'nested/deep/.git').stat().st_ino
+        assert len(descriptors) == 180
+    finally:
+        resource.setrlimit(resource.RLIMIT_NOFILE, before)
+        for fd in descriptors: os.close(fd)
+        os.close(root_fd)
+
+
 def test_nested_symlink_git_external_worktree_and_hardlinks_fail_closed(runtime_factory, monkeypatch):
     runtime, _, _, workspace, other = runtime_factory()
     no_probe(monkeypatch, runtime)
@@ -908,7 +929,8 @@ def test_launcher_and_configuration_must_be_outside_writable_workspaces(runtime_
 
 
 @pytest.mark.parametrize("shared_snapshot", [False, True])
-def test_argie_stages_only_explicit_antigravity_token(runtime_factory, monkeypatch, tmp_path, shared_snapshot):
+@pytest.mark.parametrize("writable", [False, True])
+def test_argie_stages_only_explicit_antigravity_token(runtime_factory, monkeypatch, tmp_path, shared_snapshot, writable):
     runtime, config, path, workspace, _ = runtime_factory()
     no_probe(monkeypatch, runtime)
     profile = path.parent.parent / "fake-gemini-profile"
@@ -939,7 +961,7 @@ def test_argie_stages_only_explicit_antigravity_token(runtime_factory, monkeypat
     save(config, path)
     (workspace / ".gemini").mkdir()
     (workspace / ".gemini" / "settings.json").write_text("workspace secrets must be masked")
-    launch = runtime.prepare("argie", str(workspace), False, ["/usr/bin/python3", "--version"])
+    launch = runtime.prepare("argie", str(workspace), writable, ["/usr/bin/python3", "--version"])
     try:
         args = launch.command
         private_home = Path(args[args.index("/home/worker") - 1])
@@ -953,9 +975,10 @@ def test_argie_stages_only_explicit_antigravity_token(runtime_factory, monkeypat
         shared_reads = (
             ["read_file(/opt/agentporter/shared/obsidian)"] if shared_snapshot else []
         )
-        assert policy["permissions"]["allow"] == ["read_file(/workspace)", *shared_reads]
+        assert policy["permissions"]["allow"] == ["read_file(/workspace)", *shared_reads,
+                                                   *(["write_file(/workspace)"] if writable else [])]
         assert set(policy["permissions"]["deny"]) == {
-            "command(*)", "write_file(*)", "read_url(*)", "execute_url(*)", "mcp(*)",
+            "command(*)", *([] if writable else ["write_file(*)"]), "read_url(*)", "execute_url(*)", "mcp(*)",
             "read_file(/home/worker/.gemini/antigravity-cli)",
             "read_file(/home/worker/.config)", "read_file(/home/worker/.local/share)",
         }
@@ -1083,7 +1106,7 @@ def test_codex_helper_readonly_mount_uses_pinned_fd(runtime_factory, monkeypatch
 
 
 def test_real_bundled_codex_helper_admin_launch_inside_boundary(runtime_factory, monkeypatch):
-    helper = Path('/home/yeli/.codex/packages/standalone/releases/0.163.0-x86_64-unknown-linux-musl/bin/codex-code-mode-host')
+    helper = Path('/home/operator/.codex/packages/standalone/releases/0.163.0-x86_64-unknown-linux-musl/bin/codex-code-mode-host')
     if not helper.is_file():
         pytest.skip('optional installed upstream bundled Codex helper unavailable on this host')
     runtime, config, path, workspace, _ = runtime_factory()

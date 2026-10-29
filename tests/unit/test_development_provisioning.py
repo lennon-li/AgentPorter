@@ -69,7 +69,7 @@ def test_system_unit_only_development_identity_paths_port(provision):
     assert '/opt/agentporter-development/current/venv/bin/python -I' in unit
     assert 'HOME=/var/lib/agentporter-dev/home' in unit
     assert 'AGENTPORTER_CONFIG_DIR=/var/lib/agentporter-dev/config' in unit
-    assert '/home/yeli' not in unit
+    assert '/home/operator' not in unit
     assert 'sudo' not in unit
     assert 'NoNewPrivileges=true\n' in unit
     assert 'RestrictSUIDSGID=true\n' in unit
@@ -162,6 +162,8 @@ def test_offline_snapshot_interpreter_and_dependencies_relocate(provision, tmp_p
     monkeypatch.setattr(provision, 'OBSIDIAN', synthetic_obsidian(tmp_path))
     monkeypatch.setattr(provision, 'immutable_tree', lambda root: None)
     monkeypatch.setattr(provision, 'atomic_text', lambda path, text, **kw: path.write_text(text))
+    if not (provision.REPO / '.venv/bin/python').is_file():
+        pytest.skip('Offline snapshot integration requires a local virtualenv')
     interpreter = (provision.REPO / '.venv/bin/python').resolve()
     vendor = tmp_path / 'vendor'
     vendor.mkdir()
@@ -211,7 +213,7 @@ def test_snapshot_missing_matching_codex_helper_fails_closed(provision, tmp_path
 def test_argie_copies_only_verified_oauth_file_not_hooks_or_mcp(provision, tmp_path, monkeypatch):
     target = '.gemini/antigravity-cli/antigravity-oauth-token'
     assert provision.CREDENTIALS['argie'] == {
-        target: '/home/yeli/.gemini/antigravity-cli/antigravity-oauth-token'}
+        target: '/home/operator/.gemini/antigravity-cli/antigravity-oauth-token'}
     source = tmp_path / 'source' / target
     source.parent.mkdir(parents=True)
     source.write_text('offline-fixture-token')
@@ -232,7 +234,7 @@ def test_argie_copies_only_verified_oauth_file_not_hooks_or_mcp(provision, tmp_p
 
 def test_wei_uses_canonical_go_key_with_private_dev_copy(provision, tmp_path, monkeypatch):
     target = '.config/opencode/wei-key'
-    assert provision.CREDENTIALS['wei'] == {target: '/home/yeli/.config/opencode/go-key'}
+    assert provision.CREDENTIALS['wei'] == {target: '/home/operator/.config/opencode/go-key'}
     source = tmp_path / 'source/go-key'
     source.parent.mkdir()
     source.write_text('offline-go-fixture')

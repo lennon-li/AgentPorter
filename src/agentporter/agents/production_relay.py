@@ -29,6 +29,12 @@ MAX_REQUEST = 32_768
 MAX_RESPONSE = 524_288
 ALLOWED_OPS = frozenset(("list_agents", "workspace_info", "dispatch_agent", "job_status", "job_output", "job_result", "lookup_dispatch"))
 RECEIVING_SECURITY_PROFILE = "provider_origin_v1"
+DEFAULT_TIMEOUT = 8
+INVENTORY_TIMEOUT = 90  # measured healthy inventory responses take 43-46s
+# Receiving gateway validates confined inventory before launch; healthy
+# admission measured 33-58s. Bounds admission only, not job execution.
+DISPATCH_ADMISSION_TIMEOUT = 90
+OPERATION_TIMEOUTS = {"list_agents": INVENTORY_TIMEOUT, "dispatch_agent": DISPATCH_ADMISSION_TIMEOUT}
 
 
 class RelayLedger:
@@ -194,6 +200,11 @@ def read_relay_scope(config_dir: Path) -> dict[str, str]:
         doc = yaml.load(os.read(fd, 4097), Loader=_UniqueKeysLoader)
     finally:
         os.close(fd)
+    from agentporter.workspace_policy import shared_policy_reference
+    policy = shared_policy_reference(doc)
+    if policy is not None:
+        return {name: row["path"] for name, row in policy.workspaces.items()
+                if policy.capabilities(name)["agent_dispatch"]}
     if (not isinstance(doc, dict) or set(doc) != {"version", "workspaces"}
             or type(doc["version"]) is not int or doc["version"] != 1
             or not isinstance(doc["workspaces"], dict)
@@ -233,6 +244,11 @@ def relay_upstream_workspaces(config_dir: Path) -> frozenset[str]:
         doc = yaml.safe_load(os.read(fd, 1025))
     finally:
         os.close(fd)
+    from agentporter.workspace_policy import shared_policy_reference
+    policy = shared_policy_reference(doc)
+    if policy is not None:
+        return frozenset(name for name in policy.workspaces
+                         if policy.capabilities(name)["agent_dispatch"])
     if (not isinstance(doc, dict) or set(doc) != {"version", "host", "port", "workspaces"}
             or type(doc["version"]) is not int or doc["version"] != 1
             or doc["host"] != "127.0.0.1" or type(doc["port"]) is not int
@@ -246,13 +262,21 @@ def relay_upstream_workspaces(config_dir: Path) -> frozenset[str]:
     return frozenset(workspaces)
 
 
-def validate_dispatch(data: dict, workspace_ids: set[str]) -> dict:
+def normalize_dispatch(data: dict) -> dict:
+    """Canonical defaults shared by the approval issuer and both relay endpoints."""
+    return {"purpose": "", "model": None, "reasoning_effort": None,
+            "allow_commit": False, "allow_push": False, "read_only": True, **data}
+
+
+def validate_dispatch(data: dict, workspace_ids: set[str], *, approval_verifier=None,
+                      workspace_paths=None) -> dict:
     if not isinstance(data, dict):
         raise ValueError("Relay payload must be an object")
     permitted = {"agent", "task", "workspace_id", "purpose", "model", "reasoning_effort",
-                 "allow_commit", "allow_push", "read_only", "request_id"}
+                 "allow_commit", "allow_push", "read_only", "request_id", "approval_token"}
     if set(data) - permitted:
         raise PermissionError("Unexpected delegation relay argument")
+    data = normalize_dispatch(data)
     agent = data.get("agent")
     workspace = data.get("workspace_id")
     task = data.get("task")
@@ -262,14 +286,24 @@ def validate_dispatch(data: dict, workspace_ids: set[str]) -> dict:
         raise PermissionError("Invalid relay task")
     if "request_id" in data:
         RelayLedger.validate_request_id(data["request_id"])
+    if any(type(data[key]) is not bool for key in ("allow_commit", "allow_push", "read_only")):
+        raise PermissionError("Relay permission flags must be booleans")
     if data.get("allow_commit") or data.get("allow_push"):
         raise PermissionError("Relay never permits Git publication")
     for key in ("purpose", "model", "reasoning_effort"):
         value = data.get(key)
         if value is not None and (not isinstance(value, str) or len(value) > 512):
             raise PermissionError("Invalid relay metadata")
-    if data.get("read_only", True) is not True:
-        raise PermissionError("Production relay is read-only until writable trust boundaries are audited")
+    token = data.get("approval_token")
+    if "approval_token" in data and (not isinstance(token, str) or not 1 <= len(token) <= 8192):
+        raise PermissionError("Invalid relay approval token")
+    if not data["read_only"]:
+        if (approval_verifier is None or not token or "request_id" not in data
+                or not isinstance(workspace_paths, dict) or workspace not in workspace_paths):
+            raise PermissionError("Writable delegation requires an independent task approval")
+        approval_verifier.verify(token, workspace_id=workspace,
+            workspace_root=workspace_paths[workspace], action="dispatch_agent", arguments=data,
+            request_id=data["request_id"], required_operations={"write"}, agent=agent, task=task)
     return {**data, "agent": agent, "workspace_id": workspace, "allow_commit": False,
             "allow_push": False, "read_only": data.get("read_only", True)}
 
@@ -287,10 +321,12 @@ def validate_job_request(data: dict) -> str:
 class ProductionDelegationClient:
     """Fixed TCP loopback + purpose-specific credential, no HTTP proxy or redirects."""
 
-    def __init__(self, token: str, workspace_paths: dict[str, str], state_dir: Path, port: int = 8876):
+    def __init__(self, token: str, workspace_paths: dict[str, str], state_dir: Path, port: int = 8876,
+                 *, approval_verifier=None):
         if not token or port != 8876:
             raise PermissionError("Invalid relay configuration")
         self.token = token
+        self.approval_verifier = approval_verifier
         self.workspace_paths = dict(workspace_paths)
         self.workspace_ids = frozenset(workspace_paths)
         self.ledger = RelayLedger(state_dir)
@@ -307,7 +343,8 @@ class ProductionDelegationClient:
         data = dict(data or {})
         request_id = None
         if operation == "dispatch_agent":
-            data = validate_dispatch(data, set(self.workspace_ids))
+            data = validate_dispatch(data, set(self.workspace_ids),
+                approval_verifier=self.approval_verifier, workspace_paths=self.workspace_paths)
             # A shared ID alone is not authority: verify both gateway
             # registries bind that ID to the SAME absolute workspace root.
             remote = self.call("workspace_info", {"workspace_id": data["workspace_id"]})
@@ -318,7 +355,9 @@ class ProductionDelegationClient:
                 raise PermissionError("Production/development workspace mapping mismatch")
             if remote.get("security_profile") != RECEIVING_SECURITY_PROFILE:
                 raise PermissionError("Receiving gateway lacks reviewed production egress; delegation refused")
-            request_id = uuid.uuid4().hex
+            if not data["read_only"] and remote.get("writable") is not True:
+                raise PermissionError("Receiving workspace does not permit approved writes")
+            request_id = uuid.uuid4().hex if data["read_only"] else data["request_id"]
             data["request_id"] = request_id
             self.ledger.reserve(request_id, data["workspace_id"], data["agent"])
         elif operation == "lookup_dispatch":
@@ -351,7 +390,8 @@ class ProductionDelegationClient:
         if len(raw) > MAX_REQUEST:
             raise PermissionError("Relay request too large")
         for attempt in range(2 if operation == "dispatch_agent" else 1):
-            connection = http.client.HTTPConnection("127.0.0.1", 8876, timeout=8)
+            connection = http.client.HTTPConnection(
+                "127.0.0.1", 8876, timeout=OPERATION_TIMEOUTS.get(operation, DEFAULT_TIMEOUT))
             try:
                 connection.request(
                     "POST", "/internal/delegation/v1", body=raw,

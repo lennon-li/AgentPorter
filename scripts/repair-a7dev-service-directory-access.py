@@ -18,8 +18,8 @@ import time
 
 INSTALLED = Path('/opt/agentporter-development/activation-tools/directory-access/repair-a7dev-service-directory-access.py')
 STATE = Path('/var/lib/agentporter-dev/state/directory-access-repair')
-PINS = {'authorize-a7dev-project-delegation.py': 'b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b',
-        'repair-a7dev-shared-directory-defaults.py': '62f2e0e566515ece9260beb3322ef763998bce76f2c52df550921b3cb8c1b8df'}
+PINS = {'authorize-a7dev-project-delegation.py': 'e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0',
+        'repair-a7dev-shared-directory-defaults.py': 'c7aceb82a6d261207095700212219cc9d8a27b55b2e2540b4cbbd226a0921027'}
 
 
 def require(ok, message):
@@ -239,7 +239,7 @@ def main():
     parser.add_argument('--list-workspaces', action='store_true'); parser.add_argument('--expected-plan-sha256')
     args = parser.parse_args()
     storage, d = dependencies()
-    require(pwd.getpwnam('agentporter-dev').pw_uid == 994 and pwd.getpwnam('yeli').pw_uid == 1000, 'Unexpected accounts')
+    require(pwd.getpwnam('agentporter-dev').pw_uid == 994 and pwd.getpwnam('operator').pw_uid == 1000, 'Unexpected accounts')
     def read_config():
         fd = storage.open_directory(storage.CONFIG, 994)
         try: return {name: storage.private_read(fd, name, 994) for name in storage.FILES}

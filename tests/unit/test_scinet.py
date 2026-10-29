@@ -33,15 +33,15 @@ def registry(*, enabled: bool = True) -> WorkspaceRegistry:
     )
 
 
-def host(home: str = "/home/yeli") -> SimpleNamespace:
-    return SimpleNamespace(pw_name="yeli", pw_dir=home)
+def host(home: str = "/home/operator") -> SimpleNamespace:
+    return SimpleNamespace(pw_name="operator", pw_dir=home)
 
 
-def settings(home: str = "/home/yeli") -> ScinetSettings:
+def settings(home: str = "/home/operator") -> ScinetSettings:
     return ScinetSettings(
         host="trillium-gpu.alliancecan.ca",
-        user="yeli",
-        control_socket=f"{home}/.ssh/cm-yeli@trillium-gpu.alliancecan.ca:22",
+        user="operator",
+        control_socket=f"{home}/.ssh/cm-operator@trillium-gpu.alliancecan.ca:22",
         machine="asgard",
     )
 
@@ -56,10 +56,10 @@ def test_remote_commands_are_fixed_and_read_only():
 
 
 def test_ssh_arguments_pin_socket_identity_and_host():
-    argv = ssh_argv(settings(), "/home/yeli", "gpu_nodes")
+    argv = ssh_argv(settings(), "/home/operator", "gpu_nodes")
     assert argv[0] == "/usr/bin/ssh"
     assert "-S" in argv
-    assert "/home/yeli/.ssh/cm-yeli@trillium-gpu.alliancecan.ca:22" in argv
+    assert "/home/operator/.ssh/cm-operator@trillium-gpu.alliancecan.ca:22" in argv
     assert "BatchMode=yes" in argv
     assert "StrictHostKeyChecking=yes" in argv
     assert "ForwardAgent=no" in argv
@@ -72,8 +72,8 @@ def test_ssh_arguments_pin_socket_identity_and_host():
 
 def test_server_generated_ssh_preserves_stdin_only_when_requested():
     remote = ["/bin/bash", "-lc", "cat"]
-    without_stdin = ssh_remote_argv(settings(), "/home/yeli", remote)
-    with_stdin = ssh_remote_argv(settings(), "/home/yeli", remote, accepts_stdin=True)
+    without_stdin = ssh_remote_argv(settings(), "/home/operator", remote)
+    with_stdin = ssh_remote_argv(settings(), "/home/operator", remote, accepts_stdin=True)
 
     assert "-n" in without_stdin
     assert "-n" not in with_stdin
@@ -187,7 +187,7 @@ def test_arbitrary_remote_command_cannot_be_substituted():
 
 
 def test_expired_master_cannot_fall_back_to_direct_authentication():
-    argv = ssh_argv(settings(), "/home/yeli", "gpu_nodes")
+    argv = ssh_argv(settings(), "/home/operator", "gpu_nodes")
     for option in ("ProxyCommand=/bin/false", "ControlMaster=no", "ControlPersist=no",
                    "IdentityAgent=none", "PubkeyAuthentication=no", "PasswordAuthentication=no",
                    "KbdInteractiveAuthentication=no", "HostbasedAuthentication=no"):

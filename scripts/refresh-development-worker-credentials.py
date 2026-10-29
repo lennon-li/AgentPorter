@@ -21,28 +21,28 @@ import tomllib
 from urllib.parse import urlsplit
 import ipaddress
 
-OWNER = "yeli"
+OWNER = "operator"
 ACCOUNT = "agentporter-dev"
 DATA = Path("/var/lib/agentporter-dev/credentials")
 SOURCES = {
     "jax": {
-        ".codex/auth.json": "/home/yeli/.codex/auth.json",
-        ".codex/config.toml": "/home/yeli/.codex/config.toml",
+        ".codex/auth.json": "/home/operator/.codex/auth.json",
+        ".codex/config.toml": "/home/operator/.codex/config.toml",
     },
     "liz": {
-        ".codex/auth.json": "/home/yeli/.codex-liz/auth.json",
-        ".codex/config.toml": "/home/yeli/.codex-liz/config.toml",
+        ".codex/auth.json": "/home/operator/.codex-liz/auth.json",
+        ".codex/config.toml": "/home/operator/.codex-liz/config.toml",
     },
     "prof": {
-        ".codex/auth.json": "/home/yeli/.codex-prof/auth.json",
-        ".codex/config.toml": "/home/yeli/.codex-prof/config.toml",
+        ".codex/auth.json": "/home/operator/.codex-prof/auth.json",
+        ".codex/config.toml": "/home/operator/.codex-prof/config.toml",
     },
-    "ming": {".claude/.credentials.json": "/home/yeli/.claude/.credentials.json"},
-    "phil": {".copilot-phil/config.json": "/home/yeli/.copilot-phil/config.json"},
-    "wei": {".config/opencode/wei-key": "/home/yeli/.config/opencode/go-key"},
+    "ming": {".claude/.credentials.json": "/home/operator/.claude/.credentials.json"},
+    "phil": {".copilot-phil/config.json": "/home/operator/.copilot-phil/config.json"},
+    "wei": {".config/opencode/wei-key": "/home/operator/.config/opencode/go-key"},
     "argie": {
         ".gemini/antigravity-cli/antigravity-oauth-token":
-        "/home/yeli/.gemini/antigravity-cli/antigravity-oauth-token"
+        "/home/operator/.gemini/antigravity-cli/antigravity-oauth-token"
     },
 }
 MAX_BYTES = 1024 * 1024

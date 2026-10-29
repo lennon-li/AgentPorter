@@ -49,7 +49,7 @@ def test_yaml_aliases_reject(prep):
 
 
 @pytest.mark.parametrize('key,value', [('enabled', False), ('profile', 'production'),
-    ('gateway_user', 'yeli'), ('production_uid', True), ('production_uid', 0),
+    ('gateway_user', 'operator'), ('production_uid', True), ('production_uid', 0),
     ('workers', {'liz': {}}), ('allowed_workspace_roots', []),
     ('allowed_workspace_roots', [{'path': '/approved/project', 'writable': 'true'}]),
     ('allowed_workspace_roots', [{'path': 'relative', 'writable': True}])])
@@ -57,7 +57,7 @@ def test_invalid_or_production_runtime_refused_without_value_disclosure(prep, ru
     runtime[key] = value
     with pytest.raises(ValueError) as error:
         prep.parse_active_runtime(yaml.safe_dump(runtime))
-    assert 'yeli' not in str(error.value)
+    assert 'operator' not in str(error.value)
     assert '/approved' not in str(error.value)
 
 

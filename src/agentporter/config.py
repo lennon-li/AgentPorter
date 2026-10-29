@@ -114,6 +114,7 @@ class Config:
         self.parallel_search = ParallelSearchSettings()
         self.scinet = ScinetSettings()
         self.workspaces: dict[str, dict[str, Any]] = {}
+        self.workspace_policy = None
         self.api_key: str = ""
 
         self._ensure_dirs()
@@ -343,7 +344,10 @@ class Config:
             try:
                 with open(ws_file, "r", encoding="utf-8") as f:
                     data = yaml.safe_load(f) or {}
-                self.workspaces = data.get("workspaces", {})
+                from agentporter.workspace_policy import shared_policy_reference
+                shared = shared_policy_reference(data)
+                self.workspace_policy = shared
+                self.workspaces = shared.workspaces if shared is not None else data.get("workspaces", {})
                 return
             except Exception as e:
                 raise ValueError(f"Failed to parse {ws_file}: {e}") from e

@@ -16,8 +16,8 @@ from agentporter.workspaces.registry import WorkspaceRegistry
 def settings():
     return SimpleNamespace(
         host="trillium-gpu.alliancecan.ca",
-        user="yeli",
-        control_socket="/home/yeli/.ssh/cm-yeli@trillium-gpu.alliancecan.ca:22",
+        user="operator",
+        control_socket="/home/operator/.ssh/cm-operator@trillium-gpu.alliancecan.ca:22",
         machine="asgard",
         training_remote_root="/scratch/project/cranary-laya",
         training_account="def-cranary",
@@ -70,7 +70,7 @@ def registry(root: Path) -> WorkspaceRegistry:
 
 
 def identity(ws):
-    return SimpleNamespace(pw_dir="/home/yeli"), ws
+    return SimpleNamespace(pw_dir="/home/operator"), ws
 
 
 def stage_receipt(*args, **kwargs):
@@ -332,7 +332,7 @@ def submit_with_template(tmp_path, data):
     _rewrite_template(root, data)
     wsreg = registry(root)
     cfg = settings()
-    cfg.training_account, cfg.training_partition = "def-yeli", "compute"
+    cfg.training_account, cfg.training_partition = "def-operator", "compute"
     tool = create_scinet_training_tool(wsreg, cfg, tmp_path / "state")
     with patch.object(training, "_identity", return_value=identity(wsreg.get("cranary"))), \
          patch.object(training, "_call") as call:
@@ -354,7 +354,7 @@ def test_rendered_script_passes_slurm_validator_with_exports_after_directives(tm
     rendered = call.call_args_list[1].kwargs["input_bytes"]
     directives = slurm_validate(rendered)
     logs = "/scratch/project/cranary-laya"
-    assert "#SBATCH --account=def-yeli" in directives
+    assert "#SBATCH --account=def-operator" in directives
     assert "#SBATCH --partition=compute" in directives
     assert "#SBATCH --gpus-per-node=1" in directives
     assert "#SBATCH --time=00:15:00" in directives

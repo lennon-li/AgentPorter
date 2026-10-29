@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Run as yeli. Root executes only the pinned, separately reviewed ACL helper.
+# Run as operator. Root executes only the pinned, separately reviewed ACL helper.
 set -Eeuo pipefail
-cd /home/yeli/agent-work/agentporter-dev
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 live=/opt/agentporter-development/versions/20261022T165047.488565Z
 unit=agentporter-development.service
@@ -10,9 +10,9 @@ discovery_unit=agentporter-dev-autodiscovery.service
 helper_dir=/opt/agentporter-development/activation-tools/directory-defaults
 helper="$helper_dir/repair-a7dev-shared-directory-defaults.py"
 helper_source=scripts/repair-a7dev-shared-directory-defaults.py
-helper_sha=62f2e0e566515ece9260beb3322ef763998bce76f2c52df550921b3cb8c1b8df
+helper_sha=c7aceb82a6d261207095700212219cc9d8a27b55b2e2540b4cbbd226a0921027
 storage="$helper_dir/authorize-a7dev-project-delegation.py"
-storage_sha=b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b
+storage_sha=e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0
 stopped_by_launcher=0
 apply_started=0
 timer_was_active=0
@@ -151,7 +151,7 @@ print(value)'
 # Allow only local function tests when sourced; no live actions occur.
 if [[ ${BASH_SOURCE[0]-$0} != "$0" ]]; then return 0; fi
 trap repair_failed ERR
-[[ $# == 0 && $(id -un) == yeli ]] || { echo 'Run as yeli with no arguments.' >&2; exit 1; }
+[[ $# == 0 && $(id -un) == operator ]] || { echo 'Run as operator with no arguments.' >&2; exit 1; }
 [[ "$helper_sha" =~ ^[0-9a-f]{64}$ ]] || { echo 'Directory helper final SHA is not pinned; refuse activation.' >&2; exit 1; }
 live=$(readlink -f /opt/agentporter-development/current)
 case "$live" in

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Continue the installed 181133 release and 33 grants. Never install/regrant.
 set -Eeuo pipefail
-cd /home/yeli/agent-work/agentporter-dev
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 live=/opt/agentporter-development/versions/20261022T181133.685266Z
 unit=agentporter-development.service
@@ -10,14 +10,14 @@ discovery_unit=agentporter-dev-autodiscovery.service
 helper_dir=/opt/agentporter-development/activation-tools/directory-access
 helper="$helper_dir/repair-a7dev-service-directory-access.py"
 helper_source=scripts/repair-a7dev-service-directory-access.py
-helper_sha=1db22bfc6d2f1d831cb5ca7959386c84bffbafdec22ef72177ec9ff0026047b1
+helper_sha=aa47bd4322dd1be8f9a6668288799da027dfa0805c59fa79523c9ac78b04bc43
 defaults="$helper_dir/repair-a7dev-shared-directory-defaults.py"
 defaults_source=scripts/repair-a7dev-shared-directory-defaults.py
-defaults_sha=62f2e0e566515ece9260beb3322ef763998bce76f2c52df550921b3cb8c1b8df
-default_launcher_sha=9f71893612475033c0a1fa3da489233aa3e8540c51cd6479b41727cd5ffd1fff
-discovery_installer_sha=476b014e02bb98a68a399b1081d05ade5791c3259f7f6ddc6b691f57279534ff
+defaults_sha=c7aceb82a6d261207095700212219cc9d8a27b55b2e2540b4cbbd226a0921027
+default_launcher_sha=075ee6b6f6b085cc28adf9982971b7cc71f09446778fe04dfc7cc4c28fe0e702
+discovery_installer_sha=107bdca3aee8bb22de624b9153f73398e9d2577bb64a5782bf1b3ec55371a01c
 storage="$helper_dir/authorize-a7dev-project-delegation.py"
-storage_sha=b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b
+storage_sha=e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0
 stopped_by_launcher=0
 apply_started=0
 timer_was_active=0
@@ -178,7 +178,7 @@ print(value)'
 # Allow only local function tests when sourced; no live actions occur.
 if [[ ${BASH_SOURCE[0]-$0} != "$0" ]]; then return 0; fi
 trap repair_failed ERR
-[[ $# == 0 && $(id -un) == yeli ]] || { echo 'Run as yeli with no arguments.' >&2; exit 1; }
+[[ $# == 0 && $(id -un) == operator ]] || { echo 'Run as operator with no arguments.' >&2; exit 1; }
 [[ "$helper_sha" =~ ^[0-9a-f]{64}$ ]] || { echo 'Service access helper final SHA is not pinned; refuse activation.' >&2; exit 1; }
 live=$(readlink -f /opt/agentporter-development/current)
 case "$live" in

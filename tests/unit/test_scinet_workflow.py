@@ -234,10 +234,10 @@ def test_config_rejects_bad_full_walltime(tmp_path):
 
 
 FIELDS = training.APPROVAL_FIELDS["laya_smoke"]
-GOOD = dict(reviewer="yeli", confirmation="I approve all 5", approved_fields=list(FIELDS))
+GOOD = dict(reviewer="operator", confirmation="I approve all 5", approved_fields=list(FIELDS))
 
 
-def run_recorder(pins, reviewer="yeli", device="cuda", stage="a" * 32):
+def run_recorder(pins, reviewer="operator", device="cuda", stage="a" * 32):
     proc = subprocess.run(
         [sys.executable, "-c", training.REMOTE_APPROVAL_RECORDER, str(pins), reviewer, device,
          json.dumps(FIELDS), stage, "cranary"], capture_output=True, text=True)
@@ -255,11 +255,11 @@ def test_recorder_writes_only_approved_fields_with_audit_and_is_idempotent(tmp_p
     code, out = run_recorder(pins)
     data = json.loads(pins.read_text())
     assert code == 0 and out["state"] == "recorded" and data["device"] == "cuda"
-    assert all(data[f] == "yeli" for f in FIELDS) and data["weights_sha256"] == "ff"
+    assert all(data[f] == "operator" for f in FIELDS) and data["weights_sha256"] == "ff"
     assert out["pins_sha256_before"] != out["pins_sha256"]
     assert out["pins_sha256"] == hashlib.sha256(pins.read_bytes()).hexdigest()
     audit = [json.loads(x) for x in (tmp_path / "approvals.audit.jsonl").read_text().splitlines()]
-    assert len(audit) == 1 and audit[0]["reviewer"] == "yeli" and audit[0]["time"]
+    assert len(audit) == 1 and audit[0]["reviewer"] == "operator" and audit[0]["time"]
     code, again = run_recorder(pins)
     assert code == 0 and again["state"] == "unchanged" and again["idempotent"] is True
     assert len((tmp_path / "approvals.audit.jsonl").read_text().splitlines()) == 1
@@ -300,10 +300,10 @@ def test_record_approvals_success_updates_ledger_and_uses_fixed_runner(tmp_path)
         result = tool["scinet_record_approvals"]("cranary", stage["stage_id"], **GOOD)
         assert result["success"] is True and result["state"] == "recorded"
         argv = call.call_args.args[2][-1]
-        assert stage["stage_id"] in argv and "/pinned/pins.json" in argv and "yeli" in argv
+        assert stage["stage_id"] in argv and "/pinned/pins.json" in argv and "operator" in argv
         assert call.call_args.args[2][:2] == ["/bin/bash", "-lc"]
         approvals = training._Ledger(tmp_path / "state").stage(stage["stage_id"])["approvals"]
-        assert approvals[0]["reviewer"] == "yeli" and approvals[0]["pins_sha256"] == "ab" * 32
+        assert approvals[0]["reviewer"] == "operator" and approvals[0]["pins_sha256"] == "ab" * 32
     finally:
         for p in reversed(patches):
             p.__exit__(None, None, None)
@@ -327,7 +327,7 @@ def test_record_approvals_idempotent_does_not_duplicate_ledger(tmp_path):
     ({"confirmation": "I approve all 5 please"}, PermissionError),
     ({"reviewer": "Copilot-agent"}, PermissionError),
     ({"reviewer": "someone-else"}, PermissionError),
-    ({"reviewer": "yeli-bot"}, PermissionError),
+    ({"reviewer": "operator-bot"}, PermissionError),
     ({"approved_fields": ["smoke_approved_by"]}, ValueError),
     ({"approved_fields": list(FIELDS) + ["extra"]}, ValueError),
     ({"device": "cpu"}, ValueError),
@@ -426,7 +426,7 @@ def test_rest_schema_scopes_approval_fields_to_record_action():
     sid = "a" * 32
     ScinetSetupRequest(action="record_approvals", stage_id=sid, **GOOD)
     for bad in ({"action": "record_approvals", "stage_id": sid},
-                {"action": "preflight", "stage_id": sid, "reviewer": "yeli"},
+                {"action": "preflight", "stage_id": sid, "reviewer": "operator"},
                 {"action": "record_approvals", "stage_id": sid, **GOOD, "device": "cpu"},
                 {"action": "record_approvals", "stage_id": sid, **GOOD, "path": "/x"}):
         with pytest.raises(ValidationError):
@@ -434,7 +434,7 @@ def test_rest_schema_scopes_approval_fields_to_record_action():
 
 
 EXPA_FIELDS = training.APPROVAL_FIELDS["laya_expA"]
-EXPA = dict(reviewer="yeli", confirmation="I approve laya_expA on 1 H100 GPU for at most 01:00:00",
+EXPA = dict(reviewer="operator", confirmation="I approve laya_expA on 1 H100 GPU for at most 01:00:00",
             approved_fields=list(EXPA_FIELDS), experiment="laya_expA")
 
 
@@ -507,12 +507,12 @@ def test_expb_and_smoke_confirmations_cannot_record_expa_or_expb():
 def test_recorder_expa_fields_audit_experiment_and_rejects_unknown(tmp_path):
     pins = write_pins(tmp_path)
     run = lambda exp: subprocess.run(
-        [sys.executable, "-c", training.REMOTE_APPROVAL_RECORDER, str(pins), "yeli", "cuda",
+        [sys.executable, "-c", training.REMOTE_APPROVAL_RECORDER, str(pins), "operator", "cuda",
          json.dumps(EXPA_FIELDS), "a" * 32, "cranary", exp], capture_output=True, text=True)
     assert run("laya_expB").returncode != 0 and json.loads(pins.read_text())["device"] is None
     assert run("laya_expA").returncode == 0
     data = json.loads(pins.read_text())
-    assert all(data[f] == "yeli" for f in EXPA_FIELDS) and data["device"] == "cuda"
+    assert all(data[f] == "operator" for f in EXPA_FIELDS) and data["device"] == "cuda"
     assert "smoke_approved_by" not in data and "experiment_b_approved_by" not in data
     audit = json.loads((tmp_path / "approvals.audit.jsonl").read_text().splitlines()[-1])
     assert audit["experiment"] == "laya_expA"
@@ -581,7 +581,7 @@ def test_preflight_expa_ready_requires_walltime_within_approved_limit(tmp_path, 
     try:
         call.return_value = ok(json.dumps({"state": "recorded"}).encode())
         tool["scinet_record_approvals"]("cranary", stage["stage_id"], **EXPA)
-        pins = {"pins_sha256": "ab", "pins": {f: "yeli" for f in EXPA_FIELDS}}
+        pins = {"pins_sha256": "ab", "pins": {f: "operator" for f in EXPA_FIELDS}}
         call.return_value = ok(preflight_text({"verify-bundle": 0, "gate-expA": 0}, pins))
         result = tool["scinet_preflight"]("cranary", stage["stage_id"], "laya_expA")
         assert result["ready"] is ready
@@ -606,7 +606,7 @@ def expb_confirmation(stage_id):
 
 
 def expb(stage_id, **override):
-    return {"reviewer": "yeli", "confirmation": expb_confirmation(stage_id),
+    return {"reviewer": "operator", "confirmation": expb_confirmation(stage_id),
             "approved_fields": list(EXPB_FIELDS), "experiment": "laya_expB", **override}
 
 
@@ -632,7 +632,7 @@ def test_record_expb_writes_only_expb_field_and_ledgers_stage_bound_limits(tmp_p
         assert argv[-1] == "laya_expB" and json.loads(argv[-4]) == EXPB_FIELDS and argv[-3] == sid
         entry = training._Ledger(tmp_path / "state").stage(sid)["approvals"][-1]
         assert entry["experiment"] == "laya_expB" and entry["stage_id"] == sid
-        assert entry["reviewer"] == "yeli" and entry["confirmation"] == expb_confirmation(sid)
+        assert entry["reviewer"] == "operator" and entry["confirmation"] == expb_confirmation(sid)
         assert entry["limits"] == {"gpus": 1, "gpu_type": "H100", "max_walltime": "01:00:00"}
     finally:
         for p in reversed(patches):
@@ -704,7 +704,7 @@ def test_record_expb_refusal_or_garbage_does_not_ledger(tmp_path):
             p.__exit__(None, None, None)
 
 
-def run_recorder_exp(pins, fields, experiment, reviewer="yeli"):
+def run_recorder_exp(pins, fields, experiment, reviewer="operator"):
     proc = subprocess.run(
         [sys.executable, "-c", training.REMOTE_APPROVAL_RECORDER, str(pins), reviewer, "cuda",
          json.dumps(fields), "a" * 32, "cranary", experiment], capture_output=True, text=True)
@@ -716,7 +716,7 @@ def test_recorder_expb_writes_only_expb_field_with_audit(tmp_path):
     code, out = run_recorder_exp(pins, EXPB_FIELDS, "laya_expB")
     data = json.loads(pins.read_text())
     assert code == 0 and out["state"] == "recorded" and out["changed_fields"] == EXPB_FIELDS
-    assert data["experiment_b_approved_by"] == "yeli" and data["compute_approved_by"] == "drA"
+    assert data["experiment_b_approved_by"] == "operator" and data["compute_approved_by"] == "drA"
     assert "smoke_approved_by" not in data and "head_contract_reviewed_by" not in data
     audit = [json.loads(x) for x in (tmp_path / "approvals.audit.jsonl").read_text().splitlines()]
     assert len(audit) == 1 and audit[0]["experiment"] == "laya_expB" and audit[0]["stage_id"] == "a" * 32
@@ -841,7 +841,7 @@ def test_submit_expb_rejects_tampered_ledger_entry(tmp_path, tamper):
         call.side_effect = stage_receipt
         sid = tool["scinet_stage"]("cranary")["stage_id"]
         led = training._Ledger(tmp_path / "state")
-        entry = {"reviewer": "yeli", "stage_id": sid, "experiment": "laya_expB",
+        entry = {"reviewer": "operator", "stage_id": sid, "experiment": "laya_expB",
                  "confirmation": expb_confirmation(sid), "limits": dict(training.APPROVAL_LIMITS["laya_expB"])}
         led.update_stage(sid, approvals=[{**entry, **tamper}])
         call.reset_mock()
@@ -874,14 +874,14 @@ def test_preflight_expb_ready_only_with_ledgered_stage_bound_approval(tmp_path, 
     cfg = settings()
     cfg.training_full_walltime = "02:00:00" if case == "walltime" else "01:00:00"
     if case == "agent_name":
-        cfg.approval_reviewer = "yeli"
+        cfg.approval_reviewer = "operator"
     tool, call, stage, patches = staged_tool(tmp_path, cfg=cfg)
     try:
         sid = stage["stage_id"]
         if case != "no_ledger":
             call.return_value = ok(json.dumps({"state": "recorded"}).encode())
             assert tool["scinet_record_approvals"]("cranary", sid, **expb(sid))["success"]
-        approver = {"other_approver": "drsmith", "pins_null": None, "agent_name": "copilot"}.get(case, "yeli")
+        approver = {"other_approver": "drsmith", "pins_null": None, "agent_name": "copilot"}.get(case, "operator")
         pins = {"pins_sha256": "ab", "pins": {"experiment_b_approved_by": approver}}
         gates = {"verify-bundle": 0, "gate-expB": 1 if case == "gate_fails" else 0}
         call.return_value = ok(preflight_text(gates, pins))
@@ -899,7 +899,7 @@ def test_preflight_expb_ready_only_with_ledgered_stage_bound_approval(tmp_path, 
 def test_preflight_expa_unaffected_by_expb_ledger_requirement(tmp_path):
     tool, call, stage, patches = staged_tool(tmp_path)
     try:
-        pins = {"pins_sha256": "ab", "pins": {f: "yeli" for f in EXPA_FIELDS}}
+        pins = {"pins_sha256": "ab", "pins": {f: "operator" for f in EXPA_FIELDS}}
         call.return_value = ok(preflight_text({"verify-bundle": 0, "gate-expA": 0}, pins))
         result = tool["scinet_preflight"]("cranary", stage["stage_id"], "laya_expA")
         assert result["ready"] is True and "ledgered_approval" not in result

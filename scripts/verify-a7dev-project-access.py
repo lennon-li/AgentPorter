@@ -20,7 +20,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
 
-PUBLIC = 'https://1xs4h6qn-8876.use.devtunnels.ms/mcp'
+PUBLIC = 'https://gateway.example.invalid/mcp'
 LOCAL = 'http://127.0.0.1:8876/mcp'
 PROTECTED = {'obsidian', 'agentporter', 'AgentPorter', 'repos', 'asgard-hermes-review'}
 TRAVERSE_ONLY = {'agentporter', 'AgentPorter', 'repos'}

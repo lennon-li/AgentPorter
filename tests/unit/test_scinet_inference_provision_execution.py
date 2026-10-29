@@ -23,7 +23,7 @@ from agentporter.tools import scinet_inference as inference
 RUN = "a" * 32
 TRANSFER = "b" * 32
 FROZEN = Path(
-    "/home/yeli/repos/cranary/data-raw/cran-history/training/trillium/"
+    "/home/operator/repos/cranary/data-raw/cran-history/training/trillium/"
     "standalone-inference/package-v2"
 )
 

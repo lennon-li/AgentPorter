@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """Pinned v11-only activation with service-UID acceptance and exact-pair rollback.
 
-Run as yeli. Root executes only fixed stdlib code and the unchanged immutable
+Run as operator. Root executes only fixed stdlib code and the unchanged immutable
 installed helper; the mutable candidate preparation script is never privileged.
 """
 import os
@@ -73,7 +73,7 @@ def trusted_directory(path):
 def private_account():
     account = pwd.getpwnam(ACCOUNT)
     group = grp.getgrnam(ACCOUNT)
-    if (account.pw_uid in (0, pwd.getpwnam('yeli').pw_uid) or group.gr_gid == 0
+    if (account.pw_uid in (0, pwd.getpwnam('operator').pw_uid) or group.gr_gid == 0
             or account.pw_gid != group.gr_gid
             or set(group.gr_mem) - {ACCOUNT}
             or {row.pw_name for row in pwd.getpwall() if row.pw_gid == group.gr_gid} != {ACCOUNT}
@@ -152,7 +152,7 @@ def archive_digest():
     fd=os.open(ARTIFACT,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     try:
         info=os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid!=pwd.getpwnam('yeli').pw_uid or info.st_mode&0o022 or info.st_size>8*1024**3:raise PermissionError('Unsafe v11 archive')
+        if not stat.S_ISREG(info.st_mode) or info.st_uid!=pwd.getpwnam('operator').pw_uid or info.st_mode&0o022 or info.st_size>8*1024**3:raise PermissionError('Unsafe v11 archive')
         with os.fdopen(fd,'rb',closefd=False) as stream:digest=hashlib.file_digest(stream,'sha256').hexdigest()
         if digest!=ARCHIVE_SHA256:raise PermissionError('V11 archive digest mismatch')
     finally:os.close(fd)
@@ -284,7 +284,7 @@ if __name__=='__main__':main()
 
 def main():
     if os.geteuid()==0:
-        raise SystemExit('Run this pinned launcher as yeli')
+        raise SystemExit('Run this pinned launcher as operator')
     subprocess.run(['/usr/bin/sudo','/usr/bin/python3','-I','-B','-c',BOOTSTRAP],check=True)
 
 if __name__=='__main__':main()

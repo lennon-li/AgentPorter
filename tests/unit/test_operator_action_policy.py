@@ -18,11 +18,12 @@ def _policy_file(config_dir: Path, body: str) -> Path:
 
 
 def test_default_modes_cover_complete_public_catalog():
-    assert len(DEFAULT_ACTION_MODES) == 54
+    assert len(DEFAULT_ACTION_MODES) == 55
     assert DEFAULT_ACTION_MODES["get_capabilities"] == "ALLOW"
     assert DEFAULT_ACTION_MODES["dispatch_agent"] == "SCOPE"
     assert DEFAULT_ACTION_MODES["https_download"] == "SCOPE"
     assert DEFAULT_ACTION_MODES["git_push"] == "LOCKED"
+    assert DEFAULT_ACTION_MODES["qman_consult"] == "LOCKED"
     assert DEFAULT_ACTION_MODES["scinet_submit"] == "APPROVAL"
 
 
@@ -139,3 +140,14 @@ action_modes:
     _, context = build_mcp_server(temp_config)
     with pytest.raises(PermissionError, match="technically locked"):
         context["tools"]["server_deploy_info"]()
+
+
+def test_qman_mcp_default_is_locked_before_consultation(temp_config, monkeypatch):
+    import agentporter.server as server
+    read = __import__("unittest.mock", fromlist=["Mock"]).Mock()
+    monkeypatch.setattr(server, "_qman_consult", read)
+    mcp, _ = build_mcp_server(temp_config)
+    tool = {tool.name: tool for tool in mcp._tool_manager.list_tools()}["qman_consult"]
+    with pytest.raises(PermissionError, match="technically locked"):
+        tool.fn()
+    read.assert_not_called()

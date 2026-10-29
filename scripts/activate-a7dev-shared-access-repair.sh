@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run as yeli on Asgard. Only this pinned A7Dev candidate and workspace scope.
+# Run as operator on Asgard. Only this pinned A7Dev candidate and workspace scope.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -13,7 +13,7 @@ old=/opt/agentporter-development/versions/20261022T015212.581522Z
 new=/opt/agentporter-development/versions/20261022T165047.488565Z
 installer=/usr/local/libexec/agentporter/install-development-artifact.py
 installer_sha=84a53fbfcfe55668a2edda208b0990acf5fd98a6a105a73fb90cc51252e01c58
-storage_sha=b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b
+storage_sha=e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0
 unit=agentporter-development.service
 expected_runtime_sha=e11cb3ef478c2f95349862fea9769cc5d86f3878e5fdb181857b4624718cb77d
 stopped_by_launcher=0
@@ -42,7 +42,7 @@ activation_failed() {
 # Lifecycle tests may source the recovery function without activating anything.
 if [[ ${BASH_SOURCE[0]} != "$0" ]]; then return 0; fi
 trap activation_failed ERR
-[[ $(id -un) == yeli ]] || { echo 'Run as yeli, not root.' >&2; exit 1; }
+[[ $(id -un) == operator ]] || { echo 'Run as operator, not root.' >&2; exit 1; }
 [[ $(readlink -f /opt/agentporter-development/current) == "$old" ]] || {
   echo 'Development release changed; rebuild/review before activating.' >&2; exit 1;
 }
@@ -68,7 +68,7 @@ sudo -u agentporter-dev /usr/bin/python3 -I -B "$gate" \
 # Check the real worker's writable-mount safety rules too. In particular,
 # package-manager hardlinks must not expose a shared cache to workspace writes.
 sudo -u agentporter-dev "$old/venv/bin/python" -I -B -c \
-  'from pathlib import Path; from agentporter.agents.development import DevelopmentRuntime; runtime=object.__new__(DevelopmentRuntime); runtime._masks(Path("/home/yeli/agent-work/agentporter-dev"), True); print("Writable-workspace confinement preflight passed")'
+  'from pathlib import Path; from agentporter.agents.development import DevelopmentRuntime; runtime=object.__new__(DevelopmentRuntime); runtime._masks(Path("/home/operator/agent-work/agentporter-dev"), True); print("Writable-workspace confinement preflight passed")'
 
 # Refuse to interrupt active work. These are metadata-only, read-only queries.
 sudo -u agentporter-dev /usr/bin/python3 -I -B -c '

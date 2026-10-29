@@ -68,7 +68,7 @@ def test_root_and_placeholder_runs_refuse_before_privileged_actions(tmp_path):
     ('policy_sha', 'bad'), ('new', '/opt/agentporter-development/versions/not-reviewed')])
 def test_invalid_final_pins_refuse_before_sudo(tmp_path, key, value):
     fake = tmp_path / 'bin'; fake.mkdir()
-    identity = fake / 'id'; identity.write_text('#!/bin/sh\nprintf "yeli\\n"\n'); identity.chmod(0o700)
+    identity = fake / 'id'; identity.write_text('#!/bin/sh\nprintf "operator\\n"\n'); identity.chmod(0o700)
     sudo = fake / 'sudo'; sudo.write_text('#!/bin/sh\nexit 99\n'); sudo.chmod(0o700)
     text, count = re.subn(r'^' + key + r'=.*$', key + '=' + value, SCRIPT.read_text(), flags=re.MULTILINE)
     assert count == 1

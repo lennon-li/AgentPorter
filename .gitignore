@@ -10,6 +10,7 @@ build/
 .eggs/
 
 # Virtual environments
+.venv
 .venv/
 venv/
 ENV/
@@ -37,6 +38,9 @@ runtime/
 state/
 logs/
 artifacts/
+
+# Private production observations and source bundles belong in operator storage.
+/review-artifacts/a7-production-workspace-policy-*/
 
 # Local release bundles; retain source manifests and review evidence in Git.
 /review-artifacts/*.tgz

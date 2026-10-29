@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import re
 import socket
 import ssl
@@ -59,9 +60,103 @@ RULES = {
         'api.enterprise.githubcopilot.com')},
 }
 RULES['prof'] = RULES['liz']
+# Native Copilot validates the selected account before opening model APIs.
+# Admit that read only; repository APIs, login and token issuance remain denied.
+RULES['phil']['api.github.com'] = frozenset({('GET', '/copilot_internal/user')})
+# Native Copilot Claude models use the Anthropic Messages route on this one origin only.
+COPILOT_CLAUDE_HOST = 'api.business.githubcopilot.com'
+RULES['phil'][COPILOT_CLAUDE_HOST] = COPILOT_API | {('POST', '/v1/messages')}
 MAX_HEADER = 32768
 MAX_BODY = 16 * 1024 * 1024
+# Observed Argie model streaming sends Transfer-Encoding: chunked. Only these
+# exact request targets (plain and the observed alt=sse query) may be normalized;
+# every other route or query form keeps rejecting it.
+CHUNKED_OPERATIONS = frozenset((host, 'POST', target)
+    for target in ('/v1internal:streamGenerateContent', '/v1internal:streamGenerateContent?alt=sse')
+    for host in ('cloudcode-pa.googleapis.com', 'daily-cloudcode-pa.googleapis.com'))
+MAX_CHUNKS = 16384
+MAX_CHUNKED_WIRE = MAX_BODY + MAX_CHUNKS * 14 + 16
+CHUNKED_BODY_TIMEOUT = 120.0
+_CHUNK_SIZE_LINE = re.compile(rb'(0|[1-9a-fA-F][0-9a-fA-F]{0,7})\r')
 TOKEN = re.compile(rb"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
+
+
+_DIAGNOSTIC_LOGGER = logging.getLogger('agentporter.agents.provider_egress')
+_DIAGNOSTIC_HOSTS = frozenset(host for rules in RULES.values() for host in rules) | {
+    'search.parallel.ai',
+    # Recognized native public origins for diagnosis only; not egress admission.
+    'daily-cloudcode-pa.sandbox.googleapis.com',
+    'autopush-cloudcode-pa.sandbox.googleapis.com',
+}
+_DIAGNOSTIC_STAGES = frozenset({'connect', 'downstream_tls', 'request_header', 'request_body',
+    'payload', 'upstream_connect', 'upstream_tls', 'upstream_request', 'upstream_response',
+    'downstream_response', 'response_stream', 'upstream_status'})
+_DIAGNOSTIC_OPERATIONS = {
+    '/v1/responses':'responses', '/backend-api/codex/responses':'codex_responses',
+    '/responses':'responses', '/chat/completions':'chat_completions',
+    '/v1/chat/completions':'chat_completions', '/v1/messages':'claude_messages',
+    '/v1/messages/count_tokens':'claude_count_tokens', '/v1/oauth/token':'oauth_refresh',
+    '/oauth/token':'oauth_refresh', '/token':'oauth_refresh',
+    '/copilot_internal/user':'copilot_account_read', '/models':'models', '/v1/models':'models',
+    '/backend-api/codex/models':'codex_models', '/backend-api/wham/accounts/check':'codex_account_read',
+    '/oauth2/v2/userinfo':'google_userinfo', '/inference/openai/v1/chat/completions':'wei_chat',
+    '/v1internal:loadCodeAssist':'google_load_code_assist',
+    '/v1internal:fetchAvailableModels':'google_models',
+    '/v1internal:streamGenerateContent':'google_stream_generate',
+    '/v1internal:generateContent':'google_generate', '/v1internal:countTokens':'google_count_tokens',
+    '/v1internal:fetchAdminControls':'google_admin_controls',
+    '/v1internal:fetchUserInfo':'google_user_info',
+    '/v1internal:retrieveUserQuotaSummary':'google_quota_summary',
+    '/v1internal:listExperiments':'google_experiments', '/mcp':'parallel_mcp',
+    # Recognized native operations for diagnosis only; RULES stay unchanged.
+    '/v1internal:getCodeAssistGlobalUserSetting':'google_global_user_setting',
+    '/v1internal:listCloudAICompanionProjects':'google_companion_projects',
+    '/v1internal:initiateMeshSession':'google_mesh_session',
+    '/v1internal:internalAtomicAgenticChat':'google_atomic_agentic_chat',
+    '/v1internal:fetchCodeCustomizationState':'google_code_customization',
+    '/v1internal:listAuthorizedDevices':'google_authorized_devices',
+    '/copilot_internal/v2/token':'copilot_token_exchange',
+}
+
+
+_DIAGNOSTIC_REASONS = frozenset({'timeout', 'tls_eof', 'tls_error', 'reset', 'broken_pipe',
+    'not_admitted', 'eof_before_header', 'header_deadline', 'header_size', 'invalid_value',
+    'os_error', 'unknown'})
+
+
+def _diagnostic_reason(exc):
+    # Exception class and our own fixed messages only; never exception text.
+    if isinstance(exc, PermissionError):
+        return 'not_admitted'
+    if isinstance(exc, TimeoutError):
+        return 'timeout'
+    if isinstance(exc, ssl.SSLEOFError):
+        return 'tls_eof'
+    if isinstance(exc, ssl.SSLError):
+        return 'tls_error'
+    if isinstance(exc, ConnectionResetError):
+        return 'reset'
+    if isinstance(exc, BrokenPipeError):
+        return 'broken_pipe'
+    if isinstance(exc, ValueError):
+        return {'Incomplete HTTP header': 'eof_before_header',
+                'HTTP header deadline exceeded': 'header_deadline',
+                'HTTP header size exceeded': 'header_size'}.get(str(exc), 'invalid_value')
+    return 'os_error' if isinstance(exc, OSError) else 'unknown'
+
+
+def _diagnostic_operation(header):
+    # Raw header/path/query bytes are transient and never returned or logged.
+    try:
+        parts = header.split(b'\r\n', 1)[0].split(b' ')
+        if len(parts) != 3:
+            return 'unknown', 'unknown'
+        method = parts[0].decode('ascii')
+        path = parts[1].split(b'?', 1)[0].decode('ascii')
+        return (method if method in {'GET', 'POST', 'DELETE'} else 'unknown',
+                _DIAGNOSTIC_OPERATIONS.get(path, 'unknown'))
+    except (AttributeError, UnicodeError, ValueError):
+        return 'unknown', 'unknown'
 
 
 def provider_rules(agent: str, parallel_search: bool = False) -> dict:
@@ -75,8 +170,13 @@ def provider_rules(agent: str, parallel_search: bool = False) -> dict:
 def operation_allowed(rules: dict, host: str, method: str, target: str) -> bool:
     if host not in rules or not target.startswith('/') or target.startswith('//'):
         return False
+    # The observed bootstrap has no query parameters; reject alternate forms.
+    if host == 'api.github.com':
+        return (method, target) in rules[host] and target == '/copilot_internal/user'
     parsed = urlsplit(target)
     path = parsed.path
+    if host == COPILOT_CLAUDE_HOST and path == '/v1/messages' and target != path:
+        return False
     if (parsed.scheme or parsed.netloc or parsed.fragment or '%' in path or
             '\\' in path or any(part in ('.', '..') for part in path.split('/'))):
         return False
@@ -92,8 +192,10 @@ def read_header(connection: socket.socket, timeout=HEADER_TIMEOUT) -> tuple[byte
     deadline = time.monotonic() + timeout
     while b'\r\n\r\n' not in data:
         remaining = deadline - time.monotonic()
-        if remaining <= 0 or len(data) >= MAX_HEADER:
-            raise ValueError('HTTP header bound exceeded')
+        if remaining <= 0:
+            raise ValueError('HTTP header deadline exceeded')
+        if len(data) >= MAX_HEADER:
+            raise ValueError('HTTP header size exceeded')
         connection.settimeout(remaining)
         block = connection.recv(min(4096, MAX_HEADER - len(data)))
         if not block:
@@ -103,8 +205,14 @@ def read_header(connection: socket.socket, timeout=HEADER_TIMEOUT) -> tuple[byte
     return header, remainder
 
 
-def request_header(header: bytes, host: str, rules: dict) -> tuple[bytes, int]:
-    """Reject ambiguous framing/authority; construct a single canonical request."""
+def request_header(header: bytes, host: str, rules: dict,
+                   chunked_ok: bool = False) -> tuple[bytes, int | None]:
+    """Reject ambiguous framing/authority; construct a single canonical request.
+
+    With chunked_ok, an eligible request using exactly one `Transfer-Encoding:
+    chunked` returns (header without any length, None); the caller must decode
+    the body and finish the header with with_content_length().
+    """
     lines = header.split(b'\r\n')
     match = re.fullmatch(rb'(GET|POST|DELETE) ([\x21-\x7e]+) HTTP/1\.1', lines[0])
     if match is None:
@@ -124,7 +232,14 @@ def request_header(header: bytes, host: str, rules: dict) -> tuple[bytes, int]:
     authority = values.get(b'host', b'').decode('ascii').lower()
     if authority not in (host, host + ':443'):
         raise PermissionError('HTTP authority differs from admitted origin')
-    if b'transfer-encoding' in values or b'expect' in values:
+    chunked = False
+    if b'transfer-encoding' in values:
+        if (not chunked_ok or method != 'POST' or (host, method, target) not in CHUNKED_OPERATIONS
+                or values[b'transfer-encoding'] != b'chunked' or b'content-length' in values
+                or b'trailer' in values):
+            raise ValueError('Ambiguous or unsupported body framing')
+        chunked = True
+    if b'expect' in values:
         raise ValueError('Ambiguous or unsupported body framing')
     if b'content-encoding' in values and values[b'content-encoding'].lower() != b'identity':
         raise PermissionError('Encoded request bodies are not admitted')
@@ -141,15 +256,74 @@ def request_header(header: bytes, host: str, rules: dict) -> tuple[bytes, int]:
     # Never forward hop-by-hop or origin/method rewrite instructions.
     connection_tokens = {v.strip().lower() for v in values.get(b'connection', b'').split(b',')}
     removed = {b'host', b'connection', b'proxy-authorization', b'proxy-connection',
-               b'te', b'trailer', b'upgrade', b'forwarded', b'x-http-method-override',
+               b'te', b'trailer', b'transfer-encoding', b'upgrade', b'forwarded', b'x-http-method-override',
                b'x-method-override', b'x-original-url', b'x-rewrite-url'} | connection_tokens
-    if connection_tokens & {b'host', b'content-length', b'authorization'}:
+    if connection_tokens & {b'host', b'content-length', b'authorization',
+                             b'transfer-encoding'}:
         raise ValueError('Connection header removes critical metadata')
     outgoing = [lines[0], b'Host: ' + host.encode(), b'Connection: close']
     for name, value in values.items():
         if name not in removed and not name.startswith((b'x-forwarded-', b'x-original-')):
             outgoing.append(name + b': ' + value)
-    return b'\r\n'.join(outgoing) + b'\r\n\r\n', size
+    return b'\r\n'.join(outgoing) + b'\r\n\r\n', (None if chunked else size)
+
+
+def with_content_length(outgoing: bytes, length: int) -> bytes:
+    return outgoing[:-2] + b'Content-Length: ' + str(length).encode() + b'\r\n\r\n'
+
+
+def read_chunked_body(connection: socket.socket, initial: bytes,
+                      timeout: float = CHUNKED_BODY_TIMEOUT) -> bytes:
+    """Strictly decode one bounded chunked body: no extensions, trailers or extra bytes."""
+    deadline = time.monotonic() + timeout
+    buffer = bytearray(initial)
+    wire = len(buffer)
+    body = bytearray()
+    chunks = 0
+
+    def need_more():
+        nonlocal wire
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('Chunked body deadline exceeded')
+        if wire >= MAX_CHUNKED_WIRE:
+            raise ValueError('Chunked body too large')
+        connection.settimeout(min(remaining, IDLE_TIMEOUT))
+        block = connection.recv(min(65536, MAX_CHUNKED_WIRE - wire))
+        if not block:
+            raise ValueError('Truncated request body')
+        wire += len(block)
+        buffer.extend(block)
+
+    while True:
+        end = buffer.find(b'\n')
+        if end < 0:
+            if len(buffer) > 9:
+                raise ValueError('Invalid chunk size')
+            need_more()
+            continue
+        match = _CHUNK_SIZE_LINE.fullmatch(bytes(buffer[:end]))
+        if match is None:
+            raise ValueError('Invalid chunk size')
+        size = int(match[1], 16)
+        rest = end + 1
+        if size == 0:
+            while len(buffer) < rest + 2:
+                if bytes(buffer[rest:]) != b'\r\n'[:len(buffer) - rest]:
+                    raise ValueError('Chunk trailers are not admitted')
+                need_more()
+            if len(buffer) != rest + 2 or buffer[rest:] != b'\r\n':
+                raise ValueError('Chunk trailers or extra bytes are not admitted')
+            return bytes(body)
+        chunks += 1
+        if chunks > MAX_CHUNKS or len(body) + size > MAX_BODY:
+            raise ValueError('Chunked body too large')
+        while len(buffer) < rest + size + 2:
+            need_more()
+        if buffer[rest + size:rest + size + 2] != b'\r\n':
+            raise ValueError('Invalid chunk terminator')
+        body.extend(buffer[rest:rest + size])
+        del buffer[:rest + size + 2]
 
 
 def validate_payload(header: bytes, body: bytes, host: str) -> None:
@@ -227,7 +401,8 @@ def validate_payload(header: bytes, body: bytes, host: str) -> None:
         if not isinstance(tools, list):
             raise ValueError('Invalid tool declarations')
         google = host.endswith('cloudcode-pa.googleapis.com')
-        anthropic = host == 'api.anthropic.com'
+        anthropic = host == 'api.anthropic.com' or (
+            host == COPILOT_CLAUDE_HOST and target == b'/v1/messages')
         def check_tools(items, depth=0):
             if depth > 8 or not isinstance(items, list):
                 raise ValueError('Invalid tool namespace')
@@ -257,9 +432,13 @@ def validate_payload(header: bytes, body: bytes, host: str) -> None:
 class ProviderEgress(PublicEgress):
     """Exact-origin, operation-scoped TLS relay, never an opaque CONNECT tunnel."""
 
-    def __init__(self, socket_path: Path, *, agent: str, parallel_search: bool = False):
+    def __init__(self, socket_path: Path, *, agent: str, parallel_search: bool = False, model_evidence=None):
         super().__init__(socket_path)
         self.rules = provider_rules(agent, parallel_search)
+        self._diagnostic_agent = agent if agent in RULES else 'unknown'
+        self._diagnostic_count = 0
+        self._diagnostic_lock = threading.Lock()
+        self._model_evidence = model_evidence
         self._tls_directory = Path(socket_path).parent / 'provider-tls'
         self._tls_directory.mkdir(mode=0o700)
         key = self._tls_directory / 'key.pem'
@@ -317,33 +496,71 @@ class ProviderEgress(PublicEgress):
         self._upstream_context = ssl.create_default_context(cafile='/etc/ssl/certs/ca-certificates.crt')
         self._upstream_context.set_alpn_protocols(['http/1.1'])
 
+    def _diagnostic(self, *, stage, host='unknown', method='unknown', operation='unknown', status=None, reason=None):
+        # Only static enums and a bounded integer enter the service journal.
+        # Diagnostics are secondary: any failure must leave forwarding unchanged.
+        try:
+            with self._diagnostic_lock:
+                if self._diagnostic_count >= 32:
+                    return
+                self._diagnostic_count += 1
+            safe_stage = stage if stage in _DIAGNOSTIC_STAGES else 'unknown'
+            event = {
+                'event':'provider_egress_diagnostic',
+                'agent':self._diagnostic_agent if self._diagnostic_agent in RULES else 'unknown',
+                'host':host if host in _DIAGNOSTIC_HOSTS else 'unknown',
+                'method':method if method in {'GET','POST','DELETE'} else 'unknown',
+                'operation':operation if operation in _DIAGNOSTIC_OPERATIONS.values() else 'unknown',
+                'stage':safe_stage,
+                'error_code':'upstream_non_2xx' if safe_stage == 'upstream_status' else 'local_rejection_or_transport_failure',
+                'reason':reason if reason in _DIAGNOSTIC_REASONS else None,
+                'upstream_status':status if type(status) is int and 100 <= status <= 599 else None,
+            }
+            _DIAGNOSTIC_LOGGER.warning('provider_egress_diagnostic %s', json.dumps(event, sort_keys=True))
+        except Exception:
+            pass
+
     def _handle(self, client: socket.socket) -> None:
         downstream = upstream = None
         response_started = False
+        observer = None
+        stage, host, method, operation = 'connect', 'unknown', 'unknown', 'unknown'
         try:
             host, remainder = _read_connect(client)
             host = host.lower()
             if host not in self.rules or remainder:
                 raise PermissionError('Unadmitted CONNECT authority or early payload')
             client.sendall(b'HTTP/1.1 200 Connection Established\r\n\r\n')
+            stage = 'downstream_tls'
             downstream = self._contexts[host].wrap_socket(client, server_side=True)
             with self._lock:
                 self._connections.add(downstream)
+            stage = 'request_header'
             header, initial_body = read_header(downstream)
-            outgoing, length = request_header(header, host, self.rules)
-            if len(initial_body) > length:
+            method, operation = _diagnostic_operation(header)
+            outgoing, length = request_header(header, host, self.rules,
+                                              chunked_ok=self._diagnostic_agent == 'argie')
+            if length is not None and len(initial_body) > length:
                 raise ValueError('Pipelined request or excessive body')
-            body = bytearray(initial_body)
-            downstream.settimeout(IDLE_TIMEOUT)
-            while len(body) < length:
-                block = downstream.recv(min(65536, length - len(body)))
-                if not block:
-                    raise ValueError('Truncated request body')
-                body.extend(block)
+            stage = 'request_body'
+            if length is None:
+                body = read_chunked_body(downstream, initial_body)
+                outgoing = with_content_length(outgoing, len(body))
+            else:
+                body = bytearray(initial_body)
+                downstream.settimeout(IDLE_TIMEOUT)
+                while len(body) < length:
+                    block = downstream.recv(min(65536, length - len(body)))
+                    if not block:
+                        raise ValueError('Truncated request body')
+                    body.extend(block)
+            stage = 'payload'
             validate_payload(header, body, host)
             # No upstream connection exists until authority and operation pass.
+            stage = 'upstream_connect'
             raw = _connect_public(host)
             try:
+                stage = 'upstream_tls'
                 upstream = self._upstream_context.wrap_socket(raw, server_hostname=host)
             except BaseException:
                 raw.close()
@@ -352,18 +569,40 @@ class ProviderEgress(PublicEgress):
                 self._connections.add(upstream)
             upstream.settimeout(IDLE_TIMEOUT)
             downstream.settimeout(IDLE_TIMEOUT)
+            stage = 'upstream_request'
             upstream.sendall(outgoing + body)
+            stage = 'upstream_response'
             response_header, response_body = read_header(upstream, timeout=IDLE_TIMEOUT)
+            status_match = re.match(rb'HTTP/1\.[01] ([1-5][0-9]{2})(?: |$)', response_header)
+            status = int(status_match[1]) if status_match else None
+            if status is not None and not 200 <= status < 300:
+                self._diagnostic(stage='upstream_status', host=host, method=method,
+                                 operation=operation, status=status)
             if response_header.startswith(b'HTTP/1.1 101 '):
                 raise ValueError('Unexpected protocol upgrade')
+            # Feed only authenticated upstream Responses data, never request or worker text.
+            request_line = outgoing.split(b'\r\n', 1)[0].split(b' ')
+            if (self._model_evidence is not None and len(request_line) == 3
+                    and request_line[0] == b'POST'
+                    and request_line[1] in {b'/v1/responses', b'/backend-api/codex/responses', b'/responses'}):
+                observer = self._model_evidence.response()
+                observer.feed(response_header + b'\r\n\r\n' + response_body)
+            stage = 'downstream_response'
             downstream.sendall(response_header + b'\r\n\r\n' + response_body)
             response_started = True
+            stage = 'response_stream'
             while not self._stop.is_set():
                 block = upstream.recv(65536)
                 if not block:
                     break
+                if observer is not None:
+                    observer.feed(block)
                 downstream.sendall(block)
-        except (OSError, ValueError, PermissionError, ssl.SSLError):
+            if observer is not None:
+                observer.finish()
+        except (OSError, ValueError, PermissionError, ssl.SSLError) as exc:
+            self._diagnostic(stage=stage, host=host, method=method, operation=operation,
+                             reason=_diagnostic_reason(exc))
             if not response_started:
                 with contextlib.suppress(OSError):
                     (downstream or client).sendall(b'HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')

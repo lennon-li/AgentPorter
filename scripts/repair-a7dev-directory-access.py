@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Run as yeli with this launcher's reviewed SHA256 pinned by the caller.
+"""Run as operator with this launcher's reviewed SHA256 pinned by the caller.
 
 Root executes fixed stdlib bootstrap code. Root's sole filesystem mutation is
 0710 -> 0750 on the existing root-owned private A7Dev data directory. Policy
@@ -47,7 +47,7 @@ def trusted_directory(path):
 def private_account():
     account = pwd.getpwnam(ACCOUNT)
     group = grp.getgrnam(ACCOUNT)
-    if (account.pw_uid in (0, pwd.getpwnam('yeli').pw_uid) or group.gr_gid == 0
+    if (account.pw_uid in (0, pwd.getpwnam('operator').pw_uid) or group.gr_gid == 0
             or account.pw_gid != group.gr_gid
             or set(group.gr_mem) - {ACCOUNT}
             or {row.pw_name for row in pwd.getpwall() if row.pw_gid == group.gr_gid} != {ACCOUNT}
@@ -194,7 +194,7 @@ if __name__ == '__main__':
 
 def main():
     if os.geteuid() == 0:
-        raise SystemExit('Run this pinned launcher as yeli; it invokes the fixed sudo bootstrap')
+        raise SystemExit('Run this pinned launcher as operator; it invokes the fixed sudo bootstrap')
     subprocess.run(['/usr/bin/sudo', '/usr/bin/python3', '-I', '-B', '-c', BOOTSTRAP], check=True)
 
 

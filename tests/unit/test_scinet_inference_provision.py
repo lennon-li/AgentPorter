@@ -14,7 +14,7 @@ from agentporter.config import ScinetSettings
 from agentporter.rest.routers.scinet import ScinetSetupRequest
 
 RUN_ID = "a" * 32
-SCRATCH = "/scratch/yeli/cranary-laya"
+SCRATCH = "/scratch/operator/cranary-laya"
 CACHE = SCRATCH + "/model-cache"
 BOOTSTRAP = "/usr/bin/python3"
 
@@ -73,7 +73,7 @@ def test_broker_rejects_bad_arguments():
 
 def test_broker_envelope_is_stdin_free():
     argv = broker._ssh_envelope(
-        "trillium-gpu.alliancecan.ca", "yeli", "/tmp/.ssh/cm",
+        "trillium-gpu.alliancecan.ca", "operator", "/tmp/.ssh/cm",
         provision_argv(), operation="inference_provision")
     assert "-n" in argv
 
@@ -81,10 +81,10 @@ def test_broker_envelope_is_stdin_free():
 def test_scinet_fallback_rejects_stdin_or_command():
     from agentporter.tools import scinet
     settings = ScinetSettings(
-        host="trillium-gpu.alliancecan.ca", user="yeli",
-        control_socket="/home/yeli/.ssh/cm", machine="asgard",
+        host="trillium-gpu.alliancecan.ca", user="operator",
+        control_socket="/home/operator/.ssh/cm", machine="asgard",
     )
-    user = SimpleNamespace(pw_dir="/home/yeli")
+    user = SimpleNamespace(pw_dir="/home/operator")
     with pytest.raises(PermissionError):
         scinet.run_scinet_bytes(
             settings, user, provision_argv(), input_bytes=b"x",
@@ -270,7 +270,7 @@ def test_inspect_reports_read_only_state(monkeypatch, tmp_path):
     monkeypatch.setattr(inference, "_call", fake_call)
     monkeypatch.setattr(
         inference, "_identity",
-        lambda *a: (SimpleNamespace(pw_dir="/home/yeli"),
+        lambda *a: (SimpleNamespace(pw_dir="/home/operator"),
                     SimpleNamespace(allow_scinet_training=True)))
     tool = inference.create_scinet_inference_provision_tool(None, settings(), tmp_path)
     result = tool(ws_id(), previous_run_id=RUN_ID)
@@ -290,7 +290,7 @@ def test_inspect_rejects_gpu_or_network_claim(monkeypatch, tmp_path):
         "stderr": b"", "timed_out": False, "truncated": False})
     monkeypatch.setattr(
         inference, "_identity",
-        lambda *a: (SimpleNamespace(pw_dir="/home/yeli"),
+        lambda *a: (SimpleNamespace(pw_dir="/home/operator"),
                     SimpleNamespace(allow_scinet_training=True)))
     tool = inference.create_scinet_inference_provision_tool(None, settings(), tmp_path)
     with pytest.raises(PermissionError, match="GPU"):
@@ -300,7 +300,7 @@ def test_inspect_rejects_gpu_or_network_claim(monkeypatch, tmp_path):
 def test_provision_settings_derive_fixed_defaults(monkeypatch):
     monkeypatch.setattr(
         inference, "_identity",
-        lambda *a: (SimpleNamespace(pw_dir="/home/yeli"),
+        lambda *a: (SimpleNamespace(pw_dir="/home/operator"),
                     SimpleNamespace(allow_scinet_training=True)))
     user, _ws, scratch, python, cache = inference._provision_settings(
         None, settings(), ws_id())
@@ -314,7 +314,7 @@ def test_provision_settings_derive_fixed_defaults(monkeypatch):
 def test_provision_settings_reject_partial_configuration(monkeypatch):
     monkeypatch.setattr(
         inference, "_identity",
-        lambda *a: (SimpleNamespace(pw_dir="/home/yeli"),
+        lambda *a: (SimpleNamespace(pw_dir="/home/operator"),
                     SimpleNamespace(allow_scinet_training=True)))
     partial = settings()
     partial.inference_scratch_root = SCRATCH
@@ -337,7 +337,7 @@ CACHE_CONFIGURED = SCRATCH + "/model-cache"
 
 def settings() -> ScinetSettings:
     return ScinetSettings(
-        host="trillium-gpu.alliancecan.ca", user="yeli", machine="asgard",
+        host="trillium-gpu.alliancecan.ca", user="operator", machine="asgard",
         training_bootstrap_python=BOOTSTRAP,
     )
 
@@ -427,7 +427,7 @@ def provision_tool(monkeypatch, tmp_path):
     workspace = SimpleNamespace(path=ws_root, allow_scinet_training=True)
     monkeypatch.setattr(
         inference, "_identity",
-        lambda *a: (SimpleNamespace(pw_dir="/home/yeli"), workspace))
+        lambda *a: (SimpleNamespace(pw_dir="/home/operator"), workspace))
     return inference.create_scinet_inference_provision_tool(None, settings(), tmp_path / "state")
 
 
@@ -474,7 +474,7 @@ def test_broker_accepts_pinned_sources_argv():
     command = broker.inference_provision_sources_command(argv)
     assert "920s" in command and "/usr/bin/python3" in command
     envelope = broker._ssh_envelope(
-        "trillium-gpu.alliancecan.ca", "yeli", "/tmp/.ssh/cm",
+        "trillium-gpu.alliancecan.ca", "operator", "/tmp/.ssh/cm",
         argv, operation="inference_provision_sources")
     assert "-n" not in envelope
 
@@ -507,7 +507,7 @@ def test_broker_prepare_command_and_stdin_denial():
     command = broker.inference_provision_prepare_command(argv)
     assert "920s" in command
     envelope = broker._ssh_envelope(
-        "trillium-gpu.alliancecan.ca", "yeli", "/tmp/.ssh/cm",
+        "trillium-gpu.alliancecan.ca", "operator", "/tmp/.ssh/cm",
         argv, operation="inference_provision_prepare")
     assert "-n" in envelope
 
@@ -537,7 +537,7 @@ def test_broker_rejects_tampered_or_unsafe_prepare_arguments():
 def test_broker_request_denies_arbitrary_commands_and_oversized_stdin(monkeypatch, tmp_path):
     instance = broker.ScinetBroker(str(tmp_path / "broker.sock"),
                                    str(tmp_path / "control.sock"),
-                                   "trillium-gpu.alliancecan.ca", "yeli")
+                                   "trillium-gpu.alliancecan.ca", "operator")
     sources_remote = [BOOTSTRAP, "-c", inference.REMOTE_INFERENCE_RECEIVER,
                       SCRATCH + "/provision-sources", "b" * 32]
     with pytest.raises(PermissionError):
@@ -572,10 +572,10 @@ def test_broker_request_denies_arbitrary_commands_and_oversized_stdin(monkeypatc
 def test_fallback_rejects_wrong_stdin_mode_for_new_ops():
     from agentporter.tools import scinet
     settings_value = ScinetSettings(
-        host="trillium-gpu.alliancecan.ca", user="yeli",
-        control_socket="/home/yeli/.ssh/cm", machine="asgard",
+        host="trillium-gpu.alliancecan.ca", user="operator",
+        control_socket="/home/operator/.ssh/cm", machine="asgard",
     )
-    user = SimpleNamespace(pw_dir="/home/yeli")
+    user = SimpleNamespace(pw_dir="/home/operator")
     sources_remote = [BOOTSTRAP, "-c", inference.REMOTE_INFERENCE_RECEIVER,
                       SCRATCH + "/provision-sources", "b" * 32]
     with pytest.raises(PermissionError):
@@ -612,14 +612,14 @@ def test_provision_refuses_interpreter_path_mismatch(monkeypatch, tmp_path, pyth
     value = configured_settings()
     value.inference_python = python
     monkeypatch.setattr(inference, "_identity", lambda *args: (
-        SimpleNamespace(pw_dir="/home/yeli"), SimpleNamespace(allow_scinet_training=True)))
+        SimpleNamespace(pw_dir="/home/operator"), SimpleNamespace(allow_scinet_training=True)))
     monkeypatch.setattr(inference, "_call", lambda *a, **kw: pytest.fail("remote call before rejection"))
     tool = inference.create_scinet_inference_provision_tool(None, value, state_dir=tmp_path)
     with pytest.raises(PermissionError, match="inference-env/bin/python"):
         tool(ws_id(), phase=phase, previous_run_id=RUN_ID)
 
 
-@pytest.mark.parametrize("bootstrap", ["/usr/bin/python3.12", "/scratch/yeli/python", "python3"])
+@pytest.mark.parametrize("bootstrap", ["/usr/bin/python3.12", "/scratch/operator/python", "python3"])
 @pytest.mark.parametrize("phase", ["inspect", "prepare"])
 def test_provision_refuses_bootstrap_outside_broker_contract(bootstrap, phase):
     with pytest.raises(PermissionError, match="bootstrap Python"):

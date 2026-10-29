@@ -1,0 +1,30 @@
+# Owner-reviewed Asgard A7 user unit; never installs or enables itself.
+[Unit]
+Description=AgentPorter Asgard production gateway
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/
+ExecStartPre=/usr/bin/test -f %h/.config/agentporter/secrets.env
+ExecStart=%h/.local/share/agentporter/current/venv/bin/python -I -m agentporter.cli serve --host 127.0.0.1 --port 8765
+Environment=AGENTPORTER_PROFILE=production
+Environment=AGENTPORTER_CONFIG_DIR=%h/.config/agentporter
+Environment=AGENTPORTER_STATE_DIR=%h/.local/state/agentporter
+Environment=AGENTPORTER_CACHE_DIR=%h/.cache/agentporter
+Environment=PYTHONNOUSERSITE=1
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=QMAN_PREFLIGHT_MODE=off
+UnsetEnvironment=AGENTPORTER_API_KEY PYTHONPATH PYTHONHOME PYTHONSTARTUP PYTHONUSERBASE VIRTUAL_ENV LD_PRELOAD LD_LIBRARY_PATH
+Delegate=cpu memory pids
+DelegateSubgroup=supervisor
+KillMode=control-group
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+# Preserve verified Bubblewrap compatibility; do not enable unrelated flags here.
+NoNewPrivileges=false
+
+[Install]
+WantedBy=default.target

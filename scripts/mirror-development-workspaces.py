@@ -14,7 +14,7 @@ import time
 import urllib.request
 import yaml
 
-REPO=Path('/home/yeli/agent-work/agentporter-dev')
+REPO=Path(__file__).resolve().parents[1]
 ARTIFACTS=REPO/'runtime/development'
 
 def plan():
@@ -30,7 +30,7 @@ def plan():
         assert '/' not in key and key not in ('.','..')
         path=Path(row['path']).resolve(strict=True)
         assert path.is_dir()
-        assert path==Path('/home/yeli/repos') or path.is_relative_to('/home/yeli/repos') or path in (REPO,Path('/home/yeli/m3-agent-poc'))
+        assert path==Path('/home/operator/repos') or path.is_relative_to('/home/operator/repos') or path in (REPO,Path('/home/operator/m3-agent-poc'))
         assert not row.get('auto_discover')
         assert not any(row.get(k) for k in ('allow_venkata_ssh','allow_venkata_transfer','allow_scinet_diagnostic','allow_scinet_training'))
     return {'workspaces':rows}
@@ -48,7 +48,7 @@ def main():
     spec=importlib.util.spec_from_file_location('development_provisioner',REPO/'scripts/provision-development-runtime.py')
     helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
     account=pwd.getpwnam('agentporter-dev')
-    assert account.pw_uid not in (0,pwd.getpwnam('yeli').pw_uid)
+    assert account.pw_uid not in (0,pwd.getpwnam('operator').pw_uid)
     target=Path('/var/lib/agentporter-dev/config/workspaces.yaml')
     helper.no_symlink(target)
     backup=Path('/var/lib/agentporter-dev/provisioning')/('workspace-mirror-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ'))

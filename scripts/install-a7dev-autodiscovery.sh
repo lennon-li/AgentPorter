@@ -3,14 +3,14 @@
 set -euo pipefail
 umask 077
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
-readonly repo=/home/yeli/agent-work/agentporter-dev
+readonly repo=/home/operator/agent-work/agentporter-dev
 readonly target=/opt/agentporter-autodiscovery
-[[ $(id -un) == yeli && $(id -u) != 0 ]] || { echo 'Run as yeli, not root.' >&2; exit 1; }
+[[ $(id -un) == operator && $(id -u) != 0 ]] || { echo 'Run as operator, not root.' >&2; exit 1; }
 cd "$repo"
-readonly helper_sha=f349e007062e7fd282bcfb6b091d183d121eeff6361b86e6af4b087f793d8f3c
-readonly service_sha=44c809c3b10bdf93921b5f23b656098cfaab3f9eb1526e24c44e19a5045b2e1e
+readonly helper_sha=451ce8829193fbf3e0ee3a223ae3593903aaf90479fa0a92bb1709874c5c668c
+readonly service_sha=8995fb99ac8800005c2979d32588a3c3db51d6fdf887b8c71f53ea426af916f9
 readonly timer_sha=0104f6620fd60e7dd4e74c3375473538a09cceb96fae146415952907dda4a9eb
-readonly repair_sha=c877cfe7a3f3e82567c1fec5f4f8e395d12a3f936d978e38ef96f8171b4c6614
+readonly repair_sha=d44593917b8345da7a850df9ae86da6a8f61e5be46e9fc9d213a4dd6f743501b
 check_user_file() {
   [[ -f $1 && ! -L $1 ]] || return 1
   printf '%s  %s\n' "$2" "$1" | sha256sum --check --status
@@ -51,7 +51,7 @@ install_pinned() {
   local source=$1 destination=$2 expected=$3 private_stage
   check_user_file "$source" "$expected"
   private_stage=$(sudo /usr/bin/mktemp -d "$target/.verified-source.XXXXXXXX")
-  # Read/hash bounded regular input as yeli; root never opens a mutable source.
+  # Read/hash bounded regular input as operator; root never opens a mutable source.
   /usr/bin/python3 -I -B -c '
 import hashlib,os,stat,sys
 fd=os.open(sys.argv[1],os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)

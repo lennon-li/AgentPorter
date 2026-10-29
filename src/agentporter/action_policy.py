@@ -74,6 +74,7 @@ APPROVAL_ACTIONS = frozenset({
 })
 
 LOCKED_ACTIONS = frozenset({
+    "qman_consult",
     "git_commit",
     "git_push",
 })
@@ -109,7 +110,8 @@ _UniqueKeysLoader.add_constructor(
 class OperatorActionPolicy:
     """Read operator-owned mode choices; never mint operator authority."""
 
-    def __init__(self, config_dir, workspace_roots=()):
+    def __init__(self, config_dir, workspace_roots=(), *, workspace_policy=None):
+        self.workspace_policy = workspace_policy
         self.config_dir = Path(config_dir).resolve()
         for root in workspace_roots:
             root_path = Path(root).resolve()
@@ -154,7 +156,8 @@ class OperatorActionPolicy:
     def effective_mode(self, action):
         if action not in DEFAULT_ACTION_MODES:
             raise PermissionError(f"Unknown public action: {action}")
-        return self.overrides.get(action, DEFAULT_ACTION_MODES[action])
+        default = 'SCOPE' if self.workspace_policy is not None and action == 'git_fetch' else DEFAULT_ACTION_MODES[action]
+        return self.overrides.get(action, default)
 
     def check(self, action, arguments):
         """Enforce owner-deny overrides now; never fake missing approval proof.
@@ -165,7 +168,7 @@ class OperatorActionPolicy:
         use their existing specialized controls, not this unfinished issuer.
         """
         mode = self.effective_mode(action)
-        baseline = DEFAULT_ACTION_MODES[action]
+        baseline = 'SCOPE' if self.workspace_policy is not None and action == 'git_fetch' else DEFAULT_ACTION_MODES[action]
         if mode == "LOCKED" or baseline == "LOCKED":
             raise PermissionError(f"Action {action} is technically locked pending independently verified approval")
         if mode == "APPROVAL" and baseline in {"ALLOW", "SCOPE"}:

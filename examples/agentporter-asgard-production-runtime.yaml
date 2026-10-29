@@ -1,0 +1,11 @@
+# Install privately as production-runtime.yaml only after owner review.
+# Separate private registry/public/action policies are mandatory.
+version: 1
+profile: production
+public_client_policy_required: true
+service_unit: agentporter.service
+job_resources:
+  memory_bytes: 4294967296
+  pids: 128
+  cpu_quota_us: 200000
+  cpu_period_us: 100000

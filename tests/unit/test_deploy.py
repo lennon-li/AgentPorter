@@ -162,6 +162,9 @@ def test_deploy_script_syntax_and_no_tmp_lock_fallback():
 # End-to-end deploy script tests with fake uv/systemctl and a real git repo.
 
 FAKE_PY = r"""#!/bin/bash
+if [ "$FAKE_REQUIRE_CLEAN_GATEWAY_ENV" = 1 ]; then
+  [ -z "${AGENTPORTER_API_KEY+x}${AGENTPORTER_PROFILE+x}${AGENTPORTER_CONFIG_DIR+x}" ] || exit 83
+fi
 echo "$*" >> "$FAKE_LOG.python"
 pkg="$(dirname "$0")/../lib/python3.13/site-packages/agentporter"
 case "$*" in
@@ -175,6 +178,9 @@ esac
 """
 
 FAKE_UV = r"""#!/bin/bash
+if [ "$FAKE_REQUIRE_CLEAN_GATEWAY_ENV" = 1 ]; then
+  [ -z "${AGENTPORTER_API_KEY+x}${AGENTPORTER_PROFILE+x}${AGENTPORTER_CONFIG_DIR+x}${AGENTPORTER_STATE_DIR+x}${AGENTPORTER_CACHE_DIR+x}" ] || exit 83
+fi
 echo "uv $* cwd=$PWD" >> "$FAKE_LOG.uv"
 v="$UV_PROJECT_ENVIRONMENT"
 mkdir -p "$v/bin" "$v/lib/python3.13/site-packages"
@@ -190,6 +196,7 @@ case "$*" in
   *list-unit-files*) [ -f "$FAKE_TRIGGERS" ] && cat "$FAKE_TRIGGERS"; exit 0 ;;
   *ExecStart*) echo "$FAKE_EXEC" ;;
   *MainPID*) echo 4242 ;;
+  *stop*) exit "${FAKE_STOP_RC:-0}" ;;
 esac
 exit 0
 """
@@ -418,3 +425,104 @@ def test_rollback_without_previous_is_refused(deploy_env):
     code, out = deploy_env.run("rollback")
     assert code == 2 and "no previous release" in out
     assert deploy_env.restarts() == []
+
+
+def test_prepare_is_inactive_even_with_legacy_unit_and_clears_gateway_environment(deploy_env):
+    e = deploy_env
+    code, out = e.run('prepare', e.sha, FAKE_EXEC='/mutable/repo/.venv/bin/agentporter',
+                      AGENTPORTER_PROFILE='production', AGENTPORTER_API_KEY='wrong-inherited-fixture',
+                      AGENTPORTER_CONFIG_DIR='/wrong-gateway-config', FAKE_REQUIRE_CLEAN_GATEWAY_ENV='1')
+    assert code == 0 and 'PREPARED and inactive' in out
+    assert e.restarts() == []
+    assert not (e.root / 'current').exists() and not (e.root / 'previous').exists()
+    assert (e.root / 'releases' / e.sha / 'RELEASE.json').is_file()
+    assert not any('ExecStart' in call for call in e.calls())
+
+
+def test_activate_requires_existing_prepared_candidate_and_exact_manifest(deploy_env):
+    e = deploy_env
+    code, out = e.run('activate', e.sha)
+    assert code == 2 and 'not prepared' in out and e.restarts() == []
+    assert e.run('prepare', e.sha)[0] == 0
+    manifest = e.root / 'releases' / e.sha / 'RELEASE.json'
+    manifest.chmod(0o644)
+    record = __import__('json').loads(manifest.read_text())
+    record['commit'] = '0' * 40
+    manifest.write_text(__import__('json').dumps(record))
+    manifest.chmod(0o444)
+    code, out = e.run('activate', e.sha)
+    assert code == 2 and 'manifest' in out and e.restarts() == []
+    assert not (e.root / 'current').exists()
+
+
+def test_activate_prepared_release_uses_owner_file_context_and_existing_restart_path(deploy_env):
+    e = deploy_env
+    assert e.run('prepare', e.sha)[0] == 0
+    e.trust("VERSION = 'a'\n")
+    home = e.tmp / 'owner-home'
+    config = home / '.config' / 'agentporter'
+    config.mkdir(parents=True)
+    (config / 'secrets.env').write_text('AGENTPORTER_API_KEY=fixture-only-file-key\n')
+    (config / 'secrets.env').chmod(0o600)
+    code, out = e.run('activate', e.sha, HOME=str(home), AGENTPORTER_API_KEY='wrong-inherited-fixture',
+                      AGENTPORTER_CONFIG_DIR='/wrong-gateway-config', AGENTPORTER_PROFILE='production',
+                      FAKE_REQUIRE_CLEAN_GATEWAY_ENV='1')
+    assert code == 0, out
+    assert e.restarts() == ['--user restart agentporter.service']
+    assert os.readlink(e.root / 'current') == 'releases/' + e.sha
+    assert '--config-dir ' + str(config) in Path(str(e.log) + '.python').read_text()
+
+
+@pytest.mark.parametrize('command', ['prepare', 'activate'])
+def test_new_release_commands_keep_full_sha_and_trigger_gates(deploy_env, command):
+    e = deploy_env
+    code, out = e.run(command, 'main')
+    assert code == 2 and '40-hex' in out
+    Path(e.env['FAKE_TRIGGERS']).write_text('agentporter-activate.path enabled enabled\n')
+    code, out = e.run(command, e.sha)
+    assert code == 2 and 'path-triggered' in out and e.restarts() == []
+
+
+def test_activate_refuses_unit_drift_and_unsealed_prepared_tree(deploy_env):
+    e = deploy_env
+    assert e.run('prepare', e.sha)[0] == 0
+    code, out = e.run('activate', e.sha, FAKE_EXEC='/mutable/repo/.venv/bin/agentporter')
+    assert code == 2 and 'config drift' in out
+    (e.root / 'releases' / e.sha / 'src').chmod(0o755)
+    code, out = e.run('activate', e.sha)
+    assert code == 2 and 'sealed modes' in out and e.restarts() == []
+
+
+
+@pytest.mark.parametrize('stop_rc', ['0', '1'])
+def test_prepared_activation_failure_holds_without_restarting_old_release(deploy_env, stop_rc):
+    e = deploy_env
+    e.trust("VERSION = 'a'\n")
+    assert e.run('deploy', e.sha)[0] == 0
+    next_sha = _commit(e.repo, "VERSION = 'b'\n")
+    assert e.run('prepare', next_sha)[0] == 0
+    home = e.tmp / 'owner-home'
+    config = home / '.config' / 'agentporter'
+    config.mkdir(parents=True)
+    (config / 'secrets.env').write_text('AGENTPORTER_API_KEY=fixture-only-file-key\n')
+    (config / 'secrets.env').chmod(0o600)
+    code, out = e.run('activate', next_sha, '--wait', '0', HOME=str(home), FAKE_STOP_RC=stop_rc)
+    assert code == 1 and 'restore reviewed unit/config/release pair before restart' in out
+    assert ('STOP FAILED' in out) is (stop_rc == '1')
+    assert e.restarts() == ['--user restart agentporter.service'] * 2
+    assert e.calls().count('--user stop agentporter.service') == 1
+    assert os.readlink(e.root / 'current') == 'releases/' + next_sha
+    assert os.readlink(e.root / 'previous') == 'releases/' + e.sha
+
+
+
+def test_activate_rejects_resealed_package_fingerprint_drift_before_mutation(deploy_env):
+    e = deploy_env
+    assert e.run('prepare', e.sha)[0] == 0
+    package = next((e.root / 'releases' / e.sha / 'venv').glob('lib/python3*/site-packages/agentporter'))
+    (package / '__init__.py').chmod(0o644)
+    (package / '__init__.py').write_text("VERSION = 'unreviewed'\n")
+    (package / '__init__.py').chmod(0o444)
+    code, out = e.run('activate', e.sha)
+    assert code == 2 and 'fingerprint differs' in out
+    assert e.restarts() == [] and not (e.root / 'current').exists()

@@ -65,6 +65,28 @@ def test_middleware_host_validation():
     assert resp.status_code == 403
 
 
+def test_oauth_metadata_probe_is_public_without_opening_mcp(tmp_path, monkeypatch):
+    """Anonymous discovery gets 404; MCP calls and unsafe methods remain keyed."""
+    from agentporter.config import Config
+    from agentporter.server import create_asgi_app
+
+    monkeypatch.setenv("AGENTPORTER_API_KEY", "test-only-not-production")
+    cfg = Config(config_dir=tmp_path / "cfg", state_dir=tmp_path / "state")
+    cfg.security.allowed_hosts.append("testserver")
+
+    with TestClient(create_asgi_app(cfg), base_url="http://testserver") as client:
+        for path in (
+            "/.well-known/oauth-protected-resource/mcp",
+            "/.well-known/oauth-protected-resource",
+        ):
+            assert client.get(path).status_code == 404
+            assert client.head(path).status_code == 404
+            assert client.post(path).status_code == 401
+            assert client.get(path, headers={"Host": "untrusted.example"}).status_code == 403
+
+        assert client.get("/mcp").status_code == 401
+
+
 def test_middleware_payload_ceiling():
     app = create_test_app(max_payload=50)
     client = TestClient(app, base_url="http://testserver")

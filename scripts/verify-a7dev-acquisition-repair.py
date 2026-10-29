@@ -20,7 +20,7 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
 from mcp.types import PaginatedRequestParams
 
-PUBLIC = 'https://1xs4h6qn-8876.use.devtunnels.ms/mcp'
+PUBLIC = 'https://gateway.example.invalid/mcp'
 LOCAL = 'http://127.0.0.1:8876/mcp'
 URL = 'https://packagemanager.posit.co/cran/2022-06-30/src/contrib/PACKAGES.gz'
 DIRECTORY = 'data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads/'

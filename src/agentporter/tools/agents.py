@@ -20,6 +20,8 @@ def create_agent_tools(broker: AgentBroker):
         allow_commit: bool = False,
         allow_push: bool = False,
         read_only: bool = True,
+        approval_token: str | None = None,
+        request_id: str | None = None,
     ) -> dict:
         """Dispatch an approved named worker; read-only by default."""
         if agent.lower().strip() not in PUBLIC_AGENT_IDS:

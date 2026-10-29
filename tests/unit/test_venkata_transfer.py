@@ -123,7 +123,7 @@ class TransferTests(unittest.TestCase):
 
     def test_unsafe_header(self):
         header = p.read_header(io.BytesIO(self.payload()))
-        for name in ("../escape", "/home/yeli/.ssh/id_rsa", "payload.tar"):
+        for name in ("../escape", "/home/operator/.ssh/id_rsa", "payload.tar"):
             header["files"][0]["name"] = name
             with self.assertRaises(ValueError):
                 p.receive_payload(io.BytesIO(json.dumps(header).encode() + b"\n"), str(self.destination))

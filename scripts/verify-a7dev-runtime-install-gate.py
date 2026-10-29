@@ -17,6 +17,16 @@ import stat
 import yaml
 
 
+def parse_runtime(data):
+    try:
+        return yaml.safe_load(data)
+    except yaml.YAMLError:
+        # Parser exceptions quote source lines. Runtime configuration is
+        # protected and may contain private values, so expose only a fixed
+        # diagnosis and suppress the parser's exception chain.
+        raise ValueError('Protected A7Dev runtime YAML is invalid') from None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--expected-version', required=True)
@@ -47,7 +57,7 @@ def main():
             raise ValueError('Runtime changed during preinstall validation')
     finally:
         os.close(fd)
-    runtime = yaml.safe_load(data)
+    runtime = parse_runtime(data)
     if not isinstance(runtime, dict) or runtime.get('profile') != 'development':
         raise ValueError('Not an A7Dev runtime')
     canonical = json.dumps(runtime, sort_keys=True, separators=(',', ':')).encode()

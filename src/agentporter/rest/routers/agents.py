@@ -28,6 +28,8 @@ def dispatch_agent(workspace_id: str, req: DispatchAgentRequest, request: Reques
             allow_commit=req.allow_commit,
             allow_push=req.allow_push,
             read_only=req.read_only,
+            **({"approval_token": req.approval_token} if req.approval_token is not None else {}),
+            **({"request_id": req.request_id} if req.request_id is not None else {}),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

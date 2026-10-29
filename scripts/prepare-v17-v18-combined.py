@@ -77,9 +77,9 @@ def main():
         raise ValueError('Exact proposed Cranary HTTPS policy changed')
 
     overlay = load('prepare-development-overlay',
-                   'bc49c16bae77964779aa8e2a7e39d7d69ad2df9551ed77cd9de2172e60f126fc')
+                   '69bf234a1b8d1732daf2179823ab93a92a6a3a9f29e00ec1c4edd01b87c02ec0')
     packer = load('prepare-closeout-candidate',
-                  '1ce0f50ca4179901123975334c175b7d1cd3ca84c2c7d44ddfe2fd2f195d70fc')
+                  'eb36970fe8e734ef46a7b49ba12465ccaa5200634cc4eaa2e1acb98a62a170be')
     installer = overlay.helper('install-development-artifact')
     builder = overlay.helper('build-development-candidate')
     changes = {name: overlay.pinned_bytes(REPO / name, digest) for name, digest in pins.items()}

@@ -1,0 +1,22 @@
+[Unit]
+Description=AgentPorter MCP gateway on knowhere
+After=network.target
+
+[Service]
+Type=simple
+# Keep knowhere's host tool path without the editable checkout venv.
+Environment="PATH=%h/bin:/usr/local/bin:/usr/bin:/bin"
+Environment=HOME=%h
+Environment=PYTHONUNBUFFERED=1
+UnsetEnvironment=PYTHONPATH PYTHONHOME PYTHONSTARTUP VIRTUAL_ENV
+Environment=PYTHONNOUSERSITE=1
+ExecStart=%h/.local/share/agentporter/current/venv/bin/python -I -m agentporter.cli serve --host 127.0.0.1 --port 8765
+Restart=always
+RestartSec=5
+KillMode=process
+TimeoutStopSec=15
+PrivateTmp=true
+NoNewPrivileges=false
+
+[Install]
+WantedBy=default.target

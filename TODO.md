@@ -4,6 +4,14 @@ AgentPorter is being developed by dogfooding: use it for real work, record frict
 
 ## Current state
 
+The [project memory](docs/PROJECT_MEMORY.md) and [shared workspace policy](docs/shared-workspace-policy.md)
+describe the current implementation. Shared-policy compilation, signed task
+authority, private copy-on-write edits, validated publication and bounded public-
+HTTPS Git fetch are implemented with migration and rollback coverage. Provider
+readiness remains a separate per-installation check. A general trusted approval
+UI and Git publisher remain unavailable. Earlier unchecked roadmap items below
+are historical; they do not override these profile-specific implementation facts.
+
 The [consolidated A7Dev status](docs/A7DEV_CURRENT_STATE.md) and
 [action map](docs/A7DEV_ACTION_MAP.md) are the entry points for the current
 development implementation. The roadmap below contains historical package-level

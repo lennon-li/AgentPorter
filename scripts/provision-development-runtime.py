@@ -30,29 +30,29 @@ try:
 except ImportError:
     raise SystemExit('Prerequisite missing: install distro python3-yaml before provisioning.')
 
-REPO = Path('/home/yeli/agent-work/agentporter-dev')
+REPO = Path(__file__).resolve().parents[1]
 STAGE = Path('/tmp/agentporter-development-asgard/config')
 INSTALL = Path('/opt/agentporter-development')
 DATA = Path('/var/lib/agentporter-dev')
 ACCOUNT = 'agentporter-dev'
-OBSIDIAN = Path('/home/yeli/repos/obsidian')
+OBSIDIAN = Path('/home/operator/repos/obsidian')
 UNIT_NAME = 'agentporter-development.service'
 SYSTEM_UNIT = Path('/etc/systemd/system') / UNIT_NAME
 AGENTS = ('jax', 'liz', 'prof', 'phil', 'wei', 'ming', 'argie')
 WORKSPACES = {
-    'm3-poc': '/home/yeli/m3-agent-poc', 'insider': '/home/yeli/repos/insider',
-    'PAGe': '/home/yeli/repos/PAGe', 'm3': '/home/yeli/repos/m3',
-    'obsidian': '/home/yeli/repos/obsidian', 'shiny': '/home/yeli/repos/shiny',
-    'cranary': '/home/yeli/repos/cranary', 'agentporter-dev': str(REPO),
+    'm3-poc': '/home/operator/m3-agent-poc', 'insider': '/home/operator/repos/insider',
+    'PAGe': '/home/operator/repos/PAGe', 'm3': '/home/operator/repos/m3',
+    'obsidian': '/home/operator/repos/obsidian', 'shiny': '/home/operator/repos/shiny',
+    'cranary': '/home/operator/repos/cranary', 'agentporter-dev': str(REPO),
 }
 CREDENTIALS = {
-    'jax': {'.codex/auth.json': '/home/yeli/.codex/auth.json', '.codex/config.toml': '/home/yeli/.codex/config.toml'},
-    'liz': {'.codex/auth.json': '/home/yeli/.codex-liz/auth.json', '.codex/config.toml': '/home/yeli/.codex-liz/config.toml'},
-    'prof': {'.codex/auth.json': '/home/yeli/.codex-prof/auth.json', '.codex/config.toml': '/home/yeli/.codex-prof/config.toml'},
-    'ming': {'.claude/.credentials.json': '/home/yeli/.claude/.credentials.json'},
-    'phil': {'.copilot-phil/config.json': '/home/yeli/.copilot-phil/config.json'},
-    'wei': {'.config/opencode/wei-key': '/home/yeli/.config/opencode/go-key'},
-    'argie': {'.gemini/antigravity-cli/antigravity-oauth-token': '/home/yeli/.gemini/antigravity-cli/antigravity-oauth-token'},
+    'jax': {'.codex/auth.json': '/home/operator/.codex/auth.json', '.codex/config.toml': '/home/operator/.codex/config.toml'},
+    'liz': {'.codex/auth.json': '/home/operator/.codex-liz/auth.json', '.codex/config.toml': '/home/operator/.codex-liz/config.toml'},
+    'prof': {'.codex/auth.json': '/home/operator/.codex-prof/auth.json', '.codex/config.toml': '/home/operator/.codex-prof/config.toml'},
+    'ming': {'.claude/.credentials.json': '/home/operator/.claude/.credentials.json'},
+    'phil': {'.copilot-phil/config.json': '/home/operator/.copilot-phil/config.json'},
+    'wei': {'.config/opencode/wei-key': '/home/operator/.config/opencode/go-key'},
+    'argie': {'.gemini/antigravity-cli/antigravity-oauth-token': '/home/operator/.gemini/antigravity-cli/antigravity-oauth-token'},
 }
 MASK_DIRS = {'.git', '.ssh', '.aws', '.codex', '.agents', '.development', '.claude', '.copilot',
              '.copilot-phil', '.opencode', '.github-copilot', '.antigravitycli', '.gemini', 'runtime'}
@@ -80,7 +80,7 @@ def no_symlink(path):
 
 
 def validate_inputs():
-    owner = pwd.getpwnam('yeli')
+    owner = pwd.getpwnam('operator')
     if owner.pw_uid == 0:
         raise ValueError('Production/source owner must not be root')
     if Path(__file__).resolve().parent.parent != REPO:
@@ -106,7 +106,7 @@ def validate_inputs():
                 if not source.is_file() or source.stat().st_uid != owner.pw_uid:
                     raise ValueError(f'Credential source is not a source-user regular file: {source}')
         executable = Path(spec.get('executable', ''))
-        if not executable.is_absolute() or not str(executable).startswith('/home/yeli/'):
+        if not executable.is_absolute() or not str(executable).startswith('/home/operator/'):
             raise ValueError(f'Unexpected worker executable source: {name}')
         if executable.exists() and (not executable.is_file() or not os.access(executable, os.X_OK)):
             raise ValueError(f'Worker executable is not executable: {name}')
@@ -121,7 +121,7 @@ def validate_inputs():
         if spec.get('allow_agent_dispatch') is not True:
             raise ValueError(f'Delegation not authorized in workspace: {key}')
     interpreter = (REPO / '.venv/bin/python').resolve(strict=True)
-    if not str(interpreter).startswith('/home/yeli/.local/share/uv/python/cpython-3.13.'):
+    if not str(interpreter).startswith('/home/operator/.local/share/uv/python/cpython-3.13.'):
         raise ValueError('Unexpected virtualenv interpreter; review the local offline snapshot plan')
     if not (REPO / '.venv/lib/python3.13/site-packages').is_dir():
         raise ValueError('Missing current Python 3.13 virtualenv dependencies')
@@ -354,7 +354,7 @@ def stage_standalone_tools(policy_file: Path, destination: Path, *, approved_too
         for root in (source.parent,):
             try:
                 no_symlink(root)
-                if not root.resolve().is_relative_to(Path("/home/yeli")):
+                if not root.resolve().is_relative_to(Path("/home/operator")):
                     continue
                 dirfd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             except OSError:
@@ -366,7 +366,7 @@ def stage_standalone_tools(policy_file: Path, destination: Path, *, approved_too
                     continue
                 try:
                     st = os.fstat(fd)
-                    if (not _stat.S_ISREG(st.st_mode) or st.st_uid != pwd.getpwnam("yeli").pw_uid
+                    if (not _stat.S_ISREG(st.st_mode) or st.st_uid != pwd.getpwnam("operator").pw_uid
                             or not st.st_mode & 0o111
                             or st.st_mode & 0o6002 or st.st_size < 4
                             or st.st_size > 128 * 1024 * 1024):
@@ -470,7 +470,7 @@ def snapshot(runtime, python_root, version, *, approvals=None, workspaces=None):
             executable = original.resolve()
             # Copy the same native platform binary selected by Phil's npm loader.
             if name == 'phil':
-                executable = Path('/home/yeli/.nvm/versions/node/v24.15.0/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64/copilot')
+                executable = Path('/home/operator/.nvm/versions/node/v24.15.0/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64/copilot')
                 native = destination / 'cli/phil/copilot'
                 native.parent.mkdir(parents=True, exist_ok=True)
                 with executable.open('rb') as stream:
@@ -739,7 +739,7 @@ def main():
         print(f'  Offline Python interpreter source: {python_root}')
         print(f'  Private config/state/cache/home and separate credential copies: {DATA}')
         print(f'  Workspace ACLs: {", ".join(workspaces["workspaces"])}; Git read-only, secret paths excluded')
-        print(f'  Stop only old yeli user {UNIT_NAME}; start separate system {UNIT_NAME} on 127.0.0.1:8876')
+        print(f'  Stop only old operator user {UNIT_NAME}; start separate system {UNIT_NAME} on 127.0.0.1:8876')
         for name, spec in runtime['workers'].items():
             missing = [target for target, source in spec['credentials'].items() if not Path(source).is_file()]
             print(f'  {name}: ' + ('dedicated credential missing: ' + ', '.join(missing) if missing else 'credential files exist; runtime/provider smoke checks still required'))

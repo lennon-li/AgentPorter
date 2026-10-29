@@ -74,9 +74,9 @@ def test_gateway_relay_workspace_scope_private(tmp_path):
     config.mkdir(mode=0o700)
     assert read_relay_scope(config) == {}
     path = config / "delegation-relay-scope.yaml"
-    path.write_text("version: 1\nworkspaces:\n  PAGe: /home/yeli/repos/PAGe\n")
+    path.write_text("version: 1\nworkspaces:\n  PAGe: /home/operator/repos/PAGe\n")
     path.chmod(0o600)
-    assert read_relay_scope(config) == {"PAGe": "/home/yeli/repos/PAGe"}
+    assert read_relay_scope(config) == {"PAGe": "/home/operator/repos/PAGe"}
     path.chmod(0o644)
     with pytest.raises(PermissionError):
         read_relay_scope(config)
@@ -118,3 +118,122 @@ def test_relay_key_is_not_general_api_key():
     assert asyncio.run(request("/api/v1/workspaces", "Bearer " + relay_key)) == 401
     assert asyncio.run(request("/api/v1/workspaces", "Bearer " + normal_key)) == 200
     assert called == ["/internal/delegation/v1", "/api/v1/workspaces"]
+
+
+class _FakeConnection:
+    timeouts = []
+    operations = []
+
+    def __init__(self, host, port, timeout=None):
+        self.timeouts.append(timeout)
+
+    def request(self, method, path, body=None, headers=None):
+        self.operations.append(json.loads(body)["operation"])
+
+    def getresponse(self):
+        operation = self.operations[-1]
+        payload = {"list_agents": [], "workspace_info": {"workspace_id": "PAGe", "path": "/w/PAGe",
+                                                           "agent_dispatch": True,
+                                                           "security_profile": "provider_origin_v1"},
+                   "dispatch_agent": {"job_id": "job_" + "b" * 24}}.get(operation, {"status": "running"})
+
+        class Response:
+            status = 200
+
+            @staticmethod
+            def read(_limit):
+                return json.dumps(payload).encode()
+        return Response()
+
+    def close(self):
+        pass
+
+
+def _client(tmp_path, monkeypatch):
+    import agentporter.agents.production_relay as relay
+    _FakeConnection.timeouts, _FakeConnection.operations = [], []
+    monkeypatch.setattr(relay.http.client, "HTTPConnection", _FakeConnection)
+    return ProductionDelegationClient("t" * 40, {"PAGe": "/w/PAGe"}, tmp_path)
+
+
+def test_inventory_uses_bounded_ninety_second_timeout(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    assert client.call("list_agents") == []
+    assert _FakeConnection.timeouts == [90]
+
+
+def test_job_and_workspace_operations_keep_eight_second_timeout(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    client.call("workspace_info", {"workspace_id": "PAGe"})
+    result = client.call("dispatch_agent", {"agent": "prof", "workspace_id": "PAGe", "task": "audit", "read_only": True})
+    client.call("job_status", {"job_id": result["job_id"]})
+    assert _FakeConnection.operations == ["workspace_info", "workspace_info", "dispatch_agent", "job_status"]
+    assert _FakeConnection.timeouts == [8, 8, 90, 8]
+
+
+class _SlowGateway:
+    """Simulated gateway: a call times out when its latency exceeds the client's socket timeout."""
+    latency = {}
+    attempts = []
+
+    def __init__(self, host, port, timeout=None):
+        self.timeout = timeout
+
+    def request(self, method, path, body=None, headers=None):
+        self.operation = json.loads(body)["operation"]
+        self.attempts.append(self.operation)
+
+    def getresponse(self):
+        if self.latency.get(self.operation, 0) > self.timeout:
+            raise TimeoutError("simulated socket timeout")
+        return _FakeConnection.getresponse(self)
+
+    def close(self):
+        pass
+
+
+def _slow_client(tmp_path, monkeypatch, latency):
+    import agentporter.agents.production_relay as relay
+    _SlowGateway.latency, _SlowGateway.attempts = latency, []
+    _SlowGateway.operations = _SlowGateway.attempts
+    monkeypatch.setattr(relay.http.client, "HTTPConnection", _SlowGateway)
+    return ProductionDelegationClient("t" * 40, {"PAGe": "/w/PAGe"}, tmp_path)
+
+
+DISPATCH = {"agent": "prof", "workspace_id": "PAGe", "task": "audit", "read_only": True}
+
+
+def test_delayed_admission_beyond_eight_seconds_succeeds_with_single_delivery(tmp_path, monkeypatch):
+    client = _slow_client(tmp_path, monkeypatch, {"dispatch_agent": 58})
+    result = client.call("dispatch_agent", dict(DISPATCH))
+    assert result.get("status") != "delivery_uncertain"
+    assert result["job_id"] == result["dispatch_id"] and result["job_id"].startswith("rjob_")
+    assert _SlowGateway.attempts.count("dispatch_agent") == 1
+    assert client.owns(result["job_id"])
+    assert client.call("job_status", {"job_id": result["job_id"]})["job_id"] == result["job_id"]
+
+
+def test_admission_slower_than_budget_stays_uncertain_with_one_retry_same_token(tmp_path, monkeypatch):
+    client = _slow_client(tmp_path, monkeypatch, {"dispatch_agent": 120})
+    sent = []
+    original = _SlowGateway.request
+
+    def capture(self, method, path, body=None, headers=None):
+        sent.append(json.loads(body)["args"].get("request_id"))
+        original(self, method, path, body, headers)
+    monkeypatch.setattr(_SlowGateway, "request", capture)
+    result = client.call("dispatch_agent", dict(DISPATCH))
+    assert result["status"] == "delivery_uncertain"
+    assert _SlowGateway.attempts.count("dispatch_agent") == 2
+    dispatch_ids = [i for i in sent if i]
+    assert len(dispatch_ids) == 2 and len(set(dispatch_ids)) == 1
+    assert result["job_id"] == "rjob_" + dispatch_ids[0]
+
+
+def test_slow_job_and_workspace_reads_still_use_fast_budget(tmp_path, monkeypatch):
+    client = _slow_client(tmp_path, monkeypatch, {"workspace_info": 40})
+    with pytest.raises(ConnectionError):
+        client.call("workspace_info", {"workspace_id": "PAGe"})
+    with pytest.raises(ConnectionError):
+        client.call("dispatch_agent", dict(DISPATCH))
+    assert "dispatch_agent" not in _SlowGateway.attempts

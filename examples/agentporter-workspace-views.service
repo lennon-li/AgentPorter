@@ -1,0 +1,23 @@
+# Production gateway's same-UID view helper; install as a user unit.
+[Unit]
+Description=AgentPorter production gateway private workspace views
+Before=agentporter.service
+
+[Service]
+Type=simple
+WorkingDirectory=/
+RuntimeDirectory=agentporter-workspace-views
+RuntimeDirectoryMode=0700
+ExecStart=%h/.local/share/agentporter/current/venv/bin/python -I -m agentporter.workspace_view_service --state-dir %h/.local/state/agentporter/workspace-views
+Environment=PATH=/usr/bin:/bin
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+NoNewPrivileges=false
+PrivateUsers=false
+KillMode=control-group
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

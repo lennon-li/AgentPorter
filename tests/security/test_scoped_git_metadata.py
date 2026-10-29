@@ -54,10 +54,24 @@ def test_git_mutations_select_trusted_metadata_mode(tmp_path, monkeypatch):
     git.git_add("repo", ["file.txt"])
     git.git_checkout("repo", "review", create=True)
     assert [c["git_metadata_writable"] for c in calls] == [False, True, True]
+    assert "--untracked-files=all" in calls[0]["argv"]
     assert all(c["network_access"] is False for c in calls)
     # Executable repository hooks must be neutralized even when .git is writable.
     for call in calls:
         assert call["argv"][call["argv"].index("core.hooksPath=/dev/null") - 1] == "-c"
+
+
+@pytest.mark.skipif(not BWRAP_USABLE, reason="Kernel Bubblewrap namespace unavailable")
+def test_git_status_forces_untracked_files_despite_repository_config(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "status.showUntrackedFiles", "no"], check=True)
+    (root / "hidden-by-config.txt").write_text("untracked\n")
+    sandbox = BubblewrapSandbox(tmp_path / "state")
+    registry = WorkspaceRegistry({"repo": {"path": str(root), "writable": True}})
+    result = create_git_tools(registry, sandbox).git_status("repo")
+    assert "hidden-by-config.txt" in result
 
 
 @pytest.mark.skipif(not BWRAP_USABLE, reason="Kernel Bubblewrap namespace unavailable")

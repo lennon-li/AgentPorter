@@ -54,13 +54,13 @@ class VenkataTests(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     tool("test", "hostname")
             run.assert_not_called()
-            with patch("agentporter.tools.venkata.pwd.getpwuid", return_value=SimpleNamespace(pw_name="yeli", pw_dir="/home/yeli")), patch("agentporter.tools.venkata.socket.gethostname", return_value="bcc"), patch("agentporter.tools.venkata.access_enabled", return_value=True):
+            with patch("agentporter.tools.venkata.pwd.getpwuid", return_value=SimpleNamespace(pw_name="operator", pw_dir="/home/operator")), patch("agentporter.tools.venkata.socket.gethostname", return_value="bcc"), patch("agentporter.tools.venkata.access_enabled", return_value=True):
                 tool("test", "hostname")
             argv, home = run.call_args.args
             self.assertIn("StrictHostKeyChecking=yes", argv)
             self.assertIn("ForwardAgent=no", argv)
             self.assertEqual(argv[-2:], ["venkata", "/usr/bin/timeout 25s /usr/bin/hostname"])
-            self.assertEqual(home, "/home/yeli")
+            self.assertEqual(home, "/home/operator")
 
     def test_switch_fail_closed_and_dynamic(self):
         from pathlib import Path
@@ -76,7 +76,7 @@ class VenkataTests(unittest.TestCase):
             marker.symlink_to("/dev/null")
             self.assertFalse(access_enabled(root))
             registry = WorkspaceRegistry({"test": {"path": root, "allow_venkata_ssh": True}})
-            with patch("agentporter.tools.venkata.pwd.getpwuid", return_value=SimpleNamespace(pw_name="yeli", pw_dir=root)), patch("agentporter.tools.venkata.socket.gethostname", return_value="bcc"), patch("agentporter.tools.venkata.run_bounded") as run:
+            with patch("agentporter.tools.venkata.pwd.getpwuid", return_value=SimpleNamespace(pw_name="operator", pw_dir=root)), patch("agentporter.tools.venkata.socket.gethostname", return_value="bcc"), patch("agentporter.tools.venkata.run_bounded") as run:
                 with self.assertRaises(PermissionError):
                     create_venkata_tool(registry)("test", "hostname")
                 run.assert_not_called()

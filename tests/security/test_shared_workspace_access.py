@@ -139,6 +139,27 @@ def test_untraversable_human_parent_fails_before_file_publication(tools, monkeyp
     assert access(parent) == before
 
 
+def test_preexisting_private_mutation_ancestor_fails_closed(tools, monkeypatch):
+    root, ops = tools
+    from agentporter.tools import files
+
+    parent = root / 'service-owned'
+    parent.mkdir(mode=0o700)
+    inode = parent.stat().st_ino
+    original = files.human_can_traverse
+    monkeypatch.setattr(
+        files, 'human_can_traverse',
+        lambda fd, uid: False if os.fstat(fd).st_ino == inode else original(fd, uid),
+    )
+    before = access(parent)
+
+    with pytest.raises(PermissionError, match='existing mutation parent'):
+        ops[5]('shared', 'service-owned')
+
+    assert not (parent / 'child').exists()
+    assert access(parent) == before
+
+
 def test_share_grants_collaborator_without_unmasking_other_users():
     entries = [['user', '', 'rw-'], ['user', '12345', 'rwx'],
                ['group', '', 'rwx'], ['mask', '', '---'], ['other', '', '---']]

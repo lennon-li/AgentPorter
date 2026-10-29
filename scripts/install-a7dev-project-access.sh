@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Run as yeli. Only installed system programs cross sudo; no repository code
+# Run as operator. Only installed system programs cross sudo; no repository code
 # executes as root. Owner approval: all ordinary registered project scopes.
 set -euo pipefail
 set +x
 umask 077
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
-cd /home/yeli/agent-work/agentporter-dev
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 if [[ $(id -u) == 0 ]]; then
-  echo 'Run this as yeli; the immutable installer alone needs root.' >&2
+  echo 'Run this as operator; the immutable installer alone needs root.' >&2
   exit 2
 fi
 version=20261021T232414.837654Z
 archive_sha=c2924acec4e2a5bb15b36c41891929179f614c211a79a5a57f5b53e258d28566
 fingerprint=099b88c95f0fb23e33554e85a426e1b25b9fbba9ca3fe4fffd1ab4869b5da315
-policy_helper_sha=b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b
+policy_helper_sha=e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0
 artifact=/tmp/a7dev-project-access.tgz
 old_release=/opt/agentporter-development/versions/20261021T212000.000019Z
 release=/opt/agentporter-development/versions/$version
@@ -102,7 +102,7 @@ sudo /usr/bin/test ! -e "$backup"
 sudo /usr/bin/test ! -e "$release"
 quiet "$old_release"
 production_before=$(systemctl --user show agentporter.service -p MainPID -p ActiveState -p NRestarts)
-production_release=$(readlink /home/yeli/.local/share/agentporter/current)
+production_release=$(readlink /home/operator/.local/share/agentporter/current)
 sudo /usr/bin/install -d -o root -g root -m 0700 "$backup"
 for name in development-runtime.yaml workspaces.yaml public-client-policy.yaml public-https.yaml; do
   sudo /usr/bin/test -f "$config/$name"
@@ -144,7 +144,7 @@ sudo -u agentporter-dev -- "$release/venv/bin/python" -I \
   --after --public-key-file "$config/secrets.env" --expected-fingerprint "$fingerprint" \
   | sudo /usr/bin/tee "$backup/public-access-acceptance.log"
 [[ $(systemctl --user show agentporter.service -p MainPID -p ActiveState -p NRestarts) == "$production_before" ]]
-[[ $(readlink /home/yeli/.local/share/agentporter/current) == "$production_release" ]]
+[[ $(readlink /home/operator/.local/share/agentporter/current) == "$production_release" ]]
 stopped=0
 trap - ERR INT TERM
 echo "A7Dev project scopes installed; public access and denial checks passed. Evidence: $backup"

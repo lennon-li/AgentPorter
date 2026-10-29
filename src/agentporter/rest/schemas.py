@@ -32,6 +32,25 @@ class FileResponse(BaseModel):
     size_bytes: Optional[int] = Field(None, description="File size.")
     truncated: Optional[bool] = Field(None)
 
+class ReadFileRange(BaseModel):
+    start_line: int
+    end_line: int
+
+
+class ReadFileResponse(BaseModel):
+    """Text with hash/size of original bytes; line boundaries use Unicode splitlines."""
+    path: str
+    content: str
+    sha256: str
+    size_bytes: int
+    total_lines: int
+    range: ReadFileRange = Field(description=(
+        "Inclusive line bounds. Ranged reads report normalized requested bounds; "
+        "total_lines reports available decoded lines. Full reads use 1..total_lines "
+        "(an empty file uses 1..0)."
+    ))
+
+
 class SearchResult(BaseModel):
     file: str = Field(description="Path to the matching file.")
     line: int = Field(description="Line number.")
@@ -172,8 +191,8 @@ class SearchTextRequest(BaseModel):
 
 class ReadFileRequest(BaseModel):
     path: str = Field(description="Relative path of the file to read.")
-    start_line: Optional[int] = Field(None, description="Start line (1-indexed).")
-    end_line: Optional[int] = Field(None, description="End line (inclusive).")
+    start_line: Optional[int] = Field(None, gt=0, description="Start line (1-indexed, positive).")
+    end_line: Optional[int] = Field(None, gt=0, description="End line (inclusive, positive).")
 
 class WriteFileRequest(BaseModel):
     path: str = Field(description="Relative path of the file to write.")
@@ -181,6 +200,8 @@ class WriteFileRequest(BaseModel):
     expected_sha256: Optional[str] = Field(None, description="Optional SHA256 checksum for stale-file protection.")
 
 class PatchFileRequest(BaseModel):
+    approval_token: Optional[str] = Field(None, max_length=8192)
+    request_id: Optional[str] = Field(None, pattern=r"^[a-f0-9]{32}$")
     patch: str = Field(description="Unified diff patch to apply to the workspace.")
 
 class MkdirRequest(BaseModel):
@@ -191,6 +212,8 @@ class MovePathRequest(BaseModel):
     destination: str = Field(description="Destination relative path.")
 
 class TrashPathRequest(BaseModel):
+    approval_token: Optional[str] = Field(None, max_length=8192)
+    request_id: Optional[str] = Field(None, pattern=r"^[a-f0-9]{32}$")
     path: str = Field(description="Relative path to move to the .trash folder.")
 
 class HTTPSDownloadRequest(BaseModel):
@@ -202,6 +225,9 @@ class HTTPSDownloadRequest(BaseModel):
 
 
 class ExecRunRequest(BaseModel):
+    approval_token: Optional[str] = Field(None, max_length=8192)
+    request_id: Optional[str] = Field(None, pattern=r"^[a-f0-9]{32}$")
+    read_only: Optional[bool] = Field(None, description="Shared production defaults to read-only execution; edits require a scoped grant.")
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=30, description="Timeout in seconds for execution.")
@@ -209,6 +235,9 @@ class ExecRunRequest(BaseModel):
     network_access: bool = Field(default=False, description="Commands stay offline. True permits only owner-approved cranary curl -fsS GET or curl -sSI HEAD HTTPS metadata through a fixed broker; otherwise denied.")
 
 class ExecStartRequest(BaseModel):
+    approval_token: Optional[str] = Field(None, max_length=8192)
+    request_id: Optional[str] = Field(None, pattern=r"^[a-f0-9]{32}$")
+    read_only: Optional[bool] = Field(None, description="Shared production defaults to read-only execution; edits require a scoped grant.")
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=300, description="Timeout in seconds for the background job.")
@@ -258,6 +287,8 @@ class ListArtifactsRequest(BaseModel):
     path: str = Field(default="artifacts", description="Relative path within workspace to look for artifacts.")
 
 class DispatchAgentRequest(BaseModel):
+    approval_token: Optional[str] = Field(None, max_length=8192, description="Independent owner approval for this exact writable task.")
+    request_id: Optional[str] = Field(None, pattern=r"^[a-f0-9]{32}$", description="Stable request identity supplied by the approval issuer.")
     agent: str = Field(description="Name of the agent to dispatch.")
     task: str = Field(description="The specific task instruction for the agent.")
     purpose: str = Field(default="", description="Context or purpose for the dispatch.")

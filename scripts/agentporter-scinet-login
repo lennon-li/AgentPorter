@@ -6,15 +6,15 @@ set -euo pipefail
 # AgentPorter/agent configuration dependency.
 # This is the broker-owned SSH control socket.  AgentPorter agents only use
 # the broker RPC socket; they never receive this path or ~/.ssh access.
-socket="${AGENTPORTER_SCINET_CONTROL_SOCKET:-$HOME/.ssh/cm-yeli@trillium-gpu.alliancecan.ca:22}"
+socket="${AGENTPORTER_SCINET_CONTROL_SOCKET:-$HOME/.ssh/cm-operator@trillium-gpu.alliancecan.ca:22}"
 runtime="${XDG_RUNTIME_DIR:?}/agentporter"
 mkdir -p "$runtime"
 chmod 700 "$runtime"
 
 if ssh -S "$socket" -O check \
-    -l yeli -o BatchMode=yes -o StrictHostKeyChecking=yes \
+    -l operator -o BatchMode=yes -o StrictHostKeyChecking=yes \
   trillium-gpu.alliancecan.ca >/dev/null 2>&1 &&
-  timeout 8s ssh -S "$socket" -T -l yeli \
+  timeout 8s ssh -S "$socket" -T -l operator \
     -o BatchMode=yes -o StrictHostKeyChecking=yes \
     -o ProxyCommand=/bin/false -o ControlMaster=no \
     trillium-gpu.alliancecan.ca /usr/bin/true >/dev/null 2>&1; then
@@ -39,4 +39,4 @@ exec ssh -M -S "$socket" -N -T -f \
   -o StrictHostKeyChecking=yes \
   -o ForwardAgent=no \
   -o ClearAllForwardings=yes \
-  -l yeli trillium-gpu.alliancecan.ca
+  -l operator trillium-gpu.alliancecan.ca

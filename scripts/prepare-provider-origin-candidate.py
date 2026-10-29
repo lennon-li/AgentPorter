@@ -31,7 +31,7 @@ def main():
         raise FileExistsError('Candidate and report must be new')
     helper_path = REPO / 'scripts/prepare-development-overlay.py'
     helper_bytes = helper_path.read_bytes()
-    if hashlib.sha256(helper_bytes).hexdigest() != 'bc49c16bae77964779aa8e2a7e39d7d69ad2df9551ed77cd9de2172e60f126fc':
+    if hashlib.sha256(helper_bytes).hexdigest() != '69bf234a1b8d1732daf2179823ab93a92a6a3a9f29e00ec1c4edd01b87c02ec0':
         raise ValueError('Reviewed unprivileged overlay helper changed')
     overlay = types.ModuleType('provider_origin_overlay')
     overlay.__file__ = str(helper_path)

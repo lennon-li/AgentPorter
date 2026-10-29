@@ -40,7 +40,7 @@ scinet:
   # inference_approval_reviewer: "reviewer@example.org"
   # Public key is installed by root at /etc/agentporter/laya-inference-approval.pub
   host: "trillium-gpu.alliancecan.ca"
-  user: "yeli"
+  user: "operator"
   machine: "asgard"
   broker_socket: "/run/user/1000/agentporter/scinet.sock"
   # Full Experiment A/B submission stays off unless a human enables it here.

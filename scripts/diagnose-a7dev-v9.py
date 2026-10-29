@@ -40,7 +40,7 @@ def trusted_directory(path):
 def private_account():
     account = pwd.getpwnam(ACCOUNT)
     group = grp.getgrnam(ACCOUNT)
-    if (account.pw_uid in (0, pwd.getpwnam('yeli').pw_uid) or group.gr_gid == 0
+    if (account.pw_uid in (0, pwd.getpwnam('operator').pw_uid) or group.gr_gid == 0
             or account.pw_gid != group.gr_gid
             or set(group.gr_mem) - {ACCOUNT}
             or {row.pw_name for row in pwd.getpwall() if row.pw_gid == group.gr_gid} != {ACCOUNT}
@@ -203,7 +203,7 @@ if __name__=='__main__':sys.exit(main())
 
 def main():
     if os.geteuid()==0:
-        raise SystemExit('Run this pinned diagnostic launcher as yeli')
+        raise SystemExit('Run this pinned diagnostic launcher as operator')
     result=subprocess.run(['/usr/bin/sudo','/usr/bin/python3','-I','-B','-c',BOOTSTRAP],check=False)
     if result.returncode:
         print('Candidate diagnosis did not complete; live release was not changed.')

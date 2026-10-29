@@ -76,13 +76,13 @@ def test_private_scinet_endpoint_is_loaded_from_config(tmp_path: Path):
     (cfg_dir / "config.yaml").write_text(
         "scinet:\n"
         "  host: approved.example\n"
-        "  user: yeli\n"
+        "  user: operator\n"
         "  control_socket: ~/.ssh/cm-approved\n"
         "  machine: asgard\n"
     )
     cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / "st")
     assert cfg.scinet.host == "approved.example"
-    assert cfg.scinet.user == "yeli"
+    assert cfg.scinet.user == "operator"
     assert cfg.scinet.control_socket == "~/.ssh/cm-approved"
     assert cfg.scinet.machine == "asgard"
 
@@ -101,7 +101,7 @@ def test_private_scinet_training_settings_are_loaded(tmp_path: Path):
         "  inference_scratch_root: /scratch/cranary/laya\n"
         "  inference_python: /scratch/project/laya/bin/python\n"
         "  inference_hf_cache: /scratch/project/hf-cache\n"
-        "  inference_approval_reviewer: lennon\n",
+        "  inference_approval_reviewer: the operator\n",
         encoding="utf-8",
     )
     cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / "st", cache_dir=tmp_path / "cache")
@@ -114,7 +114,7 @@ def test_private_scinet_training_settings_are_loaded(tmp_path: Path):
     assert cfg.scinet.inference_scratch_root == "/scratch/cranary/laya"
     assert cfg.scinet.inference_python == "/scratch/project/laya/bin/python"
     assert cfg.scinet.inference_hf_cache == "/scratch/project/hf-cache"
-    assert cfg.scinet.inference_approval_reviewer == "lennon"
+    assert cfg.scinet.inference_approval_reviewer == "the operator"
 
 
 def test_inference_runtime_catalog_digest_configuration(tmp_path, monkeypatch):
@@ -143,9 +143,9 @@ def test_inference_approval_public_key_cannot_be_configured(tmp_path, monkeypatc
     cfg_dir.mkdir()
     (cfg_dir / "config.yaml").write_text(
         f"scinet:\n  inference_approval_public_key: {encoded}\n"
-        "  inference_approval_reviewer: lennon\n"
+        "  inference_approval_reviewer: the operator\n"
     )
     monkeypatch.setenv("AGENTPORTER_SCINET_INFERENCE_APPROVAL_PUBLIC_KEY", encoded)
     cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / "st", cache_dir=tmp_path / "cache")
     assert not hasattr(cfg.scinet, "inference_approval_public_key")
-    assert cfg.scinet.inference_approval_reviewer == "lennon"
+    assert cfg.scinet.inference_approval_reviewer == "the operator"

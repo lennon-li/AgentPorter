@@ -52,9 +52,9 @@ with tempfile.TemporaryDirectory() as tmp:
     assert not relay_upstream_workspaces(config)
     print("PASS: explicit upstream loopback and workspace allowlist")
     scope_file = config / "delegation-relay-scope.yaml"
-    scope_file.write_text("version: 1\nworkspaces:\n  PAGe: /home/yeli/repos/PAGe\n")
+    scope_file.write_text("version: 1\nworkspaces:\n  PAGe: /home/operator/repos/PAGe\n")
     scope_file.chmod(0o600)
-    assert read_relay_scope(config) == {"PAGe": "/home/yeli/repos/PAGe"}
+    assert read_relay_scope(config) == {"PAGe": "/home/operator/repos/PAGe"}
     scope_file.chmod(0o644)
     denies(lambda: read_relay_scope(config))
     scope_file.chmod(0o600)
@@ -90,11 +90,13 @@ with tempfile.TemporaryDirectory() as tmp:
 
     class FakeHTTP:
         def __init__(self, host, port, timeout):
-            assert (host, port, timeout) == ("127.0.0.1", 8876, 8)
+            assert (host, port) == ("127.0.0.1", 8876)
+            self.timeout = timeout
         def request(self, method, path, body, headers):
             assert method == "POST" and path == "/internal/delegation/v1"
             assert headers["Authorization"] == "Bearer " + token
             self.data = json.loads(body)
+            assert self.timeout == (90 if self.data["operation"] == "dispatch_agent" else 8)
         def getresponse(self):
             op = self.data["operation"]
             if op == "workspace_info":

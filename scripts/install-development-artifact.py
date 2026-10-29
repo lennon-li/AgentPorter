@@ -80,6 +80,57 @@ def private_write(parent, name, content, uid=0, gid=0):
             pass
 
 
+def replace_symlink(parent, name, target):
+    """Atomically replace one symlink without following the existing link."""
+    temporary = '.current-' + secrets.token_hex(16)
+    os.symlink(str(target), temporary, dir_fd=parent)
+    try:
+        os.rename(temporary, name, src_dir_fd=parent, dst_dir_fd=parent)
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=parent)
+        except FileNotFoundError:
+            pass
+
+
+def restore_pair(base, config, previous_release, previous_runtime, uid, gid):
+    """Attempt both compensations even if one fails; caller must keep service stopped."""
+    failures = []
+    try:
+        replace_symlink(base, 'current', previous_release)
+    except Exception:
+        failures.append('release pointer')
+    try:
+        private_write(config, 'development-runtime.yaml', previous_runtime, uid, gid)
+    except Exception:
+        failures.append('runtime configuration')
+    return failures
+
+
+def switch_pair(base, config, candidate_release, candidate_runtime,
+                previous_release, previous_runtime, uid, gid, activate=None, evidence=None):
+    """Switch runtime and pointer as a compensating transaction.
+
+    The service must remain quiesced while the two filesystem entries change.
+    If activation fails, restore both entries and leave service recovery to the
+    operator's gated procedure.
+    """
+    try:
+        private_write(config, 'development-runtime.yaml', candidate_runtime, uid, gid)
+        replace_symlink(base, 'current', candidate_release)
+        if activate is not None:
+            activate()
+    except BaseException:
+        failures = restore_pair(base, config, previous_release, previous_runtime, uid, gid)
+        if failures:
+            raise RuntimeError(
+                'A7Dev install failed and automatic compensation was incomplete '
+                f'({", ".join(failures)}); keep service stopped'
+                + (f'; recovery evidence: {evidence}' if evidence else '')
+            ) from None
+        raise
+
+
 def member_parent(root, path):
     fd = os.dup(root)
     try:
@@ -190,7 +241,7 @@ def install(artifact, expected_digest, activate=False):
     if not re.fullmatch('[0-9a-f]{64}', expected_digest):
         raise ValueError('Explicit approved archive SHA256 required')
     account = pwd.getpwnam('agentporter-dev')
-    owner = pwd.getpwnam('yeli')
+    owner = pwd.getpwnam('operator')
     base = directory(INSTALL)
     versions = directory(INSTALL / 'versions')
     source = os.open(artifact, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -253,16 +304,19 @@ def install(artifact, expected_digest, activate=False):
                 os.close(old)
             (stage / 'previous-runtime.yaml').write_bytes(previous)
             previous_release = os.readlink('current', dir_fd=base)
+            previous_path = Path(previous_release)
+            if (previous_path.parent != INSTALL / 'versions'
+                    or not re.fullmatch(r'\d{8}T\d{6}\.\d{6}Z', previous_path.name)):
+                raise ValueError('Existing A7Dev current pointer is outside the release set')
             (stage / 'rollback.json').write_text(json.dumps({'release': previous_release, 'candidate': version}) + '\n')
-            private_write(config, 'development-runtime.yaml', json.dumps(runtime).encode() + b'\n', account.pw_uid, account.pw_gid)
+            def restart_development():
+                subprocess.run(['/usr/bin/systemctl', 'restart', 'agentporter-development.service'], check=True,
+                               env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8'}, stdin=subprocess.DEVNULL)
+            switch_pair(base, config, final, json.dumps(runtime).encode() + b'\n',
+                        previous_release, previous, account.pw_uid, account.pw_gid,
+                        activate=restart_development if activate else None, evidence=stage)
         finally:
             os.close(config)
-        temporary = '.current-' + secrets.token_hex(16)
-        os.symlink(str(final), temporary, dir_fd=base)
-        os.rename(temporary, 'current', src_dir_fd=base, dst_dir_fd=base)
-        if activate:
-            subprocess.run(['/usr/bin/systemctl', 'restart', 'agentporter-development.service'], check=True,
-                           env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8'}, stdin=subprocess.DEVNULL)
         print(json.dumps({'installed': str(final), 'rollback_evidence': str(stage), 'service_restarted': activate}))
     finally:
         os.close(source)
@@ -281,25 +335,44 @@ def rollback(evidence_name, activate=False):
         record = bounded_json(evidence / 'rollback.json')
         previous = Path(record['release'])
         prefix = INSTALL / 'versions'
+        candidate = record.get('candidate', '')
+        active = os.readlink('current', dir_fd=base)
+        allowed_pair = {str(previous), str(prefix / candidate)}
         if (previous.parent != prefix or not re.fullmatch(r'\d{8}T\d{6}\.\d{6}Z', previous.name)
-                or os.readlink('current', dir_fd=base) != str(prefix / record['candidate'])):
-            raise ValueError('Rollback pair no longer matches the active candidate')
+                or not re.fullmatch(r'\d{8}T\d{6}\.\d{6}Z', candidate)
+                or active not in allowed_pair):
+            raise ValueError('Rollback evidence does not match the current A7Dev release pair')
         release_fd = directory(previous)
         os.close(release_fd)
         config = directory(DATA / 'config', account.pw_uid)
         try:
+            old = os.open('development-runtime.yaml', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                          dir_fd=config)
+            try:
+                if not stat.S_ISREG(os.fstat(old).st_mode):
+                    raise ValueError('Existing runtime must be regular')
+                active_runtime = os.read(old, 1024**2 + 1)
+                if len(active_runtime) > 1024**2:
+                    raise ValueError('Existing runtime too large')
+            finally:
+                os.close(old)
             content = (evidence / 'previous-runtime.yaml').read_bytes()
             if len(content) > 1024**2:
                 raise ValueError('Rollback runtime exceeds limit')
-            private_write(config, 'development-runtime.yaml', content, account.pw_uid, account.pw_gid)
+
+            def restart_development():
+                subprocess.run(['/usr/bin/systemctl', 'restart', 'agentporter-development.service'], check=True,
+                               env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8'}, stdin=subprocess.DEVNULL)
+
+            # Rollback is the same paired transition as install: if the runtime,
+            # active pointer, or restart fails, compensate back to the exact
+            # pair observed before this attempt and leave recovery to the gate.
+            switch_pair(base, config, str(previous), content, active, active_runtime,
+                        account.pw_uid, account.pw_gid,
+                        activate=restart_development if activate else None,
+                        evidence=evidence)
         finally:
             os.close(config)
-        temporary = '.current-' + secrets.token_hex(16)
-        os.symlink(str(previous), temporary, dir_fd=base)
-        os.rename(temporary, 'current', src_dir_fd=base, dst_dir_fd=base)
-        if activate:
-            subprocess.run(['/usr/bin/systemctl', 'restart', 'agentporter-development.service'], check=True,
-                           env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8'}, stdin=subprocess.DEVNULL)
         print(json.dumps({'rolled_back': str(previous), 'service_restarted': activate}))
     finally:
         os.close(evidence_fd)

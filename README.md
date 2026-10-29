@@ -174,6 +174,36 @@ See [SECURITY.md](SECURITY.md), the
   permission failures, and a distinction between configured models and
   independently verified runtime identity.
 
+### Shared workspace policy and approved edits
+
+The optional shared-policy profile compiles workspace registrations, public
+client scopes and receiving-worker admission from one protected operator-owned
+policy. Ordinary capability defaults apply consistently to registered workspaces;
+explicit overrides and protected paths still take precedence. Specialized
+infrastructure access is granted separately.
+
+Delegation and direct execution default to read-only in this profile. A writable
+request needs an independently signed, expiring approval bound to its workspace,
+operation, worker and exact arguments. Both relay boundaries verify it. Retrying
+the same approved request returns its original job instead of launching again.
+
+Approved edits use a private copy-on-write workspace view. Large existing files
+do not consume the changed-output budget, and the original workspace stays
+unchanged until the producer exits and its output passes validation. Publication
+rejects unapproved deletion, protected-path and Git-metadata changes, unsafe
+links, and conflicting source changes; collaborator access is preserved.
+
+Git inspection remains separate from publication. The shared profile includes a
+fixed-purpose public-HTTPS fetch backend; it does not expose credentials, execute
+repository hooks, or grant arbitrary networking. Git pull, commit and push remain
+locked behind their respective missing authorization/backend requirements.
+
+See [shared policy and write isolation](docs/shared-workspace-policy.md) for
+the trust boundaries, operator requirements and verification limits. Runtime
+eligibility does not prove provider authentication, account quota or model
+availability. Public documentation contains generic examples; deployment records
+and account details stay in private operator storage.
+
 ## Desired action authorization matrix
 
 **Target policy, not the current production permission state.** The owner
@@ -199,6 +229,7 @@ These are *recommended defaults*, not permanent privilege ceilings.
 | --- | --- | --- |
 | `get_capabilities` | **ALLOW** | Read server capabilities, not a permission grant. |
 | `server_deploy_info` | **ALLOW** | Read live release provenance only. |
+| `qman_consult` | **LOCKED** | External advisory integration requires immutable operator-installed code or a read-only confined bridge. |
 | `list_workspaces` | **ALLOW** | Return IDs and status; no new access. |
 | `workspace_info` | **ALLOW** | Use registered workspace only. |
 | `list_agents` | **ALLOW** | Expose seven named identities; never promise available. |
@@ -228,13 +259,13 @@ These are *recommended defaults*, not permanent privilege ceilings.
 | `apply_patch` | **SCOPE** | Explicit writable workspace, patch review. |
 | `mkdir` | **SCOPE** | Explicit writable workspace/path. |
 | `move_path` | **SCOPE** | Explicit writable workspace; conflict guard. |
-| `trash_path` | **SCOPE** | Recoverable trash only; no permanent delete. |
-| `exec_run` | **SCOPE** | Bubblewrap commands remain offline; a separately operator-approved cranary GET/HEAD metadata broker is proposed, without generic shell internet access. Arbitrary commands may write workspace content; future scope gate required. |
+| `trash_path` | **SCOPE** | Recoverable trash only; shared-profile deletion also requires separately signed destructive authority. |
+| `exec_run` | **SCOPE** | Bubblewrap commands remain offline; a separately operator-approved cranary GET/HEAD metadata broker is proposed, without generic shell internet access. Shared-policy execution defaults read-only; writable commands require exact signed task authority. |
 | `exec_start` | **SCOPE** | Offline-by-default; proposed owner-approved metadata requests use a fixed-function supervised HTTPS worker with bounded lifetime. |
 | `job_cancel` | **SCOPE** | Only authorized job; report actual cancellation state. |
 | `git_add` | **SCOPE** | Stage only exact approved paths; no commit. |
 | `git_checkout` | **SCOPE** | Only approved branch/worktree, inspect dirty changes before switch. |
-| `dispatch_agent` | **SCOPE** | Only one of seven named IDs; default read-only; scoped write opt-in. |
+| `dispatch_agent` | **SCOPE** | Configured identity only; default read-only; shared-profile edits require signed task authority. |
 | `local_http_request` | **APPROVAL** | Explicit port + method + body review; loopback can mutate services. |
 | `venkata_transfer` | **APPROVAL** | Approved file hashes and fixed destination; data exfiltration risk. |
 | `scinet_login` | **APPROVAL** | Human performs Duo; caller cannot approve for human. |
@@ -245,19 +276,19 @@ These are *recommended defaults*, not permanent privilege ceilings.
 | `scinet_inference_provision` | **APPROVAL** | Remote inference environment provisioning; exact manifest/digest and authorized path, never unreviewed installation. |
 | `scinet_inference_approve` | **APPROVAL** | Verify offline independent signature; do not self-approve. |
 | `scinet_inference_submit` | **APPROVAL** | Signed exact stage + allocation quota. |
-| `git_fetch` | **APPROVAL** | Remote-only plus workspace metadata change; no read-only fetch. |
+| `git_fetch` | **APPROVAL** (legacy); **SCOPE** (shared policy) | The shared profile permits bounded public-HTTPS fetch through its dedicated metadata backend; it grants no general networking or publication. |
 | `git_pull` | **APPROVAL** | Branch and remote explicit, clean-tree and conflict checks. |
 | `git_commit` | **APPROVAL** | Publication by a separate verified publisher, bound to a reviewed tree/remote/ref; currently technically disabled. |
 | `git_push` | **APPROVAL** | Publication by a separate verified publisher, bound to a reviewed tree/remote/ref; currently technically disabled. |
 | `scinet_record_approvals` | **APPROVAL** | Existing per-stage, per-experiment fixed-reviewer confirmation mechanism; never treat speech or worker text as human approval. |
 
 **Important deployment distinctions:** The matrix describes **desired**
-authorization modes, not a live capability guarantee. Git publication,
-network-capable Git operations, trusted owner approvals, and writable worker
-dispatch depend on the specific installed release and operator policy.
-A development deployment may have verified OS-confined worker delegation
-while production is still blocked. The `action-policy.yaml` configuration
-alone does not create a trusted approval issuer or safe permission escalation.
+authorization modes, not a live capability guarantee. The shared-policy profile
+implements signed task approvals, confined writable delegation and bounded
+public-HTTPS Git fetch. Git publication remains locked; a task-edit receipt is
+not a publication receipt. Other profiles retain their own stricter defaults.
+The `action-policy.yaml` configuration alone cannot issue trusted approvals or
+enable an unavailable backend.
 Check live tool permissions, deployment provenance, and the operator's actual
 policy before attempting any state-changing action.
 

@@ -19,7 +19,7 @@ import types
 OLD_RELEASE = Path('/opt/agentporter-development/versions/20261021T212000.000019Z')
 NEW_RELEASE = Path('/opt/agentporter-development/versions/20261021T232414.837654Z')
 HELPER = NEW_RELEASE / 'operator-plan/authorize-a7dev-project-delegation.py'
-HELPER_SHA = 'b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b'
+HELPER_SHA = 'e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0'
 PLAN_SHA = '2c4b78429001d4a3f3e5acdfa074d2a0ea5987a3980b04e6d378177d5f9c196c'
 BEFORE = {
     'development-runtime.yaml': 'fa33ac76062ce50e333a71d21310808bf6ea64658117da6224c6b4dab484a3fe',

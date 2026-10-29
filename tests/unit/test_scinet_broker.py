@@ -72,7 +72,7 @@ def test_broker_envelope_pins_destination_and_disables_forwarding(tmp_path):
         str(tmp_path / "broker.sock"),
         str(tmp_path / "control.sock"),
         "trillium-gpu.alliancecan.ca",
-        "yeli",
+        "operator",
     )
 
     from agentporter.tools.scinet_broker import _ssh_envelope
@@ -102,7 +102,7 @@ def test_broker_remote_shell_preserves_command_and_staging_input(tmp_path):
 
     argv = _ssh_envelope(
         "trillium-gpu.alliancecan.ca",
-        "yeli",
+        "operator",
         str(tmp_path / "control.sock"),
         [sys.executable, "-c", "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"],
     )
@@ -122,7 +122,7 @@ def test_broker_rejects_ssh_like_remote_tokens(tmp_path):
         str(tmp_path / "broker.sock"),
         str(tmp_path / "control.sock"),
         "trillium-gpu.alliancecan.ca",
-        "yeli",
+        "operator",
     )
     with patch("agentporter.tools.scinet_broker._control_socket_available", return_value=True):
         with pytest.raises(PermissionError):
@@ -137,11 +137,11 @@ def test_login_argv_allows_host_public_key_then_duo_with_fixed_target(tmp_path):
         str(tmp_path / "broker.sock"),
         str(tmp_path / "control.sock"),
         "trillium-gpu.alliancecan.ca",
-        "yeli",
+        "operator",
     )
     argv = broker._login_argv()
     assert argv[0] == "/usr/bin/ssh"
-    assert argv[-2:] == ["yeli", "trillium-gpu.alliancecan.ca"]
+    assert argv[-2:] == ["operator", "trillium-gpu.alliancecan.ca"]
     assert "-M" in argv and "-f" in argv
     assert "PreferredAuthentications=publickey,keyboard-interactive" in argv
     assert "PubkeyAuthentication=yes" in argv
@@ -160,7 +160,7 @@ def test_master_health_requires_remote_response_not_just_mux_listener(tmp_path, 
     import subprocess
 
     broker = ScinetBroker(str(tmp_path / "broker.sock"), str(tmp_path / "control.sock"),
-                          "trillium-gpu.alliancecan.ca", "yeli")
+                          "trillium-gpu.alliancecan.ca", "operator")
     probe = subprocess.TimeoutExpired("ssh", 5) if timeout_probe else SimpleNamespace(returncode=255)
     with (
         patch("agentporter.tools.scinet_broker._control_socket_available", return_value=True),
@@ -177,7 +177,7 @@ def test_master_health_requires_remote_response_not_just_mux_listener(tmp_path, 
 
 def test_stale_authenticated_status_is_reported_as_connection_failure(tmp_path):
     broker = ScinetBroker(str(tmp_path / "broker.sock"), str(tmp_path / "control.sock"),
-                          "trillium-gpu.alliancecan.ca", "yeli")
+                          "trillium-gpu.alliancecan.ca", "operator")
     broker._login_state = "authenticated"
     with patch.object(broker, "_master_is_running", return_value=False):
         assert broker._login_status() == {
@@ -190,7 +190,7 @@ def test_login_status_only_reports_verified_master(tmp_path):
         str(tmp_path / "broker.sock"),
         str(tmp_path / "control.sock"),
         "trillium-gpu.alliancecan.ca",
-        "yeli",
+        "operator",
     )
     request = {
         "version": 1,
@@ -210,7 +210,7 @@ def test_login_rpc_rejects_caller_supplied_remote_command(tmp_path):
         str(tmp_path / "broker.sock"),
         str(tmp_path / "control.sock"),
         "trillium-gpu.alliancecan.ca",
-        "yeli",
+        "operator",
     )
     request = {
         "version": 1,
@@ -228,7 +228,7 @@ def test_first_login_not_cooldown_on_short_host_uptime(tmp_path):
         str(tmp_path / "broker.sock"),
         str(tmp_path / "control.sock"),
         "trillium-gpu.alliancecan.ca",
-        "yeli",
+        "operator",
     )
     request = {
         "version": 1,
@@ -253,7 +253,7 @@ def test_login_start_is_single_flight_and_rate_limited(tmp_path):
         str(tmp_path / "broker.sock"),
         str(tmp_path / "control.sock"),
         "trillium-gpu.alliancecan.ca",
-        "yeli",
+        "operator",
     )
     request = {
         "version": 1,
@@ -285,7 +285,7 @@ def test_broker_round_trip_uses_unix_socket_and_returns_bounded_result(tmp_path)
         socket_path,
         str(tmp_path / "control.sock"),
         "trillium-gpu.alliancecan.ca",
-        "yeli",
+        "operator",
     )
     raw = {
         "exit_code": 0,
@@ -320,7 +320,7 @@ def test_broker_does_not_accept_client_supplied_destination(tmp_path):
         str(tmp_path / "broker.sock"),
         str(tmp_path / "control.sock"),
         "trillium-gpu.alliancecan.ca",
-        "yeli",
+        "operator",
     )
     with (
         patch("agentporter.tools.scinet_broker._control_socket_available", return_value=True),

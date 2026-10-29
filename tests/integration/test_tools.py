@@ -184,7 +184,7 @@ def test_git_inspection(workspace_registry, tmp_path: Path):
     exec_run_tool, _ = create_execution_tools(workspace_registry, sandbox, JobManager(tmp_path / "state" / "jobs"))
     res = exec_run_tool("test-ws", ["git", "config", "user.name"], network_access=False)
     assert res["exit_code"] == 0
-    assert "Lennon Li" in res["stdout"] or "sandbox" in res["stdout"] or res["exit_code"] == 0
+    assert "the operator Li" in res["stdout"] or "sandbox" in res["stdout"] or res["exit_code"] == 0
 
 
 def test_local_http_tool(workspace_registry):

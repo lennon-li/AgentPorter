@@ -16,7 +16,7 @@ import re
 import stat
 
 EVIDENCE = Path('/tmp/a7dev-cranary-acquisition-verification-cma155n3/results.json')
-WORKSPACE = Path('/home/yeli/repos/cranary')
+WORKSPACE = Path('/home/operator/repos/cranary')
 DOWNLOADS = WORKSPACE / 'data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads'
 LIMIT = 16 * 1024**2
 EXPANDED = 64 * 1024**2

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run as yeli on Asgard. Only this pinned A7Dev candidate and workspace scope.
+# Run as operator on Asgard. Only this pinned A7Dev candidate and workspace scope.
 set -Eeuo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -13,15 +13,15 @@ old=/opt/agentporter-development/versions/20261022T165047.488565Z
 new=/opt/agentporter-development/versions/20261022T181133.685266Z
 installer=/usr/local/libexec/agentporter/install-development-artifact.py
 installer_sha=84a53fbfcfe55668a2edda208b0990acf5fd98a6a105a73fb90cc51252e01c58
-storage_sha=b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b
+storage_sha=e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0
 unit=agentporter-development.service
 expected_runtime_sha=b8e1d9b98398e5b3a3776670ccb98e718c02468c023d6b859254783c79365d9c
 stopped_by_launcher=0
 install_started=0
 discovery_was_active=0
-grant_launcher_sha=c9898b6efb3628b52c0c7e13a42828255940d35ca1a9ebfdd3484c823e4d7765
-discovery_installer_sha=476b014e02bb98a68a399b1081d05ade5791c3259f7f6ddc6b691f57279534ff
-directory_repair_launcher_sha=9f71893612475033c0a1fa3da489233aa3e8540c51cd6479b41727cd5ffd1fff
+grant_launcher_sha=de47c32cad64fbb33ab15f960e088c217b8b7546ef587fa1ab8d582f491ebe37
+discovery_installer_sha=107bdca3aee8bb22de624b9153f73398e9d2577bb64a5782bf1b3ec55371a01c
+directory_repair_launcher_sha=075ee6b6f6b085cc28adf9982971b7cc71f09446778fe04dfc7cc4c28fe0e702
 
 run_verified_child() {
   /usr/bin/python3 -I -B -c '
@@ -81,7 +81,7 @@ activation_failed() {
 # Lifecycle tests may source the recovery function without activating anything.
 if [[ ${BASH_SOURCE[0]} != "$0" ]]; then return 0; fi
 trap activation_failed ERR
-[[ $(id -un) == yeli ]] || { echo 'Run as yeli, not root.' >&2; exit 1; }
+[[ $(id -un) == operator ]] || { echo 'Run as operator, not root.' >&2; exit 1; }
 [[ $(readlink -f /opt/agentporter-development/current) == "$old" ]] || {
   echo 'Development release changed; rebuild/review before activating.' >&2; exit 1;
 }
@@ -104,7 +104,7 @@ printf '%s  %s\n' "$installer_sha" "$installer" | sudo /usr/bin/sha256sum --chec
 # /usr/local/libexec is root-private on Asgard. Keep it private and use a
 # development-only root-owned location traversable by the service account.
 sudo /usr/bin/install -d -o root -g root -m 0755 "$gate_dir"
-# Read mutable input as yeli into a root-private staging file. A changed
+# Read mutable input as operator into a root-private staging file. A changed
 # input can never publish private root-readable data before its hash passes.
 root_stage=$(sudo /usr/bin/mktemp -d "$gate_dir/.gate-stage.XXXXXXXX")
 run_verified_child "$gate_source" "$gate_sha" --emit |
@@ -122,7 +122,7 @@ sudo -u agentporter-dev /usr/bin/python3 -I -B "$gate" \
 # Check the real worker's writable-mount safety rules too. In particular,
 # package-manager hardlinks must not expose a shared cache to workspace writes.
 sudo -u agentporter-dev "$old/venv/bin/python" -I -B -c \
-  'from pathlib import Path; from agentporter.agents.development import DevelopmentRuntime; runtime=object.__new__(DevelopmentRuntime); runtime._masks(Path("/home/yeli/agent-work/agentporter-dev"), True); print("Writable-workspace confinement preflight passed")'
+  'from pathlib import Path; from agentporter.agents.development import DevelopmentRuntime; runtime=object.__new__(DevelopmentRuntime); runtime._masks(Path("/home/operator/agent-work/agentporter-dev"), True); print("Writable-workspace confinement preflight passed")'
 
 # Refuse to interrupt active work. These are metadata-only, read-only queries.
 sudo -u agentporter-dev /usr/bin/python3 -I -B -c '

@@ -341,7 +341,7 @@ def _headroom_upgrade_response(upstream, request):
     return data, upgraded
 
 
-def _headroom_response(client, upstream, stop):
+def _headroom_response(client, upstream, stop, observer=None):
     """Drain a response after client write EOF; additional requests fail closed."""
     client.settimeout(5)
     upstream.settimeout(5)
@@ -361,7 +361,11 @@ def _headroom_response(client, upstream, stop):
                     continue
                 data = upstream.recv(65536)
                 if not data:
+                    if observer is not None:
+                        observer.finish()
                     return
+                if observer is not None:
+                    observer.feed(data)
                 client.sendall(data)
                 last_activity = time.monotonic()
 
@@ -369,9 +373,10 @@ def _headroom_response(client, upstream, stop):
 class HeadroomEgress(PublicEgress):
     """Fixed service and model endpoints; no general loopback or admin access."""
 
-    def __init__(self, socket_path, *, enforce_provider_tools=False):
+    def __init__(self, socket_path, *, enforce_provider_tools=False, model_evidence=None):
         super().__init__(socket_path)
         self._enforce_provider_tools = enforce_provider_tools
+        self._model_evidence = model_evidence
 
     def _handle(self, client: socket.socket) -> None:
         upstream = None
@@ -397,7 +402,11 @@ class HeadroomEgress(PublicEgress):
                 else:
                     _headroom_response(client, upstream, self._stop)
             else:
-                _headroom_response(client, upstream, self._stop)
+                observer = (self._model_evidence.response()
+                    if self._model_evidence is not None
+                    and request.split(b'\r\n', 1)[0].split(b' ')[:2] == [b'POST', b'/v1/responses']
+                    else None)
+                _headroom_response(client, upstream, self._stop, observer)
         except (OSError, ValueError, PermissionError):
             pass
         finally:

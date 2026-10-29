@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Run as yeli. All current eligible owner-scoped project leaves; no release installation.
+# Run as operator. All current eligible owner-scoped project leaves; no release installation.
 set -Eeuo pipefail
-cd /home/yeli/agent-work/agentporter-dev
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 live=/opt/agentporter-development/versions/20261022T165047.488565Z
 unit=agentporter-development.service
 helper_source=scripts/authorize-a7dev-writable-delegation.py
 helper_sha=74e44d361c54a48ded57dcbb22704d60189313fc5cd1e1d63d16e4f21fad0eb8
 storage_source="$live/operator-plan/authorize-a7dev-project-delegation.py"
-storage_sha=b15410c4ce3962c9233b2947129baec01c7a76e4784a861dc0e3bde8dfbbca2b
+storage_sha=e4bca398d91b8e0d95dec522d05c78ebe46081686376f109d12049929600c7d0
 helper_dir=/opt/agentporter-development/activation-tools/workspace-writes
 helper="$helper_dir/authorize-a7dev-writable-delegation.py"
 storage="$helper_dir/authorize-a7dev-project-delegation.py"
@@ -49,7 +49,7 @@ restore_discovery_timer() {
 publish_pinned() {
   local source=$1 destination=$2 digest=$3 private_stage
   private_stage=$(sudo /usr/bin/mktemp -d "$helper_dir/.verified-source.XXXXXXXX")
-  # Bound and verify the source as yeli before sending data to root. The root
+  # Bound and verify the source as operator before sending data to root. The root
   # copy remains private and gets an independent digest check before publish.
   /usr/bin/python3 -I -B -c '
 import hashlib,os,stat,sys
@@ -129,7 +129,7 @@ case ${1-} in
   *) echo 'Use no arguments for all eligible project leaves, or --qman.' >&2; exit 2 ;;
 esac
 [[ $# -le 1 ]] || exit 2
-[[ $(id -un) == yeli ]] || { echo 'Run as yeli, not root.' >&2; exit 1; }
+[[ $(id -un) == operator ]] || { echo 'Run as operator, not root.' >&2; exit 1; }
 live=$(readlink -f /opt/agentporter-development/current)
 case "$live" in
   /opt/agentporter-development/versions/20261022T165047.488565Z|/opt/agentporter-development/versions/20261022T181133.685266Z) ;;

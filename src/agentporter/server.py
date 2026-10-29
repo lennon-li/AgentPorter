@@ -6,6 +6,7 @@ import time
 import json
 import logging
 import functools
+from contextlib import nullcontext
 from contextlib import asynccontextmanager
 from typing import Optional, Any, Literal
 from logging.handlers import RotatingFileHandler
@@ -19,6 +20,8 @@ from fastapi.responses import JSONResponse
 from agentporter import __version__
 from agentporter.deployinfo import deploy_info
 from agentporter.config import Config
+from agentporter.production_profile import load_production_profile
+from agentporter.rest.schemas import ReadFileResponse
 from agentporter.auth import RateLimiter
 from agentporter.middleware import SecurityMiddleware
 from agentporter.workspaces.registry import WorkspaceRegistry
@@ -31,7 +34,7 @@ from agentporter.agents.production_relay import (
 )
 from agentporter.action_policy import OperatorActionPolicy
 from agentporter.client_policy import PublicClientPolicy
-from agentporter.resources import JobResources, JobCapacityError
+from agentporter.resources import JobResources, JobCapacityError, worker_service_unit
 from agentporter.scoped_https import ScopedPublicHTTPS, ScopedPublicHTTPSPolicy
 from agentporter.tools.system import create_system_tools
 from agentporter.tools.files import create_file_tools
@@ -41,6 +44,7 @@ from agentporter.tools.artifacts import create_artifact_tools
 from agentporter.tools.local_http import create_local_http_tool
 from mcp.types import ToolAnnotations
 from agentporter.tools.agents import create_agent_tools
+from agentporter.qman import qman_consult as _qman_consult
 from agentporter.tools.venkata import create_venkata_tool, Diagnostic
 from agentporter.tools.venkata_transfer import create_venkata_transfer_tool, TransferSource, TransferDestination
 from agentporter.tools.scinet import (
@@ -109,21 +113,22 @@ def log_tool_event(tool_name: str, kwargs: dict, result: Any, duration: float, e
         pass
 
 
-def _monitored_tool(tool_name: str, policy=None, client_policy=None):
+def _monitored_tool(tool_name: str, policy=None, client_policy=None, authorization=None):
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(**kwargs):
             t0 = time.time()
             try:
-                if policy is not None:
-                    policy.check(tool_name, kwargs)
-                if client_policy is not None:
-                    client_policy.check(tool_name, kwargs)
-                res = fn(**kwargs)
-                if client_policy is not None:
-                    res = client_policy.result(tool_name, kwargs, res)
-                log_tool_event(tool_name, kwargs, res, time.time() - t0)
-                return res
+                with authorization.authorize(tool_name, kwargs) if authorization is not None else nullcontext():
+                    if policy is not None:
+                        policy.check(tool_name, kwargs)
+                    if client_policy is not None:
+                        client_policy.check(tool_name, kwargs)
+                    res = fn(**kwargs)
+                    if client_policy is not None:
+                        res = client_policy.result(tool_name, kwargs, res)
+                    log_tool_event(tool_name, kwargs, res, time.time() - t0)
+                    return res
             except Exception as e:
                 log_tool_event(tool_name, kwargs, None, time.time() - t0, error=e)
                 raise
@@ -133,10 +138,11 @@ def _monitored_tool(tool_name: str, policy=None, client_policy=None):
 
 def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     """Construct MCPServer and register all standard tools."""
+    production = load_production_profile(config)
     setup_logging(config.state_dir)
 
     mcp = MCPServer(config.server.name)
-    registry = WorkspaceRegistry(config.workspaces)
+    registry = WorkspaceRegistry(config.workspaces, workspace_policy=getattr(config, "workspace_policy", None))
     sandbox = BubblewrapSandbox(
         config.state_dir,
         default_timeout_seconds=config.sandbox.default_timeout_seconds,
@@ -150,6 +156,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     agent_broker = AgentBroker(
         registry, job_manager, config_dir=getattr(config, "config_dir", None),
         parallel_search_enabled=getattr(getattr(config, "parallel_search", None), "enabled", False),
+        production_no_host_detection=production is not None,
     )
 
     # The same decorated callables are used by MCP and REST. An operator's
@@ -157,20 +164,33 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     operator_policy = OperatorActionPolicy(
         config.config_dir,
         workspace_roots=[row["path"] for row in registry.list_all()],
+        **({'workspace_policy': registry.workspace_policy} if registry.workspace_policy is not None else {}),
     )
     runtime = agent_broker.development_runtime
-    runtime_settings = runtime._config() if runtime else {}
+    if production is not None and runtime is not None:
+        raise PermissionError("Production cannot use a development worker runtime")
+    runtime_settings = production if production is not None else (runtime._config() if runtime else {})
     required = runtime_settings.get('public_client_policy_required') is True
-    client_policy = PublicClientPolicy(config.config_dir, config.state_dir, registry, required=required)
-    if required and client_policy.internal_key is None:
+    client_policy = PublicClientPolicy(config.config_dir, config.state_dir, registry, required=required,
+                                       allow_owned_job_cancel=production is not None,
+                                       allow_production_scinet=production is not None)
+    if production is not None and client_policy.internal_key is not None:
+        raise PermissionError('Production cannot use an internal-client bypass credential')
+    if required and production is None and client_policy.internal_key is None:
         raise PermissionError('Hardened development startup requires a separate internal-client credential')
     if 'job_resources' in runtime_settings:
-        resources = JobResources(runtime_settings['job_resources'])
+        resources = (JobResources(runtime_settings['job_resources'], expected_unit=production['service_unit'])
+                     if production is not None else
+                     JobResources(runtime_settings['job_resources'],
+                                  expected_unit=worker_service_unit(runtime_settings)))
         job_manager.configure_resources(resources)
         sandbox.resources = resources
 
+    from agentporter.task_authorization import load_task_authorization
+    task_authorization = load_task_authorization(registry, config.state_dir)
+
     def monitored_tool(tool_name: str):
-        return _monitored_tool(tool_name, policy=operator_policy, client_policy=client_policy)
+        return _monitored_tool(tool_name, policy=operator_policy, client_policy=client_policy, authorization=task_authorization)
 
     # Instantiate tool sets
     _get_capabilities, _list_workspaces, _workspace_info = create_system_tools(
@@ -197,7 +217,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _exec_run, _exec_start = create_execution_tools(
         registry, sandbox, job_manager, scoped_https=scoped_https
     )
-    git_tools = create_git_tools(registry, sandbox)
+    git_tools = create_git_tools(registry, sandbox, state_dir=config.state_dir)
     _git_status = git_tools.git_status
     _git_diff = git_tools.git_diff
     _git_log = git_tools.git_log
@@ -230,7 +250,8 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         if set(workspace_paths) != set(relay_allowed_workspaces):
             raise PermissionError("Relay allowlist contains unauthorized production workspaces")
         delegation_relay_client = ProductionDelegationClient(
-            relay_key, workspace_paths, config.state_dir)
+            relay_key, workspace_paths, config.state_dir,
+            **({'approval_verifier': task_authorization.verifier} if task_authorization else {}))
         local_dispatch = _dispatch_agent
 
         def _list_agents():
@@ -428,6 +449,31 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def get_capabilities() -> dict:
         """Return gateway capabilities and effective owner-approved HTTPS scope."""
         result = _get_capabilities()
+        git_operations = {}
+        for name in ("git_status", "git_diff", "git_log", "git_show", "git_branch",
+                     "git_add", "git_checkout", "git_commit", "git_push", "git_fetch", "git_pull"):
+            mode = operator_policy.effective_mode(name)
+            scope = "git_write" if name in {"git_add", "git_checkout", "git_commit", "git_push", "git_fetch", "git_pull"} else "git_read"
+            registered = name in result["supported_tools"]
+            if not registered:
+                availability, reason = "unavailable", "Tool is not registered."
+            elif name in {"git_commit", "git_push"}:
+                availability, reason = "unavailable", "Public scope is not granted; a server-verified publication approval and publisher are unavailable."
+                scope = None
+            elif name == 'git_fetch' and registry.workspace_policy is not None and mode in {'ALLOW', 'SCOPE'}:
+                availability, reason = 'conditional', 'Confined fetch supports public HTTPS remotes without ambient credentials; workspace/client Git-fetch scope and runtime checks remain required.'
+                scope = 'git_fetch'
+            elif name in {"git_fetch", "git_pull"}:
+                availability, reason = "unavailable", "Public scope is not granted; the scoped network-capable Git backend and independently verified approval are unavailable."
+                scope = None
+            elif mode in {"LOCKED", "APPROVAL"}:
+                availability, reason = "unavailable", "Operator policy blocks this operation or requires an unavailable approval."
+            else:
+                availability, reason = "conditional", "Requires the matching workspace and client scope, operator policy, and a working sandbox; availability is not verified for any specific workspace."
+            git_operations[name] = {"registered": registered, "availability": availability,
+                                    "operation_mode": mode, "required_scope": scope, "reason": reason}
+        result["git_operations"] = git_operations
+        result["git_shell_metadata"] = "Generic exec mounts Git metadata read-only; use authorized dedicated Git tools."
         scopes = https_policy.scopes
         result["scoped_public_https"] = {
             "enabled": bool(scopes),
@@ -467,7 +513,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool()
     @monitored_tool("read_file")
-    def read_file(workspace_id: str, path: str, start_line: Optional[int] = None, end_line: Optional[int] = None) -> dict:
+    def read_file(workspace_id: str, path: str, start_line: Optional[int] = None, end_line: Optional[int] = None) -> ReadFileResponse:
         """Read full or sliced lines of a file, returning content and SHA-256."""
         return _read_file(workspace_id, path, start_line=start_line, end_line=end_line)
 
@@ -479,7 +525,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("apply_patch")
-    def apply_patch(workspace_id: str, patch: str) -> dict:
+    def apply_patch(workspace_id: str, patch: str, approval_token: Optional[str] = None, request_id: Optional[str] = None) -> dict:
         """Apply a unified diff patch to the workspace."""
         return _apply_patch(workspace_id, patch)
 
@@ -497,7 +543,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("trash_path")
-    def trash_path(workspace_id: str, path: str) -> dict:
+    def trash_path(workspace_id: str, path: str, approval_token: Optional[str] = None, request_id: Optional[str] = None) -> dict:
         """Move a file to the recoverable .trash folder rather than permanently deleting it."""
         return _trash_path(workspace_id, path)
 
@@ -511,15 +557,15 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("exec_run")
-    def exec_run(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 30, network_access: bool = False) -> dict:
+    def exec_run(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 30, network_access: bool = False, read_only: Optional[bool] = None, approval_token: Optional[str] = None, request_id: Optional[str] = None) -> dict:
         """Run offline Bubblewrap command. Approved cranary GET/HEAD public HTTPS metadata only when network_access=true."""
-        return _exec_run(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access)
+        return _exec_run(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access, **({"read_only": read_only} if read_only is not None else {}))
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("exec_start")
-    def exec_start(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 300, network_access: bool = False) -> dict:
+    def exec_start(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 300, network_access: bool = False, read_only: Optional[bool] = None, approval_token: Optional[str] = None, request_id: Optional[str] = None) -> dict:
         """Start offline Bubblewrap job; approved cranary public HTTPS metadata uses a fixed-purpose bounded worker."""
-        return _exec_start(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access)
+        return _exec_start(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access, **({"read_only": read_only} if read_only is not None else {}))
 
     @mcp.tool()
     @monitored_tool("job_status")
@@ -629,6 +675,18 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """Read an artifact file (supports text and base64 images)."""
         return _read_artifact(workspace_id, path=path)
 
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+    @monitored_tool("qman_consult")
+    def qman_consult(provider: Literal["all", "codex", "claude", "agy", "copilot"] = "all",
+                     profile: Optional[str] = None, model: Optional[str] = None) -> dict:
+        """Read cached Qman evidence before delegation. Evidence grants no execution authority.
+
+        Stale or unverified quota remains unknown. No provider refresh is performed.
+        Owner-only database isolation is preserved; unavailable is a bounded error.
+        """
+        return _qman_consult(provider=provider, profile=profile, model=model,
+                             workspace_registry=registry)
+
     @mcp.tool()
     @monitored_tool("list_agents")
     def list_agents(workspace_id: Optional[str] = None) -> list[dict]:
@@ -650,6 +708,8 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         allow_commit: bool = False,
         allow_push: bool = False,
         read_only: bool = True,
+        approval_token: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> dict:
         """Dispatch a worker; read_only defaults to true. Explicitly opt in to edits."""
         return _dispatch_agent(
@@ -662,9 +722,12 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             allow_commit=allow_commit,
             allow_push=allow_push,
             read_only=read_only,
+            **({"approval_token": approval_token} if approval_token is not None else {}),
+            **({"request_id": request_id} if request_id is not None else {}),
         )
 
     context = {
+        "task_authorization": task_authorization,
         "registry": registry,
         "sandbox": sandbox,
         "job_manager": job_manager,
@@ -828,6 +891,7 @@ def create_asgi_app(config: Config) -> ASGIApp:
                     from agentporter.agents.production_relay import RECEIVING_SECURITY_PROFILE
                     result = {"workspace_id": workspace.id, "path": workspace.path,
                               "agent_dispatch": workspace.allow_agent_dispatch,
+                              "writable": workspace.writable,
                               "security_profile": RECEIVING_SECURITY_PROFILE}
                 elif operation == "dispatch_agent":
                     context["agent_broker"].development_runtime.require_production_egress(arguments.get("agent", ""))
@@ -836,8 +900,13 @@ def create_asgi_app(config: Config) -> ASGIApp:
                     # gateway; no duplicate launch under concurrent requests.
                     registry = context["registry"]
                     scopes = set(relay_scope)
-                    arguments = validate_dispatch(arguments, scopes)
-                    token = arguments.pop("request_id", None)
+                    authority = context.get("task_authorization")
+                    arguments = validate_dispatch(arguments, scopes,
+                        approval_verifier=(authority.verifier if authority else None),
+                        workspace_paths=relay_scope)
+                    # Keep the identity for the shared tool's independent
+                    # approval check as well as the durable relay reservation.
+                    token = arguments.get("request_id")
                     relay_ledger.validate_request_id(token)
                     with relay_dispatch_lock:
                         # Reconcile tracked completions so finished jobs do not

@@ -18,6 +18,7 @@ from agentporter.agents.adapters.claude import ClaudeAdapter
 from agentporter.agents.adapters.opencode import OpenCodeAdapter, WeiAdapter
 from agentporter.agents.adapters.agy import AgyAdapter
 from agentporter.agents.policy import ExecutionPolicy
+from agentporter.qman import shadow_consult, record_shadow
 from agentporter.workspaces.registry import WorkspaceRegistry
 
 if TYPE_CHECKING:
@@ -38,7 +39,11 @@ class AgentBroker:
         *,
         config_dir: Optional[str | os.PathLike] = None,
         parallel_search_enabled: bool = False,
+        production_no_host_detection: bool = False,
     ):
+        if type(production_no_host_detection) is not bool:
+            raise ValueError('Production discovery flag must be boolean')
+        self.production_no_host_detection = production_no_host_detection
         self.workspace_registry = workspace_registry
         self.job_manager = job_manager
         self.parallel_search_enabled = parallel_search_enabled
@@ -67,6 +72,8 @@ class AgentBroker:
             Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "agentporter"
         ))
         if self.job_manager is not None and (runtime_config / "development-runtime.yaml").is_file():
+            if self.production_no_host_detection:
+                raise PermissionError('Production cannot initialize development workers')
             from agentporter.agents.development import DevelopmentRuntime
             self.development_runtime = DevelopmentRuntime(
                 runtime_config, job_manager.state_dir, workspace_registry
@@ -83,6 +90,12 @@ class AgentBroker:
 
     def _detection(self, agent: str, adapter: AgentAdapter, *, runtime_status: dict | None = None) -> dict:
         if self.development_runtime is None:
+            if self.production_no_host_detection:
+                # Even --version/config detection is host execution. Production
+                # reports static registration only until a confined tier exists.
+                return {'executable': None, 'is_installed': False, 'cli_version': 'unknown',
+                        'provider': adapter.provider or 'unknown',
+                        'configured_model': 'unknown', 'reasoning_effort': 'unknown'}
             return adapter.detect()
         # Never execute even --version on the host when confinement failed.
         status = self._runtime_status(agent, adapter, None) if runtime_status is None else runtime_status
@@ -271,6 +284,8 @@ class AgentBroker:
             raise PermissionError(runtime_status.get("availability_reason") or "Development confinement unavailable")
         if not detection.get("is_installed"):
             raise RuntimeError(f"Agent '{agent_key}' is not installed or available on host")
+        # Never downgrade to start_raw_job if a backend is missing or errors.
+        # The future backend must enforce this exact policy.
         # The host-user Popen path has no kernel-enforced boundary; CLI flags
         # and prompt policy cannot prevent publication or reading host secrets.
         # Re-enable only via a verified, broker-owned confined launch method.
@@ -280,6 +295,13 @@ class AgentBroker:
             )
         if allow_commit or allow_push:
             raise PermissionError("Delegated commit/push require a separate operator-verified approval; caller booleans are insufficient")
+        if not read_only and getattr(self.workspace_registry, 'workspace_policy', None) is not None:
+            from agentporter.task_authorization import ACTIVE_GRANT
+            grant = ACTIVE_GRANT.get()
+            if (grant is None or grant.claims.get('workspace_root') != ws.path
+                    or grant.claims.get('agent') != agent_key
+                    or 'write' not in grant.claims.get('operations', [])):
+                raise PermissionError('Writable delegation requires verified task authority')
         effective_read_only = read_only or not ws.writable
         if (allow_commit or allow_push) and effective_read_only:
             raise PermissionError("Commit/push cannot be authorized for a read-only dispatch")
@@ -427,25 +449,26 @@ class AgentBroker:
         else:
             launch_env = None
 
-        # Launch only via a backend owned by AgentPorter that provides
-        # kernel-enforced workspace, network and credential confinement.
-        # Never downgrade to start_raw_job if a backend is missing or errors.
-        job_id = self.job_manager.start_confined_agent_job(
-            workspace_id=workspace_id,
-            workspace_path=ws.path,
-            cmd=cmd,
-            agent=agent_key,
-            provider=provider,
-            model=configured_model,
-            requested_model=requested_model,
-            reasoning_level=requested_reasoning or configured_reasoning,
-            cli_version=cli_ver,
-            timeout_seconds=900,
-            # The future backend must enforce this exact policy, not just
-            # trust the caller's textual task packet or agent name.
-            policy=policy,
-            env=launch_env,
-        )
+        qman_shadow = shadow_consult(agent_key, effective_model, self.workspace_registry)
+        try:
+            job_id = self.job_manager.start_confined_agent_job(
+                workspace_id=workspace_id,
+                workspace_path=ws.path,
+                cmd=cmd,
+                agent=agent_key,
+                provider=provider,
+                model=configured_model,
+                requested_model=requested_model,
+                reasoning_level=requested_reasoning or configured_reasoning,
+                cli_version=cli_ver,
+                timeout_seconds=900,
+                policy=policy,
+                env=launch_env,
+            )
+        except Exception:
+            record_shadow(qman_shadow)
+            raise
+        record_shadow(qman_shadow, job_id=job_id, launched=True)
 
         return {
             "worker_cli": runtime,
@@ -462,7 +485,8 @@ class AgentBroker:
             "status": "running",
             "selected_agent": agent_key,
             "alias": alias,
-            "model": configured_model,
+            "model": effective_model,
+            "effective_model": effective_model,
             "thinking_level": requested_reasoning or configured_reasoning,
             "workspace_id": workspace_id,
             "read_only": not policy.workspace_write,
