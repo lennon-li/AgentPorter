@@ -137,3 +137,6 @@ The server verifies signature, audience, freshness, immutable target, permitted 
 **Phase 3:** OS-confined workers and generic execution with host credentials isolated. Only then enable receipt-gated commit/push; demonstrate negative tests under every runtime, including Wei and Argie.
 
 **Phase 4:** integrate a user-approved ChatGPT/voice-to-trusted-confirmation experience. Device prompts or a local companion approval workflow are required until the platform provides verifiable user attestation.
+
+
+Proposed scoped R-metadata HTTPS exception (not deployed): see the reviewed proposal at docs/scoped-cranary-public-https.md; missing private operator approval means fail closed. Generic shell networking remains disabled.

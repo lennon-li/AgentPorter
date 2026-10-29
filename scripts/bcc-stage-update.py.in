@@ -1,0 +1,344 @@
+#!/usr/bin/python3
+"""Pinned update/rollback for BCC isolated staging, never production."""
+from __future__ import annotations
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import secrets
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+import types
+import urllib.request
+import zipfile
+
+SOURCE = Path(@@SOURCE@@)
+PIN = @@PIN@@
+OLD = Path('/opt/agentporter-bcc/releases/bcc-stage-20261027-03')
+NEW = Path('/opt/agentporter-bcc/releases/bcc-stage-20261027-04')
+DATA = Path('/var/lib/agentporter-bcc-worker/staging/bcc-stage-20261027-03')
+UNIT = Path('/etc/systemd/system/agentporter-bcc-worker.service')
+TRUSTED = Path('/usr/local/libexec/agentporter-bcc-stage-update.py')
+JOURNAL = Path('/var/lib/agentporter-bcc-stage-operator/update-20261027-04')
+OLD_HELPER = Path('/usr/local/libexec/agentporter-bcc-stage-install.py')
+OLD_HELPER_SHA = 'b28328682772415c9f001c1f3a44adff218241d35f872a9032919eaaf44de334'
+OLD_UNIT = @@OLD_UNIT@@
+NEW_UNIT = OLD_UNIT.replace(str(OLD) + '/', str(NEW) + '/')
+
+# Runs as UID/GID 997 using isolated distro Python, never writes SQLite as root.
+# The private journal records nonce/intent durably BEFORE installing the guards.
+GUARD_PROGRAM = r'''
+import json,re,sqlite3,sys
+database,action,nonce=sys.argv[1:]
+assert re.fullmatch('[0-9a-f]{32}',nonce)
+assert action in {'install','check','remove'}
+terminal=('completed','failed','cancelled','timed_out','output_limit_exceeded','interrupted','recovered')
+sql={name:"CREATE TRIGGER "+name+" BEFORE "+operation+" ON job_admissions BEGIN SELECT RAISE(ABORT,'BCC staging update "+nonce+"'); END"
+     for name,operation in [('bcc_stage_update_insert','INSERT'),('bcc_stage_update_update','UPDATE')]}
+with sqlite3.connect('file:'+database+'?mode=rw',uri=True,timeout=3) as db:
+    db.execute('BEGIN IMMEDIATE')
+    assert db.execute('SELECT count(*) FROM job_admissions').fetchone()[0]==0,'Unresolved admissions'
+    rows=db.execute('SELECT status FROM jobs').fetchall()
+    assert all(row[0] in terminal for row in rows),'Active or unresolved jobs'
+    actual=dict(db.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name IN (?,?)",tuple(sql)))
+    if action=='install':
+        assert not actual,'Unknown or prior guard already present'
+        for statement in sql.values(): db.execute(statement)
+    else:
+        assert actual==sql,'Guard ownership/SQL mismatch'
+        if action=='remove':
+            for name in sql: db.execute('DROP TRIGGER '+name)
+print(json.dumps({'guard':action,'jobs_terminal':True,'admissions':0}))
+'''
+
+
+def require(condition, message):
+    if not condition:
+        raise PermissionError(message)
+
+
+def root_control(path):
+    for entry in [path, *path.parents]:
+        info = entry.lstat()
+        require(info.st_uid == 0 and not info.st_mode & 0o022 and not stat.S_ISLNK(info.st_mode),
+                'Operator paths require immutable root control')
+
+
+def trusted_installer():
+    require(os.geteuid() == 0 and sys.flags.isolated and Path(__file__) == TRUSTED,
+            'Use the installed root-owned helper with /usr/bin/python3 -I')
+    root_control(TRUSTED)
+    root_control(OLD_HELPER)
+    content = OLD_HELPER.read_bytes()
+    require(hashlib.sha256(content).hexdigest() == OLD_HELPER_SHA, 'Original trusted installer changed')
+    module = types.ModuleType('trusted_bcc_installer')
+    module.__file__ = str(OLD_HELPER)
+    exec(compile(content, str(OLD_HELPER), 'exec'), module.__dict__)
+    return module
+
+
+def package_fingerprint(root):
+    checksum = hashlib.sha256()
+    entries = []
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        dirs[:] = [name for name in dirs if name != '__pycache__']
+        for name in files:
+            path = Path(directory) / name
+            if not name.endswith('.pyc'):
+                require(not path.is_symlink(), 'Unexpected package symlink')
+                entries.append((str(path.relative_to(root)), path))
+    for name, path in sorted(entries):
+        checksum.update(name.encode() + b'\0' + path.read_bytes() + b'\0')
+    return checksum.hexdigest()
+
+
+def verify_release(root, manifest_sha=None):
+    root_control(root)
+    manifest_path = root / 'RELEASE.json'
+    root_control(manifest_path)
+    body = manifest_path.read_bytes()
+    require(len(body) <= 4 * 1024**2, 'Oversized release manifest')
+    if manifest_sha:
+        require(hashlib.sha256(body).hexdigest() == manifest_sha, 'Baseline manifest differs')
+    expected = json.loads(body)['files']
+    actual = {}
+    for path in root.rglob('*'):
+        name = str(path.relative_to(root))
+        if name == 'RELEASE.json': continue
+        info = path.lstat()
+        require(info.st_uid == 0 and (stat.S_ISLNK(info.st_mode) or not info.st_mode & 0o222),
+                'Release is not sealed/root-owned')
+        if path.is_symlink():
+            actual[name] = {'symlink': os.readlink(path)}
+        elif path.is_file():
+            checksum = hashlib.sha256()
+            with path.open('rb') as stream:
+                for block in iter(lambda: stream.read(1024**2), b''): checksum.update(block)
+            actual[name] = {'sha256': checksum.hexdigest()}
+    require(actual == expected, 'Baseline release file set or hashes differ')
+
+
+def write_journal(state):
+    temporary = JOURNAL / '.state-new'
+    with temporary.open('w') as stream:
+        temporary.chmod(0o600)
+        json.dump(state, stream)
+        stream.flush(); os.fsync(stream.fileno())
+    os.replace(temporary, JOURNAL / 'state.json')
+    fd = os.open(JOURNAL, os.O_RDONLY | os.O_DIRECTORY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+
+def guard(action, nonce):
+    result = subprocess.run(['/usr/bin/python3', '-I', '-c', GUARD_PROGRAM,
+                             str(DATA / 'state/jobs.db'), action, nonce],
+                            user=997, group=997, extra_groups=(), cwd='/',
+                            env={'PATH': '/usr/bin:/bin', 'HOME': str(DATA / 'home'), 'LANG': 'C.UTF-8'},
+                            capture_output=True, text=True, timeout=10)
+    require(result.returncode == 0, 'Admission guard refused: jobs/ownership require inspection')
+
+
+def unit_write(content):
+    root_control(UNIT.parent)
+    temporary = UNIT.parent / '.agentporter-bcc-worker.update-new'
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    try:
+        with os.fdopen(fd, 'w', closefd=False) as stream:
+            stream.write(content); stream.flush(); os.fsync(stream.fileno())
+        os.replace(temporary, UNIT)
+    finally:
+        os.close(fd)
+        if temporary.exists(): temporary.unlink()
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        raise PermissionError('Redirected staging verification refused')
+
+
+def verify_live(root, fingerprint):
+    # Existing staging API key remains private and is never printed or changed.
+    key_path = DATA / 'config/secrets.env'
+    fd = os.open(key_path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == 997 and not info.st_mode & 0o077
+                and info.st_size <= 4096, 'Staging API key metadata is unsafe')
+        lines = os.read(fd, 4097).decode().splitlines()
+    finally: os.close(fd)
+    keys = [line.split('=', 1)[1] for line in lines if line.startswith('AGENTPORTER_API_KEY=')]
+    require(len(keys) == 1 and keys[0], 'Staging API key unavailable')
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    request = urllib.request.Request('http://127.0.0.1:8876/api/v1/server/deploy-info',
+                                     headers={'X-AgentPorter-Key': keys[0]})
+    deadline = time.monotonic() + 35
+    while time.monotonic() < deadline:
+        try:
+            with opener.open(request, timeout=2) as response:
+                body = response.read(1024**2 + 1)
+            require(len(body) <= 1024**2, 'Oversized verification response')
+            info = json.loads(body)
+            pid = subprocess.check_output(['/usr/bin/systemctl', 'show', 'agentporter-bcc-worker.service',
+                                            '-p', 'MainPID', '--value'], text=True).strip()
+            require(pid.isdecimal() and int(pid) > 0 and info['pid'] == int(pid), 'Staging PID mismatch')
+            require(info['package_path'] == str(root / 'venv/lib/python3.13/site-packages/agentporter')
+                    and info['loaded_fingerprint'] == info['disk_fingerprint'] == fingerprint
+                    and info['stale'] is False, 'Staging fingerprint/path mismatch')
+            return info['pid']
+        except (OSError, ValueError, KeyError):
+            time.sleep(1)
+    raise RuntimeError('Staging verification failed')
+
+
+def install_wheel(wheel, site):
+    """Only the package/dist-info data, no pip/build hooks or root execution."""
+    allowed = {'agentporter', 'agentporter-0.1.0.dev0.dist-info'}
+    with zipfile.ZipFile(wheel) as archive:
+        names = set()
+        size = 0
+        for entry in archive.infolist():
+            path = PurePosixPath(entry.filename.rstrip('/'))
+            require(path.parts and not path.is_absolute() and '..' not in path.parts
+                    and str(path) == entry.filename.rstrip('/') and path.parts[0] in allowed
+                    and entry.filename not in names
+                    and not stat.S_ISLNK(entry.external_attr >> 16), 'Unsafe wheel member')
+            names.add(entry.filename)
+            size += entry.file_size
+            require(entry.file_size <= 1024**2 and size <= 16 * 1024**2, 'Wheel size limit exceeded')
+        old_metadata = site / 'agentporter-0.1.0.dev0.dist-info/METADATA'
+        require(archive.read('agentporter-0.1.0.dev0.dist-info/METADATA') == old_metadata.read_bytes(),
+                'Dependency/package metadata changed; full release review required')
+        for name in allowed:
+            shutil.rmtree(site / name)
+        for entry in archive.infolist():
+            target = site / entry.filename
+            if entry.is_dir(): target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with target.open('xb') as stream: stream.write(archive.read(entry))
+                target.chmod(0o444)
+
+
+def build_release(installer):
+    if NEW.exists():
+        verify_release(NEW)
+        require(package_fingerprint(NEW / 'venv/lib/python3.13/site-packages/agentporter') == PIN['new_fingerprint'],
+                'Existing new release differs from pin')
+        return
+    with tempfile.TemporaryDirectory(prefix='bcc-stage-update-', dir='/var/tmp') as temporary:
+        wheel = Path(temporary) / 'candidate.whl'
+        installer.copy_source(SOURCE / 'candidate.whl', wheel, 16 * 1024**2, PIN['wheel_sha256'])
+        shutil.copytree(OLD, NEW, symlinks=True)
+        for path in [NEW, *NEW.rglob('*')]:
+            if path.is_dir() and not path.is_symlink(): path.chmod(0o755)
+        site = NEW / 'venv/lib/python3.13/site-packages'
+        install_wheel(wheel, site)
+        require(package_fingerprint(site / 'agentporter') == PIN['new_fingerprint'], 'New package fingerprint mismatch')
+        manifest = json.loads((NEW / 'RELEASE.json').read_text())
+        files = {}
+        for path in NEW.rglob('*'):
+            name = str(path.relative_to(NEW))
+            if name == 'RELEASE.json': continue
+            if path.is_symlink(): files[name] = {'symlink': os.readlink(path)}
+            elif path.is_file():
+                checksum = hashlib.sha256()
+                with path.open('rb') as stream:
+                    for block in iter(lambda: stream.read(1024**2), b''): checksum.update(block)
+                files[name] = {'sha256': checksum.hexdigest()}
+                path.chmod(0o555 if path.stat().st_mode & 0o111 else 0o444)
+        manifest.update(version=NEW.name, previous_version=OLD.name, wheel_sha256=PIN['wheel_sha256'], files=files)
+        (NEW / 'RELEASE.json').write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
+        (NEW / 'RELEASE.json').chmod(0o444)
+        for path in [*NEW.rglob('*'), NEW]:
+            if path.is_dir() and not path.is_symlink(): path.chmod(0o555)
+    verify_release(NEW)
+
+
+def switch(target, fingerprint, content, label):
+    current = UNIT.read_text()
+    require(current in {OLD_UNIT, NEW_UNIT}, 'Unknown staging unit; refuse overwrite')
+    require(not (JOURNAL / 'state.json').exists()
+            or json.loads((JOURNAL / 'state.json').read_text())['phase'] in {'complete', 'rolled_back'},
+            'Unfinished upgrade requires explicit --recover')
+    nonce = secrets.token_hex(16)
+    state = {'phase': 'guard_planned', 'nonce': nonce, 'target': str(target), 'previous_unit': current}
+    write_journal(state)
+    guard('install', nonce)
+    state['phase'] = 'guard_installed'; write_journal(state)
+    try:
+        subprocess.run(['/usr/bin/systemctl', 'stop', 'agentporter-bcc-worker.service'], check=True)
+        guard('check', nonce)
+        unit_write(content)
+        subprocess.run(['/usr/bin/systemctl', 'daemon-reload'], check=True)
+        subprocess.run(['/usr/bin/systemctl', 'start', 'agentporter-bcc-worker.service'], check=True)
+        pid = verify_live(target, fingerprint)
+        guard('remove', nonce)
+        state.update(phase='complete' if label == 'updated' else 'rolled_back', verified_pid=pid)
+        write_journal(state)
+        print('STAGING_' + label.upper() + ': fingerprint/path/PID verified; admissions released.')
+    except BaseException:
+        # Keep guards until a verified known release has been restored.
+        state['phase'] = 'recovery_required'; write_journal(state)
+        raise
+
+
+def recover():
+    state = json.loads((JOURNAL / 'state.json').read_text())
+    require(state['phase'] not in {'complete', 'rolled_back'}, 'No pending recovery')
+    # If the helper died before guard commit, this refuses rather than guessing.
+    guard('check', state['nonce'])
+    current = UNIT.read_text()
+    require(current in {OLD_UNIT, NEW_UNIT}, 'Unknown staging unit; preserve state')
+    subprocess.run(['/usr/bin/systemctl', 'stop', 'agentporter-bcc-worker.service'], check=True)
+    unit_write(OLD_UNIT)
+    subprocess.run(['/usr/bin/systemctl', 'daemon-reload'], check=True)
+    subprocess.run(['/usr/bin/systemctl', 'start', 'agentporter-bcc-worker.service'], check=True)
+    pid = verify_live(OLD, PIN['old_fingerprint'])
+    guard('remove', state['nonce'])
+    state.update(phase='rolled_back', verified_pid=pid); write_journal(state)
+    print('STAGING_RECOVERED: original release verified; admissions released.')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--rehearse-rollback', action='store_true')
+    parser.add_argument('--rollback', action='store_true')
+    parser.add_argument('--recover', action='store_true')
+    args = parser.parse_args()
+    require(sum([args.apply, args.rollback, args.recover]) <= 1, 'Choose one operation')
+    require(not args.rehearse_rollback or args.apply, 'Rehearsal requires --apply')
+    if not any([args.apply, args.rollback, args.recover]):
+        print(json.dumps({'mode': 'plan', 'old': str(OLD), 'new': str(NEW),
+                          'staging_state_and_credentials_preserved': True, 'production_changed': False}))
+        return
+    installer = trusted_installer()
+    require(__import__('socket').gethostname().split('.')[0] == 'pho-rdpdl-23', 'BCC-only update')
+    root_control(UNIT)
+    require(UNIT.read_text() in {OLD_UNIT, NEW_UNIT}, 'Unexpected staging unit')
+    verify_release(OLD, PIN['old_manifest_sha256'])
+    installer.root_directory(JOURNAL.parent)
+    JOURNAL.mkdir(mode=0o700, exist_ok=True)
+    root_control(JOURNAL)
+    if args.recover:
+        recover(); return
+    if args.rollback:
+        switch(OLD, PIN['old_fingerprint'], OLD_UNIT, 'rolled_back'); return
+    require(UNIT.read_text() == OLD_UNIT, 'Expected original staging release before apply')
+    verify_live(OLD, PIN['old_fingerprint'])
+    build_release(installer)
+    switch(NEW, PIN['new_fingerprint'], NEW_UNIT, 'updated')
+    if args.rehearse_rollback:
+        switch(OLD, PIN['old_fingerprint'], OLD_UNIT, 'rolled_back')
+        switch(NEW, PIN['new_fingerprint'], NEW_UNIT, 'updated')
+        print('ROLLBACK_REHEARSAL_PASSED: new -> original -> new; production untouched.')
+
+
+if __name__ == '__main__':
+    main()

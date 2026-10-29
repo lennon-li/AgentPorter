@@ -27,17 +27,23 @@ def git_show(workspace_id: str, req: GitShowRequest, request: Request):
 
 @router.post("/fetch", response_model=str, responses={403: {"description": "Scoped network Git transport and owner approval unavailable"}})
 def git_fetch(workspace_id: str, req: GitFetchRequest, request: Request):
-    return request.app.state.tools["git_fetch"](workspace_id=workspace_id, remote=req.remote)
+    try:
+        return request.app.state.tools["git_fetch"](
+            workspace_id=workspace_id, remote=req.remote, branch=req.branch,
+            approval_receipt=req.approval_receipt, prepare_only=req.prepare_only)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 @router.post("/pull", response_model=str, responses={403: {"description": "Scoped network Git transport and owner approval unavailable"}})
 def git_pull(workspace_id: str, req: GitPullRequest, request: Request):
     return request.app.state.tools["git_pull"](workspace_id=workspace_id, remote=req.remote, branch=req.branch)
 
-@router.post("/push", response_model=str, responses={403: {"description": "Operator approval required; publication locked"}})
+@router.post("/push", response_model=str, responses={403: {"description": "Exact independent owner approval and protected remote policy required"}})
 def git_push(workspace_id: str, req: GitPushRequest, request: Request):
     try:
         return request.app.state.tools["git_push"](
-            workspace_id=workspace_id, remote=req.remote, branch=req.branch, set_upstream=req.set_upstream
+            workspace_id=workspace_id, remote=req.remote, branch=req.branch, set_upstream=req.set_upstream,
+            approval_receipt=req.approval_receipt, prepare_only=req.prepare_only
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -46,7 +52,9 @@ def git_push(workspace_id: str, req: GitPushRequest, request: Request):
 def git_commit(workspace_id: str, req: GitCommitRequest, request: Request):
     try:
         return request.app.state.tools["git_commit"](
-            workspace_id=workspace_id, message=req.message, all_files=req.all_files
+            workspace_id=workspace_id, message=req.message, all_files=req.all_files,
+            approval_receipt=req.approval_receipt, approval_timestamp=req.approval_timestamp,
+            prepare_only=req.prepare_only
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc

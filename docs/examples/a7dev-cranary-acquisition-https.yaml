@@ -1,0 +1,18 @@
+# Proposal only. Independent owner installation and reviewed code required.
+version: 2
+workspaces:
+  cranary:
+    hosts:
+      - api.github.com
+      - cran.r-project.org
+      - cran-archive.r-project.org
+      - bioconductor.org
+      - packagemanager.posit.co
+    methods: [GET, HEAD]
+    max_response_bytes: 262144
+    timeout_seconds: 15
+    downloads:
+      hosts: [cran.r-project.org, packagemanager.posit.co]
+      directory: data-raw/cran-history/reports/2026-10-21-authorized-acquisition/downloads
+      max_response_bytes: 16777216
+      timeout_seconds: 60

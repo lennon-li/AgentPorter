@@ -1,12 +1,17 @@
+from agentporter.tools.jobs import TERMINAL_JOB_STATUSES
 from fastapi import APIRouter, Request
 from typing import Dict, Any
 from agentporter.rest.schemas import (
-    ExecRunRequest, ExecStartRequest, JobOutputRequest,
+    ExecRunRequest, ExecStartRequest, JobOutputRequest, HTTPSDownloadRequest,
     ExecResponse, JobStartResponse, JobStatusResponse, JobOutputResponse, JobResultResponse, GenericActionResponse
 )
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/exec", tags=["Exec"])
 jobs_router = APIRouter(prefix="/jobs", tags=["Jobs"])
+
+@router.post("/https-download", include_in_schema=False)
+def https_download(workspace_id: str, req: HTTPSDownloadRequest, request: Request):
+    return request.app.state.tools["https_download"](workspace_id=workspace_id, **req.model_dump())
 
 @router.post("/run", response_model=ExecResponse)
 def exec_run(workspace_id: str, req: ExecRunRequest, request: Request):
@@ -30,7 +35,7 @@ def job_output(job_id: str, req: JobOutputRequest, request: Request):
     if "output" not in res or not res["output"]:
         res["output"] = res.get("stdout", "") or res.get("stderr", "")
     if "eof" not in res:
-        res["eof"] = res.get("status") in ("completed", "failed", "timed_out", "cancelled")
+        res["eof"] = res.get("status") in TERMINAL_JOB_STATUSES
     return res
 
 @jobs_router.post("/{job_id}/result", response_model=JobResultResponse)

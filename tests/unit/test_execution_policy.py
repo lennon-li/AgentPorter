@@ -182,14 +182,15 @@ def test_command_guard_hook_exit_codes():
     assert run("git status") == 0
 
 
-def test_commit_and_push_require_explicit_confirmation():
+def test_writable_commits_are_routine_and_push_remains_denied():
     default = ExecutionPolicy.for_workspace(writable=True)
-    assert {"git commit", "git push"} <= set(default.denied_commands())
+    assert "git commit" not in default.denied_commands()
+    assert "git push" in default.denied_commands()
 
     confirmed = ExecutionPolicy.for_workspace(writable=True, allow_commit=True, allow_push=True)
     denied = confirmed.denied_commands()
-    assert "git commit" not in denied and "git push" not in denied
-    assert find_denied("git push origin main", denied) is None
+    assert "git commit" not in denied and "git push" in denied
+    assert find_denied("git push origin main", denied) == "git push"
     assert find_denied("git push --force origin main", denied) == "git push --force"
     assert find_denied("git remote add x url", denied) == "git remote"
 

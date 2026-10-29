@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>BCC owner approval</title>
+<link rel="stylesheet" href="style.css">
+<main>
+  <p class="eyebrow">AgentPorter · owner device</p>
+  <h1>Approve a BCC Git action</h1>
+  <p>The signing key stays on this device. Paste a proposal from ChatGPT, review its exact details, then sign it yourself.</p>
+  <section aria-labelledby="device-title">
+    <h2 id="device-title">Your device key</h2>
+    <p id="key-status" role="status">Checking this device…</p>
+    <button id="create-key" disabled>Set up this device</button>
+    <label for="public-key">Public verification key for the BCC owner installer</label>
+    <textarea id="public-key" readonly rows="2" spellcheck="false"></textarea>
+    <p class="hint">Register this public key once through the owner installation procedure. This page cannot export the private key.</p>
+  </section>
+  <section aria-labelledby="proposal-title">
+    <h2 id="proposal-title">Commit or push proposal</h2>
+    <label for="proposal">Paste the complete proposal, including its request digest</label>
+    <textarea id="proposal" rows="8" spellcheck="false" autocomplete="off"></textarea>
+    <button id="review">Review proposal</button>
+    <p id="status" role="status" aria-live="polite"></p>
+    <dl id="details"></dl>
+    <label class="acknowledge"><input id="acknowledge" type="checkbox" disabled> I reviewed every field, including the exact commit and any remote publication target.</label>
+    <button id="approve" disabled>Sign this exact action</button>
+  </section>
+  <section aria-labelledby="receipt-title">
+    <h2 id="receipt-title">Signed receipt</h2>
+    <p>Copy this receipt back to ChatGPT for the exact reviewed action. For a commit, include its exact timestamp. The receipt expires after five minutes and can be used only once.</p>
+    <textarea id="receipt" rows="6" readonly spellcheck="false"></textarea>
+    <button id="copy" disabled>Copy receipt</button>
+  </section>
+  <p class="hint">Use only the owner’s independently hosted approval page. Clearing this browser’s site data loses this device key and requires owner enrollment of a new public key.</p>
+</main>
+<script type="module" src="app.mjs"></script>
+</html>

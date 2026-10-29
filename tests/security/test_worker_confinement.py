@@ -83,7 +83,7 @@ def test_generic_writable_workspace_cannot_change_git_control(tmp_path):
         writable=True,
     )
     assert result["exit_code"] != 0
-    assert (ws / "edited.txt").read_text() == "ok"
+    assert not (ws / "edited.txt").exists()
     assert (ws / ".git" / "HEAD").read_text() == "ref: refs/heads/main\n"
 
 def test_broker_must_use_confined_launcher_not_raw_job(tmp_path):

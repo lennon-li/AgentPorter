@@ -1,0 +1,475 @@
+{
+  "release": "bcc-stage-20261029-19",
+  "files": [
+    {
+      "path": "__init__.py",
+      "sha256": "4917c29d544a1a301b7b7103a26ddff456798ff996d4635a60ea39e0211e93a3",
+      "working_source_matches": true
+    },
+    {
+      "path": "action_policy.py",
+      "sha256": "cd14b98eede2ba3f2c70ed9448ca392e39eb25233a5f2dca9ec86d1a47af8920",
+      "working_source_matches": true
+    },
+    {
+      "path": "admission.py",
+      "sha256": "38cc04021a980ab97953ff244fafc161773fa762a1eaad8604fb552ea93be9bf",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/__init__.py",
+      "sha256": "00cf6c06ecff75e246c002b917959473567369804dd3f0c68285745c9bdc4865",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/adapters/__init__.py",
+      "sha256": "34587c428cff65817922734af562107ca129cd733554ebdd5ee2a4cacd1f38f1",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/adapters/agy.py",
+      "sha256": "d63b583f8f7d76a55dce435f76229adac4d4654e29f3ce9ea692493adb38263e",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/adapters/base.py",
+      "sha256": "3be20d19d7b4aef37fdb6494d7e243e373fdc3fb70747cc32ae4d39d5b197750",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/adapters/claude.py",
+      "sha256": "c2f62629add021af045d8c7b9fe3d99570cb3f4994005f79b08d563df45f414d",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/adapters/codex.py",
+      "sha256": "59c280aee2536299aea9a86a487e439208db92a2fa1a270d6a625679be0e28d8",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/adapters/codex_identity.py",
+      "sha256": "d0d1c54fb2ecbdca9d31dbc8595e8f21d9e1fba64c0b35b59f3807d3bc95ff59",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/adapters/copilot.py",
+      "sha256": "5428b8c59e314d9c25665a6c944ec8be58a9b27e868197f39e32dd956f300cd8",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/adapters/opencode.py",
+      "sha256": "82ba74309a6a82fda7a67b0d410e90e3097bb90a6aae75cdf9ef6bf17013857e",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/broker.py",
+      "sha256": "8f2f274676ead3c395136c15ee24a2ea8b095ca115513e7db81d5ad84aa4c280",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/command_guard.py",
+      "sha256": "26672e1702234a4483f17e26b31c087f4d49199bcde8b0417caf673dafab3501",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/development.py",
+      "sha256": "10b08fe3126914305573b82843d1e4dcbe8f352dd52d845ab5fa9d9b4e758446",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/development_egress.py",
+      "sha256": "44bde73b546705b79778b4932e21e941afd6280a37b7dc98e2c23c1ec1907f01",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/isolated_codex.py",
+      "sha256": "6d32be6c90ba94fa99407e11f70951564c2fac12da15fac3a4c3179c9fc80978",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/parallel_search.py",
+      "sha256": "6f6a60264f008fd829d60dba0f38b6a85902d85ec3118f97a413caf28f1e3f5c",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/policy.py",
+      "sha256": "6080d17ee6ba12cc1bfdd3358c98e9477c3d32973a93d511e973507798ba25ea",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/production_relay.py",
+      "sha256": "8397533b202402dc23bfaabdbc7f024676f3a192ce5cc4ec0f6b78d560f32d2f",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/provider_egress.py",
+      "sha256": "8bf8068c232c9eae1fb88fc4da397d243e0f421f8a477022bbc2f90de83db44a",
+      "working_source_matches": true
+    },
+    {
+      "path": "agents/roster.py",
+      "sha256": "1f1ff3d29764ede7c23bff28961b3dbefb6b10f80ec9454512c0898dc85d36a4",
+      "working_source_matches": true
+    },
+    {
+      "path": "auth.py",
+      "sha256": "0738d22dd83bb9177f2523f385c5a4db66ab69b7035973e80bdb9707e900e790",
+      "working_source_matches": true
+    },
+    {
+      "path": "cli.py",
+      "sha256": "bd52411a0d389e8849ea0a94f0330a67b1e18a696c2c4660dca0a61b84414500",
+      "working_source_matches": true
+    },
+    {
+      "path": "client_policy.py",
+      "sha256": "3633945c93c14fc9e25285501fc4c327fa5985e41551ac2fc086be9e1196e4f7",
+      "working_source_matches": true
+    },
+    {
+      "path": "config.py",
+      "sha256": "5046ebc2497dc66044f00cf66ca33110ef53b671692dbce2439c6f5ae0f0e683",
+      "working_source_matches": true
+    },
+    {
+      "path": "deployinfo.py",
+      "sha256": "f543a00b592f5630dd7cf3a6a4b4a42bf961cbced7c79915f13bd8df8fb1401e",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_admission.py",
+      "sha256": "bde983c46826babf1815e8648ea395f95be9f749a9f271f47c277b8aea062fd9",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_approval_state.py",
+      "sha256": "aa9fc456d0627000344cf0a1c9cbe66969756226d59047fd427ba0eec0f80d1d",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_approvals.py",
+      "sha256": "511b1766a59a7ebfe89748a1a1ce52782c1a54394c2215bb077c35a9347e82cc",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_commit_recovery.py",
+      "sha256": "6f4e8341b43db47d7d334ef16082e7859cf4a6fc92430fbb3516a798a27d75ed",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_commits.py",
+      "sha256": "44b1e4f7b487f3790871374bfc2266b0106343a4469a1838fe32d768acd07315",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_fetch_recovery.py",
+      "sha256": "bb09e2fe462e9e13589f642dce68b7666efe3e792dd869c7133d2bf88e6e4a78",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_fetches.py",
+      "sha256": "f784fd22ac0a6eacbcbc462550044ab1f37e58167e18ce36e62420b45bafa18e",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_policy.py",
+      "sha256": "2e97dbe0903ced1433cab1c80e914353f70663b37552e3e02bf01240c8b72fc9",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_push_recovery.py",
+      "sha256": "6ff29f0204599143be054a22643fc5fbabbddfbf0d18f1f6f12a66b8276c5c45",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_pushes.py",
+      "sha256": "3697d9b3a3e96f8b4c72ce2ce7d41032d515786276256ee8d77b729108dd8d6c",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_remote_policy.py",
+      "sha256": "cead91653f348dfe4cf7f430c620678a724a2afa195c27018a6a4f6f42c9b5ae",
+      "working_source_matches": true
+    },
+    {
+      "path": "git_smart_http.py",
+      "sha256": "ad4a6a353e5b6feeb9eb52f5b5c26bc9b6618bc4b3857722d112413451462220",
+      "working_source_matches": true
+    },
+    {
+      "path": "https_download.py",
+      "sha256": "158d8a0ae11370cb3083eb2201612203589cdc3d1bd408d8720d369385258447",
+      "working_source_matches": true
+    },
+    {
+      "path": "middleware.py",
+      "sha256": "6dc50ed91345df5893ef2b0417bb48714829622481a3f5965bc1e2b78902f675",
+      "working_source_matches": true
+    },
+    {
+      "path": "models.py",
+      "sha256": "499f656401146aaa6a27ee243817beae70b35853d009539d91f850f85946c9ed",
+      "working_source_matches": true
+    },
+    {
+      "path": "process_handles.py",
+      "sha256": "3eb156dac56e6f5b383e43e1690a3a50e190d912e7de087dcbf4336f5ddb810a",
+      "working_source_matches": true
+    },
+    {
+      "path": "provenance.py",
+      "sha256": "df2b39cb9954992b80c5adf1059b643b29c30aa628eb9e8cdb4ebabe2bfaa712",
+      "working_source_matches": true
+    },
+    {
+      "path": "resource_runner.py",
+      "sha256": "06dd43faef49f9eda61c0cd5ffe96f6fecaa7771c1bf79c9953f380ae3f26c16",
+      "working_source_matches": true
+    },
+    {
+      "path": "resource_supervisor.py",
+      "sha256": "50719098adf0e5ee52e5275ed79e9c358d97aec8bdff8fc19ac7271f691c461e",
+      "working_source_matches": true
+    },
+    {
+      "path": "resources.py",
+      "sha256": "50363934c19de647968a7f32f636af266a5dc1ccef03b4754bfaa081e0d605db",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/api.py",
+      "sha256": "4e97042f501fc8a8afb41b283ada8517aa11a66e977272ac12b38fd929e53dc8",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/routers/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/routers/agents.py",
+      "sha256": "f690f0c788dff92737f41c7623849f7d96d98695dfa41361a1ef3ffca681ecea",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/routers/artifacts.py",
+      "sha256": "b6abe454c2408efd89a1700f50512da81149030c86800538293d7376a9ba8618",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/routers/exec.py",
+      "sha256": "b87f7538e6b77b19c563c12e65eaac199414170906bd87234f3f3967a11941d6",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/routers/files.py",
+      "sha256": "a07b489ab8a1581284d11533ff5b69a96d3d2a140ff8784d0d5c36c8fd42e0ff",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/routers/git.py",
+      "sha256": "1dd277f74f79cc19dc8c0561e6750459094357e313cd1867b1f907483af25220",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/routers/scinet.py",
+      "sha256": "806b303dab8a441477e7bb568b79cc680483de118f0e1cc6389984f21cf7f9cb",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/routers/venkata.py",
+      "sha256": "59fe9fcbbfe4221704c9a0f49b62b3d18c751b15e13893ee55ef232e9ca4f264",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/routers/workspaces.py",
+      "sha256": "4e500269ac926fe77411e96455be8d5efa9c2027fd6753d632ab4abe6c59279e",
+      "working_source_matches": true
+    },
+    {
+      "path": "rest/schemas.py",
+      "sha256": "9dd819e6e5dbb888d9c1905be614f9083f231c81a0c1fb90d0779a0bfd1eb754",
+      "working_source_matches": true
+    },
+    {
+      "path": "sandbox/__init__.py",
+      "sha256": "9bb1c65681e2bfd46cd2be870b91a5be3d356add5a6dccf7816d18c652fb1570",
+      "working_source_matches": true
+    },
+    {
+      "path": "sandbox/base.py",
+      "sha256": "8f5558c87d51b2d81f265722cb1fc88c41a4c184901cba89be01d2fc9c77829f",
+      "working_source_matches": true
+    },
+    {
+      "path": "sandbox/bubblewrap.py",
+      "sha256": "d550bfaf7f6d43af95a368a77480212c86e60f54e567e7333530c9a2d08f7b87",
+      "working_source_matches": true
+    },
+    {
+      "path": "sandbox/workspace_delta.py",
+      "sha256": "8c3cb174a3937e207b07814dd104f984ee119271253ee4b3f9a4b02b4ba732d0",
+      "working_source_matches": true
+    },
+    {
+      "path": "sandbox/workspace_git.py",
+      "sha256": "6d5e698564a0e003d6e7a187c7fe4dd6509b64a20729475cc7acebd5c8e63050",
+      "working_source_matches": true
+    },
+    {
+      "path": "sandbox/workspace_projections.py",
+      "sha256": "1c5bcebb81c894f90692f2212b4a379c2303395c9c39d50d1d183ff4e79ed6be",
+      "working_source_matches": true
+    },
+    {
+      "path": "sandbox/workspace_recovery.py",
+      "sha256": "ccc131ceecde5a7e76675e9267408a142780c4a153ca61a82499eb1fc504b154",
+      "working_source_matches": true
+    },
+    {
+      "path": "sandbox/workspace_transactions.py",
+      "sha256": "4548c2b0d8d133674bf04c3f9790f6209cf26362263bb4229af3f4ef63c23e24",
+      "working_source_matches": true
+    },
+    {
+      "path": "scoped_https.py",
+      "sha256": "b7a0efa165796231077ee28c186c8d86a51cf201dac6548eb655b00e387aea7b",
+      "working_source_matches": true
+    },
+    {
+      "path": "scoped_https_worker.py",
+      "sha256": "d02745df9e18f0e412c12a4b6b85290aefa98e33f62fadcb70d01decca7886bb",
+      "working_source_matches": true
+    },
+    {
+      "path": "server.py",
+      "sha256": "75193edd9fff2a00678d3edb1d8b5a8d0b835a02277375ecd84c6f7f473a4119",
+      "working_source_matches": true
+    },
+    {
+      "path": "tooling.py",
+      "sha256": "fa3d878ed5ce974a9baf444832e83d8f2ec6c4d8f389c8201a560c7b960b648d",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/__init__.py",
+      "sha256": "c1adf727e5d909dd16399b8ce42f04f9affa6bca0a65e5a2053915ccf0970e0c",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/agents.py",
+      "sha256": "430940d1f3e459f489122f80763c979b698e9c4a84cfe45cc55f4208d7fceb9c",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/artifacts.py",
+      "sha256": "337a2d0d8d65f018759b7b984af4db747eb860b685999d7b4dcecd69a856bd96",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/execution.py",
+      "sha256": "eb2f04f507fb62f9264e6916d0f9298d1873b8e67f119767509e17337cd89845",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/files.py",
+      "sha256": "9d5ca9d89fb5c50d2b67f732d5686401b875429e6118b6a3e65708655024a3cc",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/git.py",
+      "sha256": "191c13f53a4b4beb0ec2d9395d86d4231c6126128a12e2bf5a392530d27ea316",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/jobs.py",
+      "sha256": "4f6ae50b921a4f479c25233ee95cb4824fa48eb23aad636a9a98364cbe1d2c23",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/local_http.py",
+      "sha256": "2cecb62522009d79dac8152b54c87b511563af0027f7fcea2dc5cf7740c25bf0",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/scinet.py",
+      "sha256": "6c22449c961596f3c52f5724be830a37a54b1b29ec6f5ba49701da924c6c1b29",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/scinet_broker.py",
+      "sha256": "25bd5c82d1e872c40cbebce9e7e38374ea16ffe61a5cd70f037d0f75d9925696",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/scinet_inference.py",
+      "sha256": "9de7d43c2133dd6f7ffa7a5630ab5cfc1b16b79ea32f5aa5d848df3b420a2557",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/scinet_training.py",
+      "sha256": "9da179a27a76158e0756bd8b219e96bb2b5f712b05e0861e52ef586dcdd142ba",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/system.py",
+      "sha256": "de9d126c8db7635894e91cdef43d8a9402cd9fb17196765ff369ced5fc44af8d",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/venkata.py",
+      "sha256": "cfa43e642db307deafb7d3df81e891505863fb1ec01b08836fcefea552221f2d",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/venkata_transfer.py",
+      "sha256": "27bf8cc1d77523733b9b1ceeb1823db20c959b9d5ec7d771a7b72ab55103a096",
+      "working_source_matches": true
+    },
+    {
+      "path": "tools/venkata_transfer_protocol.py",
+      "sha256": "c2f52fc83826c8f160a2d3e7470f108a90a1f12e8b58f262fd89d630705cee7c",
+      "working_source_matches": true
+    },
+    {
+      "path": "workspaces/__init__.py",
+      "sha256": "7d9ac1ccbde5ccc3e317bcb2d563480619ae19a7c3c68d8f6737af1fd75df5dd",
+      "working_source_matches": true
+    },
+    {
+      "path": "workspaces/bounded.py",
+      "sha256": "cc9f9b5188376328a33e0a2c7d9a83e47c37f3c0ef5aa59932c2bb5a4e49448f",
+      "working_source_matches": true
+    },
+    {
+      "path": "workspaces/leases.py",
+      "sha256": "219b5e7e0226a9fb4fb14a1a6062674b32e06bed3effb881dab8e1f04911da43",
+      "working_source_matches": true
+    },
+    {
+      "path": "workspaces/patching.py",
+      "sha256": "2d75868e573ae4c5f588ad9be6e3a3ba86d9f91e8aa96f05a3b91845ea33e373",
+      "working_source_matches": true
+    },
+    {
+      "path": "workspaces/paths.py",
+      "sha256": "2873c80a22f12c0afc4f04b303ae0a186f0e71d0cad0118e53a312fc5fb7080a",
+      "working_source_matches": true
+    },
+    {
+      "path": "workspaces/registry.py",
+      "sha256": "f23602cf57005dbd13216593c17ec8a74fad2e74a48ee61e860820cfb19b909f",
+      "working_source_matches": true
+    },
+    {
+      "path": "workspaces/shared_access.py",
+      "sha256": "7d03176b082b394dc5dd3baba07c56d72e2430d7bd7a27f782cafc2a7db51319",
+      "working_source_matches": true
+    }
+  ]
+}

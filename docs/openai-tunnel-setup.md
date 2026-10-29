@@ -1,8 +1,58 @@
-# ChatGPT access to AgentPorter on knowhere
+# Connect AgentPorter to ChatGPT with a Secure MCP Tunnel
 
-Use an [OpenAI Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) to connect a private AgentPorter MCP endpoint to a ChatGPT custom MCP plugin. AgentPorter stays bound to `127.0.0.1`; the tunnel client makes outbound HTTPS requests to OpenAI. ChatGPT plugin access and Platform tunnel permissions are separate.
+An [OpenAI Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) connects a private AgentPorter MCP server to a ChatGPT workspace. Run `tunnel-client` on a host that can reach the server; the client connects outbound to OpenAI. The existing AgentPorter server and any existing tunnel are not changed by creating an OpenAI tunnel.
 
-## Knowhere status and scope
+## Before you start
+
+- Choose the host, AgentPorter endpoint and workspaces intended for ChatGPT. Verify the running release and its effective permissions. A tunnel carries the server's actual capabilities; it does not make a writable or dispatch-enabled server read-only. A dedicated instance with its own key and explicitly scoped workspaces is a useful option.
+- The endpoint must be reachable from the client host, for example `http://127.0.0.1:8776/mcp`. The port and instance are examples; use the actual reviewed endpoint on your host. Do not expose a staging instance as production.
+- The client needs outbound HTTPS access to `api.openai.com:443` and connectivity to the MCP endpoint. No inbound Internet port is required. See OpenAI's guide for mTLS and network details.
+- Select the intended OpenAI Platform organization and ChatGPT workspace. Creating a tunnel requires organization-level **Tunnels Read** and **Manage**. The restricted runtime key and ChatGPT app operator require **Tunnels Read** and **Use**. The tunnel must be associated with the target ChatGPT workspace, not only the Platform organization.
+
+## Create the OpenAI tunnel
+
+1. Open [Platform tunnel settings](https://platform.openai.com/settings/organization/tunnels), select the intended organization, and create or reuse a tunnel associated with the intended ChatGPT workspace. Record its `tunnel_id`; it is an identifier, not a secret.
+2. Create or use a restricted Platform API key with the required tunnel permissions. Keep the key private and enter it locally; do not put it in chat, shell arguments, logs or repository files. Follow your organization's secret-storage practice for persistent operation.
+3. From the same Platform settings page, use the link to the [latest tunnel-client release](https://github.com/openai/tunnel-client/releases/latest). Install the appropriate verified binary on the client host and check `tunnel-client help quickstart`. Commands and available flags can vary by version.
+
+## Configure and start the client
+
+The following is an interactive example for an HTTP MCP server using the v0.0.18 profile syntax. Substitute the tunnel ID and endpoint selected above, and verify the installed client's help first. The `read` commands prompt without displaying the keys; they do not store them in shell history.
+
+```bash
+read -r -s -p 'OpenAI restricted tunnel API key: ' CONTROL_PLANE_API_KEY; printf '\n'
+read -r -s -p 'AgentPorter API key for this instance: ' AGENTPORTER_API_KEY; printf '\n'
+export CONTROL_PLANE_API_KEY AGENTPORTER_API_KEY
+export MCP_EXTRA_HEADERS='X-AgentPorter-Key: env:AGENTPORTER_API_KEY'
+export MCP_DISCOVERY_EXTRA_HEADERS='X-AgentPorter-Key: env:AGENTPORTER_API_KEY'
+
+tunnel-client init \
+  --sample sample_mcp_remote_no_auth \
+  --profile agentporter \
+  --tunnel-id '<tunnel_id>' \
+  --mcp-server-url 'http://127.0.0.1:8776/mcp' \
+  --control-plane-api-key-ref env:CONTROL_PLANE_API_KEY
+
+tunnel-client doctor --profile agentporter --explain
+tunnel-client run --profile agentporter
+```
+
+The AgentPorter key and the OpenAI runtime key have different purposes. The example injects the AgentPorter key into both discovery and MCP requests using environment references, as supported by the tested v0.0.18 client. Check your client's help and verify discovery and authenticated calls for other versions. Keep the client running during ChatGPT discovery and use. After stopping it, clear the four variables with `unset CONTROL_PLANE_API_KEY AGENTPORTER_API_KEY MCP_EXTRA_HEADERS MCP_DISCOVERY_EXTRA_HEADERS`.
+
+For unattended operation, configure the host's service manager with an appropriately protected secret source and the same environment references; do not put literal keys in the service command. Verify health, readiness and active polling using the client's local `/healthz`, `/readyz` or `/ui` endpoints. The example [systemd user unit](../examples/agentporter-openai-tunnel.service) is a knowhere-specific reference, not a portable installer.
+
+## Connect ChatGPT and verify
+
+1. Open [ChatGPT Plugins](https://chatgpt.com/plugins), select the plus button, choose **Add custom MCP server**, and choose **Tunnel** under Connection.
+2. Select the tunnel or enter its ID, configure the appropriate MCP authentication, review the warning, and create the plugin. If the client injects the AgentPorter key as above, the local MCP endpoint receives that key through the client.
+3. Refresh tool discovery and make a safe read-only call such as `list_workspaces` or `get_capabilities`. Check that the returned host and workspace scope are the intended ones. Consider setup verified only after a call succeeds through ChatGPT.
+
+If the tunnel is absent, check its ChatGPT workspace association and the operator's organization-level **Tunnels Use** permission. If discovery fails, confirm the client is running and retry `tunnel-client doctor --profile agentporter --explain`. See the [official troubleshooting guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels#troubleshooting) for current guidance.
+
+## Host-specific example: knowhere
+
+The following is the existing knowhere deployment procedure. Its paths, installer and service names are specific to that host and are not prerequisites on other machines.
+
 
 Before first use from ChatGPT, install a reviewed immutable release following [deployment.md](deployment.md) and verify `agentporter deploy-check` against the live systemd PID and package fingerprint. On knowhere, `agentporter.service` now runs an immutable release on `127.0.0.1:8765`; the dedicated ChatGPT service listens on `127.0.0.1:8776`. The [knowhere service candidate](../examples/agentporter-knowhere.service) preserves the existing host tool path without the editable virtual environment. Back up and compare the installed unit before replacing it on another host. The owner performs the final activation from a terminal, as required by the deployment security decision.
 
@@ -28,56 +78,3 @@ The [dedicated service](../examples/agentporter-chatgpt.service), [server config
 Check `systemctl --user is-active agentporter-chatgpt.service`, a healthy `http://127.0.0.1:8776/health`, and the authenticated `/api/v1/server/deploy-info` result before connecting the tunnel. Its PID, path, and fingerprint must match the dedicated unit and active `RELEASE.json`.
 
 Current source deliberately blocks worker delegation and remote Git publication. A ChatGPT connection does not change those limits.
-
-## OpenAI prerequisites
-
-1. In [Platform tunnel settings](https://platform.openai.com/settings/organization/tunnels), create or reuse a tunnel associated with the intended ChatGPT workspace. The creator needs Tunnels Read + Manage; the runtime key and plugin operator need Tunnels Read + Use.
-2. Create a restricted runtime key with Tunnels Read + Use. Store it in a private local file; never put it in a command argument, repository, or transcript.
-3. Knowhere already has the checksum-verified `tunnel-client` v0.0.18 in `~/.local/bin/`. Run `tunnel-client help quickstart` and use the installed binary's help for command syntax. For future upgrades, use the release linked in the [official guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
-
-Knowhere's prepared client was v0.0.18. These commands match that version; recheck help after upgrading.
-
-## Local profile and authentication
-
-Point the profile at the dedicated ChatGPT-facing AgentPorter loopback endpoint. `8776` is an example port; check that it is free before using it. The `tunnel_id` is an identifier, not the runtime key.
-
-```bash
-tunnel-client init \
-  --sample sample_mcp_remote_no_auth \
-  --profile knowhere-agentporter \
-  --tunnel-id '<tunnel_id>' \
-  --mcp-server-url http://127.0.0.1:8776/mcp \
-  --control-plane-api-key-ref env:CONTROL_PLANE_API_KEY
-```
-
-Create `~/.config/agentporter/openai-tunnel.env` with mode `0600` from your terminal. Put only these two values in it; copy the AgentPorter key from `~/.config/agentporter-chatgpt/secrets.env` after the installer has started that service:
-
-```text
-CONTROL_PLANE_API_KEY=<restricted OpenAI runtime key>
-AGENTPORTER_API_KEY=<dedicated agentporter-chatgpt key>
-```
-
-AgentPorter accepts `X-AgentPorter-Key`; `tunnel-client` v0.0.18 can inject that header for both MCP discovery and calls via `env:` references. Do not reuse the existing `~/.config/agentporter/secrets.env`, which also contains an unrelated M3 key. Do not paste either key into chat, commands, logs, or the repository.
-
-The [example user unit](../examples/agentporter-openai-tunnel.service) loads that private file and injects the header. The installer copies it without enabling it. Its `ExecStart` expects `tunnel-client` at `~/.local/bin/tunnel-client`.
-
-```bash
-set -a
-. ~/.config/agentporter/openai-tunnel.env
-set +a
-export MCP_EXTRA_HEADERS='X-AgentPorter-Key: env:AGENTPORTER_API_KEY'
-export MCP_DISCOVERY_EXTRA_HEADERS='X-AgentPorter-Key: env:AGENTPORTER_API_KEY'
-tunnel-client doctor --profile knowhere-agentporter --explain
-unset CONTROL_PLANE_API_KEY AGENTPORTER_API_KEY MCP_EXTRA_HEADERS MCP_DISCOVERY_EXTRA_HEADERS
-systemctl --user daemon-reload
-systemctl --user enable --now agentporter-openai-tunnel.service
-systemctl --user is-active agentporter-openai-tunnel.service
-```
-
-The client exposes loopback `/healthz`, `/readyz`, and `/ui`. Check that it is ready and polling before configuring ChatGPT. Keep the tunnel service running for discovery and tool calls. The tunnel must reach `api.openai.com:443` and the local AgentPorter endpoint; no inbound internet port is needed.
-
-## Connect ChatGPT
-
-In ChatGPT on the web, open **Plugins → Add custom MCP server**, choose **Tunnel**, select the associated tunnel, and configure the plugin's authentication. With the local key injected by `tunnel-client`, the plugin itself uses no authentication to the tunnel endpoint; the tunnel still uses its restricted runtime key. Refresh the discovered tools and make a read-only `list_workspaces` or `get_capabilities` call. Only report access as working after that call succeeds through ChatGPT.
-
-ChatGPT custom MCP plugin availability depends on the target workspace's permissions. The official [custom MCP server guide](https://developers.openai.com/api/docs/guides/custom-mcp-server) describes the current UI and supported authentication modes.

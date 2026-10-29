@@ -56,7 +56,7 @@ class JobStartResponse(BaseModel):
 
 class JobStatusResponse(BaseModel):
     job_id: str = Field(description="Job ID.")
-    status: str = Field(description="Current status (running, completed, failed, timed_out, cancelled).")
+    status: str = Field(description="Current status, including running, finalizing, completed, failed, cancelled, cleanup_failed, or recovered.")
     exit_code: Optional[int] = Field(None, description="Exit code if finished.")
     duration_seconds: Optional[float] = Field(None)
 
@@ -109,7 +109,15 @@ class AgentInfo(BaseModel):
     agent: Optional[str] = Field(None, description="Named agent: jax, liz, prof, phil, wei, ming, or argie.")
     registered: Optional[bool] = Field(None, description="Whether this named identity is registered on the host.")
     delegatable: Optional[bool] = Field(None, description="Whether AgentPorter currently permits executing this named worker, distinct from installed/available.")
+    runtime_delegatable: Optional[bool] = Field(None, description="Runtime launch checks before public workspace authorization; provider quota is not verified.")
+    public_dispatch_workspaces: Optional[List[str]] = Field(None, description="Workspaces admitted by public policy and registry for read-only delegation; runtime restrictions still apply.")
+    public_writable_dispatch_workspaces: Optional[List[str]] = Field(None, description="Workspaces admitted for local edits by public policy, registry, and development runtime; commit and push remain denied.")
+    public_dispatch_read_only: Optional[bool] = None
+    workspace_dispatch_authorized: Optional[bool] = Field(None, description="Public workspace authorization for a workspace-specific inventory request.")
+    readiness_note: Optional[str] = None
     confinement_status: Optional[str] = Field(None, description="Reason delegation is blocked or description of verified confinement backend.")
+    availability_reason: Optional[str] = Field(None, description="Verified runtime availability or reason launch is blocked.")
+    runtime_profile: Optional[str] = Field(None, description="Verified development confinement profile, if configured.")
     routing_error: Optional[str] = Field(None, description="Unavailable identity or worker-CLI mismatch; no fallback.")
     name: Optional[str] = Field(None, description="Agent name.")
     worker_cli: Optional[str] = Field(None, description="Worker CLI binary name.")
@@ -185,21 +193,27 @@ class MovePathRequest(BaseModel):
 class TrashPathRequest(BaseModel):
     path: str = Field(description="Relative path to move to the .trash folder.")
 
+class HTTPSDownloadRequest(BaseModel):
+    url: str
+    filename: str
+    expected_sha256: Optional[str] = None
+    max_bytes: int = 16777216
+    timeout_seconds: int = 60
+
+
 class ExecRunRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=30, description="Timeout in seconds for execution.")
-    # A client flag cannot authenticate permission for outbound traffic.
-    # Until trusted receipts and destination-scoped egress exist, true is rejected.
-    network_access: bool = Field(default=False, description="Generic execution is offline; true is rejected pending scoped network approval.")
+    # This flag alone does not authenticate network access; requires private owner policy.
+    network_access: bool = Field(default=False, description="Commands stay offline. True permits only owner-approved cranary curl -fsS GET or curl -sSI HEAD HTTPS metadata through a fixed broker; otherwise denied.")
 
 class ExecStartRequest(BaseModel):
     argv: List[str] = Field(description="Command and arguments to execute.")
     cwd: str = Field(default="", description="Working directory for the command relative to workspace.")
     timeout_seconds: int = Field(default=300, description="Timeout in seconds for the background job.")
-    # A client flag cannot authenticate permission for outbound traffic.
-    # Until trusted receipts and destination-scoped egress exist, true is rejected.
-    network_access: bool = Field(default=False, description="Generic execution is offline; true is rejected pending scoped network approval.")
+    # This flag alone does not authenticate network access; requires private owner policy.
+    network_access: bool = Field(default=False, description="Commands stay offline. True permits only owner-approved cranary curl -fsS GET or curl -sSI HEAD HTTPS metadata through a fixed broker; otherwise denied.")
 
 class JobOutputRequest(BaseModel):
     cursor: int = Field(default=0, description="Byte offset to start reading from.")
@@ -215,20 +229,31 @@ class GitShowRequest(BaseModel):
     ref: str = Field(default="HEAD", description="Git object or commit ref to show.")
 
 class GitFetchRequest(BaseModel):
-    remote: str = Field(default="origin", description="Remote repository name.")
+    model_config = {"extra": "forbid"}
+    remote: str = Field(default="origin", max_length=128, description="Exact logical remote ID from owner policy.")
+    branch: str = Field(default="", max_length=1024, description="Exact protected remote refs/heads/... source.")
+    approval_receipt: str = Field(default='', max_length=8192, description="Independent owner signature for this exact fetch request.")
+    prepare_only: bool = Field(default=False, description="Prepare an unsigned exact fetch request without changing local refs.")
 
 class GitPullRequest(BaseModel):
     remote: str = Field(default="origin", description="Remote repository name.")
     branch: str = Field(default="", description="Remote branch name to pull.")
 
 class GitPushRequest(BaseModel):
-    remote: str = Field(default="origin", description="Remote repository name.")
-    branch: str = Field(default="", description="Branch name to push.")
-    set_upstream: bool = Field(default=False, description="Whether to set upstream branch (-u).")
+    model_config = {"extra": "forbid"}
+    remote: str = Field(default="origin", max_length=128, description="Exact logical remote ID from owner policy.")
+    branch: str = Field(default="", max_length=1024, description="Exact protected remote refs/heads/... target.")
+    set_upstream: bool = Field(default=False, description="Legacy flag; true is rejected because publication does not change local upstream configuration.")
+    approval_receipt: str = Field(default='', max_length=8192, description="Independent owner signature for this exact push request.")
+    prepare_only: bool = Field(default=False, description="Prepare an unsigned exact push request without publishing.")
 
 class GitCommitRequest(BaseModel):
+    model_config = {"extra": "forbid"}
     message: str = Field(description="Commit message.")
-    all_files: bool = Field(default=False, description="Automatically stage modified/deleted files (-a).")
+    all_files: bool = Field(default=False, description="Stage explicit paths with git_add; true is unsupported.")
+    approval_receipt: str = Field(default='', max_length=8192, description="Legacy field; omit for workspace commits.")
+    approval_timestamp: Optional[int] = Field(default=None, description="Legacy field; omit for workspace commits.")
+    prepare_only: bool = Field(default=False, description="Legacy field; workspace commits execute directly.")
 
 class GitAddRequest(BaseModel):
     paths: List[str] = Field(description="File paths to stage for commit.")
@@ -249,6 +274,6 @@ class DispatchAgentRequest(BaseModel):
     purpose: str = Field(default="", description="Context or purpose for the dispatch.")
     model: Optional[str] = Field(None, description="Specific LLM model to use (if applicable).")
     reasoning_effort: Optional[str] = Field(None, description="Reasoning effort level (e.g., 'high', 'low').")
-    allow_commit: bool = Field(False, description="Reserved; worker commit remains blocked until server-side operator approval exists.")
-    allow_push: bool = Field(False, description="Reserved; worker push remains blocked until server-side operator approval exists.")
+    allow_commit: bool = Field(False, description="Compatibility flag; writable workers can commit without confirmation.")
+    allow_push: bool = Field(False, description="Agent pushes are disabled; true is rejected.")
     read_only: bool = Field(True, description="Enforce read-only execution; set false explicitly for authorized workspace edits.")

@@ -1,9 +1,11 @@
 """Security middleware enforcing host validation, rate limits, payload limits, and auth."""
 
 import logging
+import hmac
 from starlette.types import ASGIApp, Scope, Receive, Send, Message
 from starlette.responses import JSONResponse
 from agentporter.auth import verify_api_key, is_host_allowed, RateLimiter
+from agentporter.client_policy import PRINCIPAL
 
 logger = logging.getLogger("agentporter.middleware")
 
@@ -20,6 +22,8 @@ class SecurityMiddleware:
         legacy_header_name: str = "",
         rate_limiter: RateLimiter = None,
         max_payload_bytes: int = 10 * 1024 * 1024,
+        delegation_relay_key: str | None = None,
+        internal_client_key: str | None = None,
     ):
         self.app = app
         self.api_key = api_key
@@ -30,6 +34,17 @@ class SecurityMiddleware:
         )
         self.rate_limiter = rate_limiter or RateLimiter()
         self.max_payload_bytes = max_payload_bytes
+        self.delegation_relay_key = delegation_relay_key
+        if internal_client_key and internal_client_key in {api_key, delegation_relay_key}:
+            raise PermissionError('Internal, public and relay credentials must differ')
+        self.internal_client_key = internal_client_key
+
+    async def _call_client(self, scope, receive, send, principal):
+        token = PRINCIPAL.set(principal)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            PRINCIPAL.reset(token)
 
     def _log_rejection_diagnostic(self, headers: dict, reason: str) -> None:
         raw_header = headers.get(self.header_bytes)
@@ -59,6 +74,50 @@ class SecurityMiddleware:
             "/redoc",
         }:
             await self.app(scope, receive, send)
+            return
+
+        # This route uses a SEPARATE, narrow-scoped credential, not the full
+        # AgentPorter API key. Never fall back to ordinary API authorization.
+        if scope.get("path") == "/internal/delegation/v1":
+            headers = dict(scope.get("headers", []))
+            client = scope.get("client")
+            loopback = client is not None and client[0] in {"127.0.0.1", "::1"}
+            provided = headers.get(b"authorization", b"")
+            expected = ("Bearer " + self.delegation_relay_key).encode("ascii") if self.delegation_relay_key else b""
+            if (not loopback or not expected or not hmac.compare_digest(provided, expected)):
+                await JSONResponse({"error": "Unauthorized delegation relay"}, status_code=401)(
+                    scope, receive, send)
+                return
+            if scope.get("method") != "POST":
+                await JSONResponse({"error": "Method not allowed"}, status_code=405)(
+                    scope, receive, send)
+                return
+            if not self.rate_limiter.is_allowed(client[0]):
+                await JSONResponse({"error": "Delegation rate limit exceeded"}, status_code=429)(
+                    scope, receive, send)
+                return
+            # Reject unknown-length/chunked bodies too; never read more than
+            # the fixed maximum independently of the normal API size ceiling.
+            data = bytearray()
+            while True:
+                message = await receive()
+                if message["type"] != "http.request":
+                    return
+                data.extend(message.get("body", b""))
+                if len(data) > 32768:
+                    await JSONResponse({"error": "Relay request too large"}, status_code=413)(
+                        scope, receive, send)
+                    return
+                if not message.get("more_body", False):
+                    break
+            sent = False
+            async def relay_receive():
+                nonlocal sent
+                if not sent:
+                    sent = True
+                    return {"type": "http.request", "body": bytes(data), "more_body": False}
+                return {"type": "http.disconnect"}
+            await self._call_client(scope, relay_receive, send, 'internal')
             return
 
         headers = dict(scope.get("headers", []))
@@ -108,13 +167,20 @@ class SecurityMiddleware:
         provided_key = (
             raw_header.decode("utf-8", errors="replace") if raw_header is not None else ""
         )
-        if not verify_api_key(provided_key, self.api_key):
+        internal = bool(self.internal_client_key and verify_api_key(provided_key, self.internal_client_key))
+        if internal and (client_ip not in {'127.0.0.1', '::1'} or any(
+                name in headers for name in (b'forwarded', b'x-forwarded-for', b'x-forwarded-host', b'x-real-ip'))):
+            await JSONResponse({'error': 'Internal credential requires direct local access'}, status_code=401)(scope, receive, send)
+            return
+        if not internal and not verify_api_key(provided_key, self.api_key):
             self._log_rejection_diagnostic(headers, "invalid_or_missing_key")
             await JSONResponse(
                 {"error": "Unauthorized: invalid or missing API key header"},
                 status_code=401,
             )(scope, receive, send)
             return
+
+        principal = 'internal' if internal else 'public'
 
         if scope.get("method", "GET").upper() in {"POST", "PUT", "PATCH"}:
             # The MCP SDK's RequestBodyLimitMiddleware enforces a byte cap
@@ -123,7 +189,7 @@ class SecurityMiddleware:
             # receive() here would be misreported as HTTP 500 by Starlette.
             # Do not prebuffer or wait for EOF in this outer middleware.
             if scope.get("path") in {"/mcp", "/mcp/"}:
-                await self.app(scope, receive, send)
+                await self._call_client(scope, receive, send, principal)
                 return
 
             # Keep buffering for REST requests so the size ceiling is enforced
@@ -155,7 +221,7 @@ class SecurityMiddleware:
                     return msg
                 return {"type": "http.request", "body": b"", "more_body": False}
 
-            await self.app(scope, replay_receive, send)
+            await self._call_client(scope, replay_receive, send, principal)
             return
 
-        await self.app(scope, receive, send)
+        await self._call_client(scope, receive, send, principal)

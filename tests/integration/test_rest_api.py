@@ -8,6 +8,7 @@ import os
 import yaml
 import sys
 import time
+import logging
 from agentporter.agents.adapters.codex import CodexAdapter
 from tests._support import BWRAP_USABLE
 
@@ -35,7 +36,19 @@ def test_config():
         config = Config(config_dir=cfg_dir, state_dir=st_dir)
         config.security.allowed_hosts.append("testserver")
         config.server.public_url = "https://example.test"
-        yield config
+        app_logger = logging.getLogger('agentporter')
+        previous_handlers = set(app_logger.handlers)
+        previous_level = app_logger.level
+        try:
+            yield config
+        finally:
+            # Server setup installs process-wide handlers. Dispose of this
+            # fixture's handlers before deleting their backing directory.
+            for handler in list(app_logger.handlers):
+                if handler not in previous_handlers:
+                    app_logger.removeHandler(handler)
+                    handler.close()
+            app_logger.setLevel(previous_level)
 
 @pytest.fixture
 def client(test_config, monkeypatch):
@@ -107,6 +120,16 @@ def test_authenticated_access_custom_header(client, test_config):
     response = client.get("/api/v1/workspaces/", headers=headers)
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+@pytest.mark.parametrize('path', ['../cfg/secrets.env', '/etc/passwd', '.ssh/id_rsa'])
+def test_invalid_file_paths_return_client_error_without_private_details(client, test_config, path):
+    response = client.post('/api/v1/workspaces/test-workspace/files/read',
+                           headers={'X-AgentPorter-Key': test_config.api_key},
+                           json={'path': path})
+    assert response.status_code == 400
+    assert response.json() == {'detail': 'Invalid tool arguments'}
+    assert test_config.api_key not in response.text
 
 def test_authenticated_access_bearer_token(client, test_config):
     headers = {"Authorization": f"Bearer {test_config.api_key}"}

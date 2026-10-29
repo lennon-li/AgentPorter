@@ -29,7 +29,7 @@ def test_claude_explicit_edits_and_central_denials(executable):
     assert json.loads(argv[argv.index("--settings") + 1]) == {"permissions": {"ask": []}}
     allowed = argv[argv.index("--allowedTools") + 1:argv.index("--disallowedTools")]
     assert {"Read", "Edit", "Write", "Bash"} <= set(allowed)
-    for command in ExecutionPolicy().denied_commands():
+    for command in ExecutionPolicy.for_workspace(writable=True).denied_commands():
         assert f"Bash({command}*)" in argv
     assert "--dangerously-skip-permissions" not in argv
     approved = adapter.build_argv("/workspace", "task", policy=ExecutionPolicy(git_commit=True))
@@ -51,14 +51,14 @@ def test_opencode_per_launch_profile(executable, monkeypatch, version):
         permissions = config["agent"]["dispatch"]["permission"]
         assert permissions["edit"] == "allow"
         assert permissions["external_directory"] == "deny"
-        for command in ExecutionPolicy().denied_commands():
+        for command in ExecutionPolicy.for_workspace(writable=True).denied_commands():
             assert permissions["bash"][command + "*"] == "deny"
     else:
         assert "--standalone" in argv
         permissions = config["agents"]["dispatch"]["permissions"]
         assert {"action": "edit", "resource": "*", "effect": "allow"} in permissions
         assert {"action": "external_directory", "resource": "*", "effect": "deny"} in permissions
-        for command in ExecutionPolicy().denied_commands():
+        for command in ExecutionPolicy.for_workspace(writable=True).denied_commands():
             assert {"action": "shell", "resource": command + "*", "effect": "deny"} in permissions
 
 

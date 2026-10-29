@@ -1,0 +1,33 @@
+[Unit]
+Description=BCC AgentPorter immutable production gateway
+After=network-online.target agentporter-bcc-worker.service
+Wants=network-online.target agentporter-bcc-worker.service
+
+[Service]
+Type=simple
+User=yeli
+WorkingDirectory=/
+Environment=HOME=/home/yeli
+Environment=PATH=/home/yeli/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=AGENTPORTER_CONFIG_DIR=/home/yeli/.config/agentporter
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=AGENTPORTER_STATE_DIR=/home/yeli/.local/state/agentporter
+Environment=AGENTPORTER_CACHE_DIR=/home/yeli/.cache/agentporter
+Environment=AGENTPORTER_PUBLIC_URL=https://example-8765.use.devtunnels.ms
+Environment=AGENTPORTER_ACTION_PREFIX=bcc
+UnsetEnvironment=PYTHONPATH PYTHONHOME PYTHONSTARTUP PYTHONUSERBASE LD_PRELOAD LD_LIBRARY_PATH
+ExecStart=/opt/agentporter-bcc/releases/bcc-stage-20261029-19/venv/bin/python -I -m agentporter.resource_supervisor --config-dir /home/yeli/.config/agentporter
+Delegate=yes
+MemoryMax=8G
+MemorySwapMax=0
+CPUQuota=400%
+TasksMax=512
+KillMode=control-group
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

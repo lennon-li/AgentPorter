@@ -11,6 +11,8 @@ import tempfile
 from pathlib import Path
 from agentporter.sandbox.base import SandboxBackend
 from agentporter.tooling import add_tooling_mounts
+from agentporter.process_handles import open_handle, signal_handle
+from agentporter.resources import ResourceCleanupError
 
 logger = logging.getLogger("agentporter.sandbox.bwrap")
 
@@ -24,8 +26,16 @@ class BubblewrapSandbox(SandboxBackend):
         default_timeout_seconds: int = 30,
         max_timeout_seconds: int = 900,
         max_output_bytes: int = 100 * 1024,
+        transactional_writes: bool = False,
     ):
         self.state_dir = state_dir
+        self.resources = None
+        self.transactional_writes = transactional_writes
+        self._unresolved_transactions = []
+        if transactional_writes:
+            from agentporter.agents.development import DevelopmentRuntime
+            self.transaction_executable = DevelopmentRuntime._sandbox_executable(
+                {'sandbox_executable': '/opt/agentporter-bcc/bin/bwrap'})
         self.default_timeout_seconds = max(1, int(default_timeout_seconds))
         self.max_timeout_seconds = max(self.default_timeout_seconds, int(max_timeout_seconds))
         self.max_output_bytes = max(1024, int(max_output_bytes))
@@ -124,7 +134,11 @@ class BubblewrapSandbox(SandboxBackend):
         add_tooling_mounts(args)
 
         args.extend([
-            "--bind" if writable else "--ro-bind",
+            # Arbitrary commands never receive a canonical writable bind.
+            # Supervised transaction wrapping replaces this read-only mount
+            # with its private overlay. Only fixed trusted Git tools may opt
+            # into canonical mutation through the separate metadata boundary.
+            "--bind" if writable and git_metadata_writable else "--ro-bind",
             real_workspace,
             "/workspace",
             "--unshare-all",
@@ -151,6 +165,14 @@ class BubblewrapSandbox(SandboxBackend):
             "--setenv", "LOGNAME", "sandbox",
             "--setenv", "LC_ALL", "C.UTF-8",
             "--setenv", "LANG", "C.UTF-8",
+            # The service UID may differ from the repository owner. Trust
+            # only this explicitly mounted root, including commands in its
+            # subdirectories; nested repositories remain independently gated.
+            # Environment config is protected Git configuration, unlike the
+            # repository-local config that cannot authorize its own owner.
+            "--setenv", "GIT_CONFIG_COUNT", "1",
+            "--setenv", "GIT_CONFIG_KEY_0", "safe.directory",
+            "--setenv", "GIT_CONFIG_VALUE_0", "/workspace",
         ])
         args.extend(["--chdir", target_cwd])
         return args
@@ -162,6 +184,46 @@ class BubblewrapSandbox(SandboxBackend):
         return min(requested, self.max_timeout_seconds)
 
     def run(
+        self, workspace_path: str, argv: list[str], cwd: str = "",
+        timeout_seconds: int | None = None, writable: bool = True,
+        max_output_bytes: int | None = None, network_access: bool = False,
+        git_metadata_writable: bool = False,
+    ) -> dict:
+        options = dict(workspace_path=workspace_path, argv=argv, cwd=cwd,
+                       timeout_seconds=timeout_seconds, writable=writable,
+                       max_output_bytes=max_output_bytes, network_access=network_access,
+                       git_metadata_writable=git_metadata_writable)
+        if not self.transactional_writes or git_metadata_writable:
+            return self._run_command(**options)
+        if self.resources is None:
+            raise PermissionError('Transactional writes require a verified resource envelope')
+        from agentporter.sandbox.workspace_transactions import WorkspaceTransaction
+        from agentporter.sandbox.workspace_delta import UnsafeWorkspaceDelta
+        transaction = WorkspaceTransaction(Path(workspace_path), self.state_dir / 'workspace-transactions',
+                                           writable=writable, git_sandbox=self)
+        retain = False
+        try:
+            result = self._run_command(**options, workspace_transaction=transaction)
+            if result['exit_code'] == 0:
+                try:
+                    transaction.publish()
+                except (UnsafeWorkspaceDelta, OSError) as error:
+                    result['exit_code'] = 1
+                    result['stderr'] += f'\nWorkspace edit rejected: {error}'
+            return result
+        except ResourceCleanupError:
+            retain = True
+            self._unresolved_transactions.append(transaction)
+            raise
+        finally:
+            if not retain:
+                try:
+                    transaction.close()
+                except ResourceCleanupError:
+                    self._unresolved_transactions.append(transaction)
+                    raise
+
+    def _run_command(
         self,
         workspace_path: str,
         argv: list[str],
@@ -171,6 +233,8 @@ class BubblewrapSandbox(SandboxBackend):
         max_output_bytes: int | None = None,
         network_access: bool = False,
         git_metadata_writable: bool = False,
+        workspace_transaction=None,
+        require_resources: bool = False,
     ) -> dict:
         """Run a bounded command without ever accumulating unbounded pipe output.
 
@@ -180,6 +244,9 @@ class BubblewrapSandbox(SandboxBackend):
         """
         if not argv or not isinstance(argv, list) or not all(isinstance(x, str) and x for x in argv):
             raise ValueError("argv must be a non-empty list of non-empty strings")
+        resource_provider = self.resources
+        if require_resources and resource_provider is None:
+            raise PermissionError('This operation requires a verified resource envelope')
 
         timeout = self.clamp_timeout(timeout_seconds)
         output_limit = min(
@@ -190,7 +257,11 @@ class BubblewrapSandbox(SandboxBackend):
             workspace_path, writable=writable, sub_cwd=cwd,
             network_access=network_access,
             git_metadata_writable=git_metadata_writable,
-        ) + ["--"] + argv
+        )
+        if workspace_transaction is not None:
+            full_cmd = workspace_transaction.wrap_command(full_cmd)
+            full_cmd[0] = self.transaction_executable
+        full_cmd += ["--"] + (workspace_transaction.wrap_argv(argv) if workspace_transaction is not None else argv)
 
         t0 = time.time()
         deadline = time.monotonic() + timeout
@@ -199,31 +270,41 @@ class BubblewrapSandbox(SandboxBackend):
         exceeded_stream = None
         timed_out = False
         selector = None
+        lease = None
+        pidfd = None
 
         def stop_group() -> None:
             if proc is None:
                 return
             try:
-                # Popen(process_group=0) makes a dedicated group for this job.
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            except OSError:
-                if proc.poll() is None:
-                    proc.kill()
+                if lease is not None:
+                    lease.terminate()
+            finally:
+                if pidfd is None:
+                    raise ResourceCleanupError('Missing owned sandbox process handle')
+                try:
+                    signal_handle(pidfd, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
             try:
                 proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired as error:
+                raise ResourceCleanupError('Sandbox leader termination remains unverified') from error
 
         try:
+            if resource_provider is not None:
+                lease = resource_provider.create()
+                if workspace_transaction is None:
+                    full_cmd[0] = os.path.realpath(shutil.which('bwrap', path='/usr/bin:/bin'))
+                full_cmd = lease.command(full_cmd)
             proc = subprocess.Popen(
                 full_cmd,
+                pass_fds=workspace_transaction.launch_fds if workspace_transaction is not None else (),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 process_group=0,
             )
+            pidfd = open_handle(proc.pid)
             selector = selectors.DefaultSelector()
             for name in ("stdout", "stderr"):
                 pipe = getattr(proc, name)
@@ -286,13 +367,21 @@ class BubblewrapSandbox(SandboxBackend):
         finally:
             if selector is not None:
                 selector.close()
-            if proc is not None:
-                for name in ("stdout", "stderr"):
-                    pipe = getattr(proc, name)
-                    if pipe is not None and not pipe.closed:
-                        pipe.close()
-                if proc.poll() is None:
-                    stop_group()
+            try:
+                if proc is not None:
+                    for name in ("stdout", "stderr"):
+                        pipe = getattr(proc, name)
+                        if pipe is not None and not pipe.closed:
+                            pipe.close()
+                    if proc.poll() is None:
+                        stop_group()
+            finally:
+                try:
+                    if lease is not None:
+                        lease.close()
+                finally:
+                    if pidfd is not None:
+                        os.close(pidfd)
 
         stdout = streams["stdout"].decode("utf-8", errors="replace")
         stderr = streams["stderr"].decode("utf-8", errors="replace")

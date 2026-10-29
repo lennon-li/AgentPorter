@@ -46,6 +46,7 @@ class SecuritySettings:
 
 @dataclass
 class SandboxSettings:
+    workspace_transactions: bool = False
     backend: str = "bubblewrap"
     # Networked direct execution is intentionally unsupported in the alpha.
     network: bool = False
@@ -231,6 +232,10 @@ class Config:
                 self.security.max_payload_bytes = int(sec["max_payload_bytes"])
 
             sbx = data.get("sandbox", {})
+            if 'workspace_transactions' in sbx:
+                if type(sbx['workspace_transactions']) is not bool:
+                    raise ValueError('sandbox.workspace_transactions must be boolean')
+                self.sandbox.workspace_transactions = sbx['workspace_transactions']
             if "backend" in sbx:
                 self.sandbox.backend = str(sbx["backend"])
             if self.sandbox.backend != "bubblewrap":

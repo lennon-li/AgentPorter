@@ -27,7 +27,7 @@ def tools():
 ])
 def test_direct_publication_denied_without_invoking_sandbox(tools, operation, kw):
     git_tools, _, sandbox = tools
-    with pytest.raises(PermissionError, match="server-verified"):
+    with pytest.raises(PermissionError, match="server-verified|push is disabled"):
         getattr(git_tools, operation)(**kw)
     sandbox.run.assert_not_called()
 

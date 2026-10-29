@@ -12,6 +12,18 @@ SENSITIVE_NAMES_LOWER = {
     "id_rsa",
     "id_ed25519",
     "secrets.env",
+    "auth.json",
+    "credentials.json",
+    ".credentials.json",
+    ".aws",
+    ".codex",
+    ".claude",
+    ".copilot",
+    ".copilot-phil",
+    ".opencode",
+    ".github-copilot",
+    ".antigravitycli",
+    ".gemini",
     ".bashrc",
     ".bash_profile",
     ".profile",
@@ -20,15 +32,21 @@ SENSITIVE_NAMES_LOWER = {
 }
 
 
-def _check_sensitive_components(path_str: str, original_ref: str) -> None:
+def check_sensitive_components(path_str: str, original_ref: str) -> None:
     """Check every path component case-insensitively for sensitive names."""
     parts = path_str.replace("\\", "/").split("/")
+    lowered = '/'.join(parts).lower()
+    for private in ('.config/github-copilot', '.config/agy', '.config/antigravity',
+                    '.config/opencode', '.local/share/opencode'):
+        if f'/{private}/' in f'/{lowered}/':
+            raise ValueError(f"Access to sensitive or internal path blocked: '{original_ref}'")
     for p in parts:
         p_lower = p.lower()
         if (
             p_lower in SENSITIVE_NAMES_LOWER
             or p_lower.startswith(".env")
-            or p_lower.endswith((".pem", ".key"))
+            or p_lower.startswith(".codex-")
+            or p_lower.endswith((".env", ".pem", ".key"))
         ):
             raise ValueError(f"Access to sensitive or internal path blocked: '{original_ref}'")
 
@@ -51,7 +69,7 @@ def validate_workspace_path(ws_root: str, rel_path: str, allow_root: bool = Fals
         raise ValueError(f"Path traversal detected: '{rel_path}'")
 
     # Check unresolved input path components
-    _check_sensitive_components(clean_rel, rel_path)
+    check_sensitive_components(clean_rel, rel_path)
 
     target = os.path.realpath(os.path.join(real_root, clean_rel))
     if not (target == real_root or target.startswith(real_root + os.sep)):
@@ -59,6 +77,6 @@ def validate_workspace_path(ws_root: str, rel_path: str, allow_root: bool = Fals
 
     # Check resolved real path relative to workspace root (protects against symlink bypass)
     resolved_rel = os.path.relpath(target, real_root)
-    _check_sensitive_components(resolved_rel, rel_path)
+    check_sensitive_components(resolved_rel, rel_path)
 
     return target

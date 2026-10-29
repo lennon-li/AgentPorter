@@ -59,7 +59,7 @@ def test_explicit_edit_opt_in_is_writable(broker):
 @pytest.mark.parametrize("flag", ["allow_commit", "allow_push"])
 def test_read_only_rejects_commit_or_push_override(broker, flag):
     gateway, _, jobs = broker
-    with pytest.raises(PermissionError, match="operator-verified approval"):
+    with pytest.raises(PermissionError, match="read-only dispatch|push is disabled"):
         gateway.dispatch_agent("jax", "inspect only", "test", **{flag: True})
     jobs.start_confined_agent_job.assert_not_called()
 
@@ -117,12 +117,13 @@ def test_private_argie_identity_remains_configurable(tmp_path, monkeypatch):
     # overwritten by an implicit built-in Antigravity alias.
 
 
-def test_missing_private_argie_does_not_invent_an_identity(tmp_path, monkeypatch):
+def test_missing_private_argie_uses_builtin_identity(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTPORTER_CONFIG_DIR", str(tmp_path))
     gateway = AgentBroker(SimpleNamespace(get=lambda _: None), Mock())
     adapters, identities = gateway._configured_workers()
     assert "agy" in adapters
-    assert "argie" not in adapters
+    assert "argie" in adapters
+    assert adapters["argie"].name == "agy"
     assert "argie" not in identities
 
 

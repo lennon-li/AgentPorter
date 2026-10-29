@@ -18,9 +18,10 @@ def _policy_file(config_dir: Path, body: str) -> Path:
 
 
 def test_default_modes_cover_complete_public_catalog():
-    assert len(DEFAULT_ACTION_MODES) == 53
+    assert len(DEFAULT_ACTION_MODES) == 54
     assert DEFAULT_ACTION_MODES["get_capabilities"] == "ALLOW"
     assert DEFAULT_ACTION_MODES["dispatch_agent"] == "SCOPE"
+    assert DEFAULT_ACTION_MODES["https_download"] == "SCOPE"
     assert DEFAULT_ACTION_MODES["git_push"] == "LOCKED"
     assert DEFAULT_ACTION_MODES["scinet_submit"] == "APPROVAL"
 
@@ -54,6 +55,18 @@ action_modes:
     # Default LOCKED Git publication cannot be bypassed with a permissive file.
     with pytest.raises(PermissionError, match="technically locked"):
         policy.check("git_push", {"workspace_id": "demo"})
+
+
+def test_commit_mode_uses_workspace_scope_and_preserves_owner_denial(tmp_path):
+    enabled = OperatorActionPolicy(tmp_path, approved_git_commits=True)
+    assert enabled.check('git_commit', {'workspace_id': 'repo'}) == 'SCOPE'
+    with pytest.raises(PermissionError):
+        enabled.check('git_push', {'workspace_id': 'repo'})
+    _policy_file(tmp_path, 'version: 1\naction_modes:\n  git_commit: ALLOW\n')
+    assert OperatorActionPolicy(tmp_path).check('git_commit', {'workspace_id': 'repo'}) == 'ALLOW'
+    _policy_file(tmp_path, 'version: 1\naction_modes:\n  git_commit: LOCKED\n')
+    with pytest.raises(PermissionError):
+        OperatorActionPolicy(tmp_path, approved_git_commits=True).check('git_commit', {'workspace_id': 'repo'})
 
 
 @pytest.mark.parametrize("body", [

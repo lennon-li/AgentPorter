@@ -13,7 +13,7 @@ from starlette.types import ASGIApp
 import uvicorn
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import DEFAULT_MAX_REQUEST_BODY_SIZE, TransportSecuritySettings
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from agentporter import __version__
@@ -23,9 +23,16 @@ from agentporter.auth import RateLimiter
 from agentporter.middleware import SecurityMiddleware
 from agentporter.workspaces.registry import WorkspaceRegistry
 from agentporter.sandbox.bubblewrap import BubblewrapSandbox
-from agentporter.tools.jobs import JobManager
+from agentporter.tools.jobs import JobManager, TERMINAL_JOB_STATUSES
 from agentporter.agents.broker import AgentBroker
+from agentporter.agents.production_relay import (
+    ALLOWED_OPS, JOB_RE, ProductionDelegationClient, read_relay_key,
+    relay_upstream_workspaces, read_relay_scope, validate_dispatch, validate_job_request,
+)
 from agentporter.action_policy import OperatorActionPolicy
+from agentporter.client_policy import PublicClientPolicy
+from agentporter.resources import JobResources, JobCapacityError
+from agentporter.scoped_https import ScopedPublicHTTPS, ScopedPublicHTTPSPolicy
 from agentporter.tools.system import create_system_tools
 from agentporter.tools.files import create_file_tools
 from agentporter.tools.execution import create_execution_tools
@@ -102,7 +109,7 @@ def log_tool_event(tool_name: str, kwargs: dict, result: Any, duration: float, e
         pass
 
 
-def _monitored_tool(tool_name: str, policy=None):
+def _monitored_tool(tool_name: str, policy=None, client_policy=None):
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(**kwargs):
@@ -110,7 +117,11 @@ def _monitored_tool(tool_name: str, policy=None):
             try:
                 if policy is not None:
                     policy.check(tool_name, kwargs)
+                if client_policy is not None:
+                    client_policy.check(tool_name, kwargs)
                 res = fn(**kwargs)
+                if client_policy is not None:
+                    res = client_policy.result(tool_name, kwargs, res)
                 log_tool_event(tool_name, kwargs, res, time.time() - t0)
                 return res
             except Exception as e:
@@ -131,10 +142,12 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         default_timeout_seconds=config.sandbox.default_timeout_seconds,
         max_timeout_seconds=config.sandbox.max_timeout_seconds,
         max_output_bytes=config.sandbox.max_output_bytes,
+        transactional_writes=config.sandbox.workspace_transactions,
     )
     job_manager = JobManager(
         config.state_dir,
         max_log_bytes=config.sandbox.max_job_log_bytes,
+        transactional_writes=config.sandbox.workspace_transactions,
     )
     agent_broker = AgentBroker(
         registry, job_manager, config_dir=getattr(config, "config_dir", None),
@@ -143,22 +156,71 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     # The same decorated callables are used by MCP and REST. An operator's
     # protected mode file is loaded at startup, not from an agent request.
-    operator_policy = OperatorActionPolicy(
-        config.config_dir,
-        workspace_roots=[row["path"] for row in registry.list_all()],
-    )
+    runtime = agent_broker.development_runtime
+    runtime_settings = runtime._config() if runtime else {}
+    required = runtime_settings.get('public_client_policy_required') is True
+    client_policy = PublicClientPolicy(config.config_dir, config.state_dir, registry, required=required)
+    if required and client_policy.internal_key is None:
+        raise PermissionError('Hardened development startup requires a separate internal-client credential')
+    from agentporter.resources import load_gateway_job_resources
+    gateway_resources = load_gateway_job_resources(config.config_dir)
+    if gateway_resources is not None and runtime is not None:
+        raise PermissionError('Gateway and worker resource profiles cannot be combined')
+    if gateway_resources is not None and client_policy.scopes is None:
+        raise PermissionError('Gateway resource profile requires an explicit public-client policy')
+    resource_settings = gateway_resources if gateway_resources is not None else runtime_settings.get('job_resources')
+    if resource_settings is not None:
+        resources = (JobResources(resource_settings, expected_service='agentporter-bcc-gateway.service')
+                     if gateway_resources is not None else JobResources(resource_settings))
+        job_manager.configure_resources(resources)
+        sandbox.resources = resources
+    if config.sandbox.workspace_transactions and sandbox.resources is None:
+        raise PermissionError('Workspace transactions require hardened job resource supervision')
 
     def monitored_tool(tool_name: str):
-        return _monitored_tool(tool_name, policy=operator_policy)
+        return _monitored_tool(tool_name, policy=operator_policy, client_policy=client_policy)
 
     # Instantiate tool sets
-    _get_capabilities, _list_workspaces, _workspace_info = create_system_tools(registry, sandbox)
+    _get_capabilities, _list_workspaces, _workspace_info = create_system_tools(
+        registry, sandbox, tool_inventory=lambda: (
+            tool.name for tool in mcp._tool_manager.list_tools()
+        ),
+    )
     (
         _list_files, _search_text, _read_file, _write_file,
         _apply_patch, _mkdir, _move_path, _trash_path
-    ) = create_file_tools(registry)
-    _exec_run, _exec_start = create_execution_tools(registry, sandbox, job_manager)
-    git_tools = create_git_tools(registry, sandbox)
+    ) = create_file_tools(
+        registry, mutation_state_dir=(config.state_dir / 'workspace-transactions')
+        if config.sandbox.workspace_transactions else None)
+    # Owner-installed 0600 policy is the only route to public HTTPS metadata.
+    # No policy file means the broker is disabled. No agent may install it.
+    https_policy = ScopedPublicHTTPSPolicy(
+        config.config_dir,
+        workspace_roots=[row["path"] for row in registry.list_all()],
+    )
+    scoped_https = ScopedPublicHTTPS(https_policy)
+    scoped_https.resources = job_manager.resources
+    from agentporter.https_download import create_https_download_tool
+    from agentporter.admission import synchronous_slot
+    _https_download = create_https_download_tool(registry, https_policy, config.state_dir,
+        resources=job_manager.resources, slot=lambda: synchronous_slot(job_manager))
+    _exec_run, _exec_start = create_execution_tools(
+        registry, sandbox, job_manager, scoped_https=scoped_https
+    )
+    from agentporter.git_commits import WorkspaceGitCommits
+    approved_commits = (WorkspaceGitCommits(registry, sandbox, job_manager=job_manager)
+                        if sandbox.transactional_writes and sandbox.resources is not None else None)
+    from agentporter.git_remote_policy import load_owner_git_remotes
+    from agentporter.git_pushes import ApprovedGitPushes
+    from agentporter.git_fetches import ApprovedGitFetches
+    remote_authority = load_owner_git_remotes(config.config_dir, registry, config.state_dir)
+    approved_pushes = None  # Agents never publish, even with an old signed receipt.
+    approved_fetches = None if remote_authority is None else ApprovedGitFetches(registry, sandbox, remote_authority, job_manager)
+    operator_policy = OperatorActionPolicy(
+        config.config_dir, workspace_roots=[row['path'] for row in registry.list_all()],
+        approved_git_commits=approved_commits is not None, approved_git_pushes=approved_pushes is not None)
+    git_tools = create_git_tools(registry, sandbox, approved_commits=approved_commits,
+        approved_pushes=approved_pushes, approved_fetches=approved_fetches)
     _git_status = git_tools.git_status
     _git_diff = git_tools.git_diff
     _git_log = git_tools.git_log
@@ -173,6 +235,53 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _list_artifacts, _read_artifact = create_artifact_tools(registry)
     _local_http_request = create_local_http_tool(registry)
     _list_agents, _dispatch_agent = create_agent_tools(agent_broker)
+    delegation_relay_client = None
+    # Production may call an independent service identity ONLY when the
+    # operator installs an explicit narrow relay configuration and token.
+    relay_allowed_workspaces = relay_upstream_workspaces(config.config_dir)
+    if agent_broker.development_runtime is None and relay_allowed_workspaces:
+        # Relay activation must not silently retain the legacy profile where
+        # every authenticated client has unrestricted workspace tool access.
+        # An explicit policy also supplies the separate dispatch_write grant.
+        if client_policy.scopes is None:
+            raise PermissionError("Production delegation relay requires an explicit public-client policy")
+        relay_key = read_relay_key(config.config_dir)
+        if relay_key == config.api_key:
+            raise PermissionError("Relay credential must differ from general AgentPorter API key")
+        if relay_key is None:
+            raise PermissionError("Delegation upstream configured without dedicated relay key")
+        workspace_paths = {
+            item["workspace_id"]: item["path"] for item in registry.list_all()
+            if (item["workspace_id"] in relay_allowed_workspaces
+                and item["permissions"]["agent_dispatch"])
+        }
+        if set(workspace_paths) != set(relay_allowed_workspaces):
+            raise PermissionError("Relay allowlist contains unauthorized production workspaces")
+        write_scope = read_relay_scope(config.config_dir, writable=True)
+        for name, path in write_scope.items():
+            if (workspace_paths.get(name) != path or not registry.get(name).writable
+                    or not {"dispatch", "write", "dispatch_write"} <= client_policy.scopes.get(name, ())):
+                raise PermissionError("Writable relay scope requires matching workspace and public write grants")
+        delegation_relay_client = ProductionDelegationClient(
+            relay_key, workspace_paths, config.state_dir, write_workspace_paths=write_scope)
+        local_dispatch = _dispatch_agent
+
+        def _list_agents():
+            return delegation_relay_client.call("list_agents")
+
+        def _dispatch_agent(**kwargs):
+            workspace_id = kwargs.get("workspace_id")
+            workspace = registry.get(workspace_id)
+            if not workspace.allow_agent_dispatch:
+                raise PermissionError("Production workspace does not permit delegation")
+            if not kwargs.get("read_only", True) and not workspace.writable:
+                raise PermissionError("Production workspace is not authorized for edits")
+            # Use the existing production roster, workspace and action-policy
+            # gates; remote development repeats its own independent checks.
+            from agentporter.agents.roster import PUBLIC_AGENT_IDS
+            if kwargs.get("agent") not in PUBLIC_AGENT_IDS:
+                raise PermissionError("Unknown named worker")
+            return delegation_relay_client.call("dispatch_agent", kwargs)
     _venkata_diagnostic = create_venkata_tool(registry)
     _venkata_transfer = create_venkata_transfer_tool(registry)
     _scinet_diagnostic = create_scinet_tool(registry, getattr(config, "scinet", None))
@@ -350,8 +459,20 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     @mcp.tool()
     @monitored_tool("get_capabilities")
     def get_capabilities() -> dict:
-        """Return gateway capabilities, sandbox status, and available runtimes."""
-        return _get_capabilities()
+        """Return gateway capabilities and effective owner-approved HTTPS scope."""
+        result = _get_capabilities()
+        scopes = https_policy.scopes
+        result["scoped_public_https"] = {
+            "enabled": bool(scopes),
+            "workspaces": sorted(scopes),
+            "methods": sorted(scopes["cranary"]["methods"]) if "cranary" in scopes else [],
+            "hosts": sorted(scopes["cranary"]["hosts"]) if "cranary" in scopes else [],
+            "generic_shell_network": False,
+            "authorization": "owner-installed 0600 allowlist; no caller boolean grants access",
+        }
+        if "cranary" in scopes and "downloads" in scopes["cranary"]:
+            result["scoped_public_https"]["downloads"] = dict(scopes["cranary"]["downloads"])
+        return result
 
     @mcp.tool()
     @monitored_tool("list_workspaces")
@@ -414,40 +535,48 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         return _trash_path(workspace_id, path)
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
+    @monitored_tool("https_download")
+    def https_download(workspace_id: str, url: str, filename: str,
+                       expected_sha256: Optional[str] = None, max_bytes: int = 16777216,
+                       timeout_seconds: int = 60) -> dict:
+        """Download approved historical source bytes into owner-scoped receipts; never overwrite or execute."""
+        return _https_download(workspace_id, url, filename, expected_sha256, max_bytes, timeout_seconds)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("exec_run")
     def exec_run(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 30, network_access: bool = False) -> dict:
-        """Execute command synchronously inside bubblewrap; opt in to host network when needed."""
+        """Run offline Bubblewrap command. Approved cranary GET/HEAD public HTTPS metadata only when network_access=true."""
         return _exec_run(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access)
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("exec_start")
     def exec_start(workspace_id: str, argv: list[str], cwd: str = "", timeout_seconds: int = 300, network_access: bool = False) -> dict:
-        """Start command asynchronously inside bubblewrap; opt in to host network when needed."""
+        """Start offline Bubblewrap job; approved cranary public HTTPS metadata uses a fixed-purpose bounded worker."""
         return _exec_start(workspace_id, argv=argv, cwd=cwd, timeout_seconds=timeout_seconds, network_access=network_access)
 
     @mcp.tool()
     @monitored_tool("job_status")
     def job_status(job_id: str) -> dict:
         """Query the status of an asynchronous job."""
-        return job_manager.get_status(job_id)
+        return (delegation_relay_client.call("job_status", {"job_id": job_id}) if delegation_relay_client and delegation_relay_client.owns(job_id) else job_manager.get_status(job_id))
 
     @mcp.tool()
     @monitored_tool("job_output")
     def job_output(job_id: str, cursor: int = 0, max_bytes: int = 65536) -> dict:
         """Retrieve incremental output from a running or completed job."""
-        return job_manager.get_output(job_id, cursor=cursor, max_bytes=max_bytes)
+        return (delegation_relay_client.call("job_output", {"job_id": job_id, "cursor": cursor, "max_bytes": max_bytes}) if delegation_relay_client and delegation_relay_client.owns(job_id) else job_manager.get_output(job_id, cursor=cursor, max_bytes=max_bytes))
 
     @mcp.tool()
     @monitored_tool("job_result")
     def job_result(job_id: str, cursor: int = 0, max_bytes: int = 65536) -> dict:
         """Retrieve full result and output of a job."""
-        return job_manager.get_result(job_id, cursor=cursor, max_bytes=max_bytes)
+        return (delegation_relay_client.call("job_result", {"job_id": job_id, "cursor": cursor, "max_bytes": max_bytes}) if delegation_relay_client and delegation_relay_client.owns(job_id) else job_manager.get_result(job_id, cursor=cursor, max_bytes=max_bytes))
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("job_cancel")
     def job_cancel(job_id: str) -> dict:
         """Cancel a running job."""
-        return job_manager.cancel(job_id)
+        return (delegation_relay_client.call("job_cancel", {"job_id": job_id}) if delegation_relay_client and delegation_relay_client.owns(job_id) else job_manager.cancel(job_id))
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("local_http_request")
@@ -481,9 +610,11 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_fetch")
-    def git_fetch(workspace_id: str, remote: str = "origin") -> str:
-        """Fetch branches and tags from remote repository."""
-        return _git_fetch(workspace_id, remote=remote)
+    def git_fetch(workspace_id: str, remote: str = "origin", branch: str = "",
+                  approval_receipt: str = '', prepare_only: bool = False) -> str:
+        """Fetch one owner-approved protected branch into its tracking ref."""
+        return _git_fetch(workspace_id, remote=remote, branch=branch,
+                          approval_receipt=approval_receipt, prepare_only=prepare_only)
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_pull")
@@ -493,15 +624,21 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_push")
-    def git_push(workspace_id: str, remote: str = "origin", branch: str = "", set_upstream: bool = False) -> str:
-        """Push local commits to remote repository."""
-        return _git_push(workspace_id, remote=remote, branch=branch, set_upstream=set_upstream)
+    def git_push(workspace_id: str, remote: str = "origin", branch: str = "", set_upstream: bool = False,
+                 approval_receipt: str = '', prepare_only: bool = False) -> str:
+        """Agent pushes are disabled by operator policy."""
+        return _git_push(workspace_id, remote=remote, branch=branch, set_upstream=set_upstream,
+                         approval_receipt=approval_receipt, prepare_only=prepare_only)
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_commit")
-    def git_commit(workspace_id: str, message: str, all_files: bool = False) -> str:
-        """Commit changes with the specified commit message."""
-        return _git_commit(workspace_id, message=message, all_files=all_files)
+    def git_commit(workspace_id: str, message: str, all_files: bool = False,
+                   approval_receipt: str = '', approval_timestamp: int | None = None,
+                   prepare_only: bool = False) -> str:
+        """Commit explicitly staged workspace changes without a phone receipt."""
+        return _git_commit(workspace_id, message=message, all_files=all_files,
+                           approval_receipt=approval_receipt, approval_timestamp=approval_timestamp,
+                           prepare_only=prepare_only)
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_add")
@@ -535,8 +672,11 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
 
     @mcp.tool()
     @monitored_tool("list_agents")
-    def list_agents() -> list[dict]:
-        """List the seven named worker identities and live availability."""
+    def list_agents(workspace_id: Optional[str] = None) -> list[dict]:
+        """List worker runtime checks and public delegation scope, optionally for a workspace.
+
+        Runtime readiness does not verify provider quota or successful execution.
+        """
         return _list_agents()
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
@@ -570,8 +710,11 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         "sandbox": sandbox,
         "job_manager": job_manager,
         "agent_broker": agent_broker,
+        "delegation_relay_client": delegation_relay_client,
         "operator_action_policy": operator_policy,
+        "client_policy": client_policy,
         "tools": {
+            "get_capabilities": get_capabilities,
             "server_deploy_info": server_deploy_info,
             "list_workspaces": list_workspaces,
             "workspace_info": workspace_info,
@@ -584,6 +727,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             "move_path": move_path,
             "trash_path": trash_path,
             "exec_run": exec_run,
+            "https_download": https_download,
             "exec_start": exec_start,
             "job_status": job_status,
             "job_output": job_output,
@@ -637,6 +781,7 @@ def create_asgi_app(config: Config) -> ASGIApp:
     # Let the MCP SDK reject oversized streamed bodies before Starlette
     # generates a response; never relax its native four-MiB default.
     streamable_app = mcp.streamable_http_app(
+        stateless_http=context['client_policy'].scopes is not None,
         max_request_body_size=min(
             config.security.max_payload_bytes, DEFAULT_MAX_REQUEST_BODY_SIZE
         ),
@@ -658,11 +803,175 @@ def create_asgi_app(config: Config) -> ASGIApp:
     )
     
     app.state.tools = context["tools"]
+    relay_key = read_relay_key(config.config_dir)
+    if relay_key is not None and relay_key == config.api_key:
+        raise PermissionError("Relay credential must differ from general AgentPorter API key")
+    relay_scope = (
+        read_relay_scope(config.config_dir)
+        if context["agent_broker"].development_runtime is not None else {}
+    )
+    if relay_key and context["agent_broker"].development_runtime is not None and not relay_scope:
+        raise PermissionError("Isolated relay key installed without operator workspace scope")
+    if relay_scope:
+        available = {
+            row["workspace_id"]: row["path"] for row in context["registry"].list_all()
+            if row["permissions"]["agent_dispatch"]
+        }
+        if any(available.get(name) != path for name, path in relay_scope.items()):
+            raise PermissionError("Isolated relay scope does not match approved registered workspaces")
+    relay_write_scope = (read_relay_scope(config.config_dir, writable=True)
+                         if relay_scope else {})
+    if relay_write_scope:
+        if not config.sandbox.workspace_transactions or context["job_manager"].resources is None:
+            raise PermissionError("Writable relay requires supervised workspace transactions")
+        if any(relay_scope.get(name) != path or not context["registry"].get(name).writable
+               for name, path in relay_write_scope.items()):
+            raise PermissionError("Writable relay scope must match a writable isolated workspace")
+    relay_server_enabled = (
+        relay_key is not None
+        and bool(relay_scope)
+        and context["agent_broker"].development_runtime is not None
+        and context["delegation_relay_client"] is None
+    )
+    relay_ledger = None
+    if relay_server_enabled:
+        context["agent_broker"].development_runtime.require_production_egress()
+        from agentporter.agents.production_relay import RelayLedger
+        relay_ledger = RelayLedger(config.state_dir)
+        import threading
+        relay_dispatch_lock = threading.RLock()
+    if relay_server_enabled:
+        @app.post("/internal/delegation/v1", include_in_schema=False)
+        async def internal_delegation(request: Request):
+            # The dedicated credential and loopback client check are enforced
+            # in SecurityMiddleware before the request reaches this handler.
+            try:
+                payload = await request.json()
+                if not isinstance(payload, dict) or set(payload) != {"operation", "args"}:
+                    raise PermissionError("Invalid relay envelope")
+                operation, arguments = payload["operation"], payload["args"]
+                if operation not in ALLOWED_OPS or not isinstance(arguments, dict):
+                    raise PermissionError("Unsupported relay operation")
+                if operation == "list_agents":
+                    if arguments:
+                        raise PermissionError("Unexpected inventory arguments")
+                    approved = context["agent_broker"].development_runtime.require_production_egress()
+                    result = [row if row.get("agent") in approved else {
+                        **row, "delegatable": False,
+                        "availability_reason": "Agent is not admitted for production delegation",
+                    } for row in context["tools"]["list_agents"]()]
+                elif operation == "lookup_dispatch":
+                    if set(arguments) != {"request_id"}:
+                        raise PermissionError("Invalid relay recovery request")
+                    previous = relay_ledger.get_request(arguments["request_id"])
+                    result = ({"job_id": previous[0], "status": "known"}
+                              if previous is not None and previous[0] else
+                              {"job_id": None, "status": "delivery_uncertain"})
+                elif operation == "workspace_info":
+                    if (set(arguments) != {"workspace_id"}
+                            or not isinstance(arguments["workspace_id"], str)
+                            or arguments["workspace_id"] not in relay_scope):
+                        raise PermissionError("Workspace outside owner-approved relay scope")
+                    workspace = context["registry"].get(arguments["workspace_id"])
+                    context["agent_broker"].development_runtime.require_production_egress()
+                    from agentporter.agents.production_relay import RECEIVING_SECURITY_PROFILE
+                    result = {"workspace_id": workspace.id, "path": workspace.path,
+                              "agent_dispatch": workspace.allow_agent_dispatch,
+                              "security_profile": RECEIVING_SECURITY_PROFILE,
+                              "writable_transactions": workspace.id in relay_write_scope}
+                elif operation == "dispatch_agent":
+                    context["agent_broker"].development_runtime.require_production_egress(arguments.get("agent", ""))
+                    # The same idempotency token always selects the same job.
+                    # Dispatch and registration are serialized within this
+                    # gateway; no duplicate launch under concurrent requests.
+                    registry = context["registry"]
+                    scopes = set(relay_scope)
+                    arguments = validate_dispatch(arguments, scopes,
+                                                  write_workspace_ids=frozenset(relay_write_scope))
+                    token = arguments.pop("request_id", None)
+                    relay_ledger.validate_request_id(token)
+                    with relay_dispatch_lock:
+                        # Reconcile tracked completions so finished jobs do not
+                        # consume the three-job admission capacity indefinitely.
+                        manager = context["job_manager"]
+                        for (known_jid,) in relay_ledger.active_jobs():
+                            try:
+                                observed = manager.get_status(known_jid)
+                            except KeyError:
+                                observed = {"status": "unknown"}
+                            if observed["status"] in TERMINAL_JOB_STATUSES:
+                                relay_ledger.mark_terminal(known_jid)
+                            # A different gateway process may own an active
+                            # worker; never infer termination from this
+                            # process's empty active_processes mapping.
+
+                        # Single SQLite BEGIN IMMEDIATE atomically arbitrates
+                        # reservations across all worker gateway processes.
+                        prior = relay_ledger.reserve(
+                            token, arguments["workspace_id"], arguments["agent"],
+                            max_active=3)
+                        if prior is not None:
+                            if prior[0] is None:
+                                raise PermissionError("Previous relay launch outcome uncertain; no duplicate dispatch")
+                            result = context["tools"]["job_status"](job_id=prior[0])
+                            result = {**result, "job_id": prior[0], "dispatch_id": prior[0]}
+                        else:
+                            try:
+                                result = context["tools"]["dispatch_agent"](**arguments)
+                            except (PermissionError, ValueError, JobCapacityError):
+                                # The broker raises these for rejected scopes,
+                                # unsupported models and refused launch policies.
+                                # The confined JobManager cleans up/kills its
+                                # child before re-raising these exceptions.
+                                # Preserve the spent idempotency key but free
+                                # its capacity only when no job ID was issued.
+                                relay_ledger.mark_no_launch(token)
+                                raise
+                            jid = result.get("job_id", "")
+                            if not JOB_RE.fullmatch(jid):
+                                raise RuntimeError("Confined backend did not issue a valid job")
+                            relay_ledger.register(
+                                token, jid, arguments["workspace_id"], arguments["agent"])
+                else:
+                    jid = validate_job_request(arguments)
+                    if relay_ledger.get_remote(jid) is None:
+                        raise PermissionError("Job was not created by relay")
+                    if operation in {"job_output", "job_result"}:
+                        arguments["max_bytes"] = min(arguments.get("max_bytes", 65536), 32768)
+                    if operation == "job_status":
+                        result = context["tools"]["job_status"](job_id=jid)
+                    elif operation == "job_output":
+                        result = context["tools"]["job_output"](**arguments)
+                    elif operation == "job_result":
+                        result = context["tools"]["job_result"](**arguments)
+                    else:
+                        raise PermissionError("Production relay cancellation is disabled pending PID-safe backend")
+                    if result.get("status") in TERMINAL_JOB_STATUSES:
+                        relay_ledger.mark_terminal(jid)
+                    elif (result.get("status") == "running"
+                          and jid not in context["job_manager"].active_processes):
+                        # Cannot tell a restarted gateway from a worker owned
+                        # by another process. Preserve durable capacity.
+                        result = {**result, "status": "running_unverified"}
+                return JSONResponse(result)
+            except (PermissionError, ValueError, KeyError) as exc:
+                logger.warning("Narrow relay request denied: %s", type(exc).__name__)
+                return JSONResponse({"detail": "Delegation relay request denied"}, status_code=403)
+
 
     @app.exception_handler(PermissionError)
     async def permission_error_response(request, exc: PermissionError):
         """Return authorization denials as 403 rather than HTTP 500."""
         return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+    @app.exception_handler(JobCapacityError)
+    async def capacity_error_response(request, exc):
+        return JSONResponse(status_code=429, content={'detail': str(exc)}, headers={'Retry-After': '3'})
+
+    @app.exception_handler(ValueError)
+    async def invalid_tool_arguments_response(request, exc: ValueError):
+        """Reject invalid tool paths/arguments without reflecting private data."""
+        return JSONResponse(status_code=400, content={'detail': 'Invalid tool arguments'})
 
 
     @app.get("/health")
@@ -765,5 +1074,7 @@ def create_asgi_app(config: Config) -> ASGIApp:
         header_name=config.security.header_name,
         legacy_header_name=config.security.legacy_header_name,
         rate_limiter=rate_limiter,
-        max_payload_bytes=config.security.max_payload_bytes
+        max_payload_bytes=config.security.max_payload_bytes,
+        delegation_relay_key=relay_key if relay_server_enabled else None,
+        internal_client_key=context['client_policy'].internal_key,
     )

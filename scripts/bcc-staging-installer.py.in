@@ -1,0 +1,263 @@
+#!/usr/bin/python3
+"""Pinned data-only BCC staging installer; never runs release code as root.
+
+Install this reviewed helper root-owned outside workspaces before --apply.
+Starts only agentporter-bcc-worker.service on 127.0.0.1:8876.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import pwd
+import shutil
+import socket
+import stat
+import subprocess
+import tarfile
+import tempfile
+import time
+import urllib.request
+
+SOURCE = Path(@@SOURCE@@)
+INPUTS = @@INPUTS@@
+CREDENTIALS = @@CREDENTIALS@@
+OWNER_UID = 2056259175
+WORKER_UID = 997
+WORKER_GID = 997
+UNIT = 'agentporter-bcc-worker.service'
+TRUSTED = Path('/usr/local/libexec/agentporter-bcc-stage-install.py')
+
+
+def require(condition, message):
+    if not condition:
+        raise PermissionError(message)
+
+
+def trusted_program():
+    require(os.getuid() == 0 and os.geteuid() == 0, 'Apply requires root')
+    here = Path(__file__)
+    require(here == TRUSTED, 'Run only the installed helper outside workspaces')
+    for path in [here, *here.parents]:
+        info = path.lstat()
+        require(info.st_uid == 0 and not info.st_mode & 0o022
+                and not stat.S_ISLNK(info.st_mode), 'Helper and ancestors require root control')
+
+
+def source_fd(path, limit):
+    """Pin every source ancestor; never follow links into private host files."""
+    require(path.is_absolute(), 'Source must be absolute')
+    current = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for component in path.parts[1:-1]:
+            info = os.fstat(current)
+            require(info.st_uid in {0, OWNER_UID} and not info.st_mode & 0o022,
+                    'Untrusted source ancestor')
+            child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
+            os.close(current)
+            current = child
+        info = os.fstat(current)
+        require(info.st_uid in {0, OWNER_UID} and not info.st_mode & 0o022, 'Untrusted source parent')
+        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=current)
+    finally:
+        os.close(current)
+    info = os.fstat(fd)
+    if not (stat.S_ISREG(info.st_mode) and info.st_uid == OWNER_UID
+            and info.st_nlink == 1 and not info.st_mode & 0o022 and 0 < info.st_size <= limit):
+        os.close(fd)
+        raise PermissionError('Unsafe or oversized source file')
+    return fd
+
+
+def copy_source(source, target, limit, expected=None, uid=0, gid=0):
+    fd = source_fd(source, limit)
+    checksum = hashlib.sha256()
+    try:
+        before = os.fstat(fd)
+        with os.fdopen(fd, 'rb', closefd=False) as incoming, target.open('xb') as outgoing:
+            target.chmod(0o600)
+            remaining = limit + 1
+            while remaining:
+                body = incoming.read(min(1024 * 1024, remaining))
+                if not body:
+                    break
+                checksum.update(body)
+                outgoing.write(body)
+                remaining -= len(body)
+            require(remaining > 0, 'Source exceeded its bound')
+        after = os.fstat(fd)
+        require((before.st_size, before.st_mtime_ns, before.st_ctime_ns) ==
+                (after.st_size, after.st_mtime_ns, after.st_ctime_ns), 'Source changed while copied')
+        require(expected is None or checksum.hexdigest() == expected, 'Pinned input checksum mismatch')
+        os.chown(target, uid, gid)
+    finally:
+        os.close(fd)
+
+
+def root_directory(path):
+    for parent in reversed([path, *path.parents]):
+        if not parent.exists():
+            parent.mkdir(mode=0o755)
+        info = parent.lstat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022,
+                'Installation ancestry must be root-controlled')
+
+
+def extract_release(archive, target):
+    allowed_links = {'venv/bin/python': {'/usr/bin/python3.13'},
+                     'venv/bin/python3': {'python'}, 'venv/bin/python3.13': {'python'},
+                     'venv/lib64': {'lib'}}
+    total = 0
+    names = set()
+    with tarfile.open(archive, 'r:gz') as bundle:
+        for member in bundle:
+            name = PurePosixPath(member.name)
+            require(not name.is_absolute() and '..' not in name.parts and str(name) == member.name
+                    and name.parts[0] in {'venv', 'cli', 'RELEASE.json'}
+                    and member.name not in names, 'Unsafe archive path')
+            names.add(member.name)
+            require(len(names) <= 30000, 'Archive member bound exceeded')
+            destination = target / str(name)
+            for parent in destination.parents:
+                if parent == target:
+                    break
+                require(not parent.is_symlink(), 'Archive symlink ancestor')
+            if member.isdir():
+                destination.mkdir(mode=0o755, parents=True, exist_ok=True)
+            elif member.issym():
+                require(member.linkname in allowed_links.get(member.name, set()), 'Unexpected release symlink')
+                destination.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+                destination.symlink_to(member.linkname)
+            elif member.isfile():
+                total += member.size
+                require(0 <= member.size <= 512 * 1024**2 and total <= 3 * 1024**3,
+                        'Archive size bound exceeded')
+                destination.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+                with bundle.extractfile(member) as incoming, destination.open('xb') as outgoing:
+                    shutil.copyfileobj(incoming, outgoing, 1024 * 1024)
+                destination.chmod(0o555 if member.mode & 0o111 else 0o444)
+            else:
+                raise PermissionError('Special archive member rejected')
+    manifest_path = target / 'RELEASE.json'
+    require(manifest_path.stat().st_size <= 4 * 1024**2, 'Oversized release manifest')
+    manifest = json.loads(manifest_path.read_text())
+    require(manifest['version'] == INPUTS['version'], 'Wrong release version')
+    actual = {}
+    for path in target.rglob('*'):
+        relative = str(path.relative_to(target))
+        if relative == 'RELEASE.json':
+            continue
+        if path.is_symlink():
+            actual[relative] = {'symlink': os.readlink(path)}
+        elif path.is_file():
+            checksum = hashlib.sha256()
+            with path.open('rb') as stream:
+                for body in iter(lambda: stream.read(1024 * 1024), b''):
+                    checksum.update(body)
+            actual[relative] = {'sha256': checksum.hexdigest()}
+    require(actual == manifest['files'], 'Extracted release manifest mismatch')
+    for path in sorted(target.rglob('*'), reverse=True):
+        if path.is_dir() and not path.is_symlink():
+            path.chmod(0o555)
+    target.chmod(0o555)
+
+
+def worker_directory(path, base):
+    require(path == base or path.is_relative_to(base), 'Worker directory outside staging data')
+    if path != base:
+        worker_directory(path.parent, base)
+    if not path.exists():
+        path.mkdir(mode=0o700)
+        os.chown(path, WORKER_UID, WORKER_GID)
+    info = path.lstat()
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == WORKER_UID
+            and stat.S_IMODE(info.st_mode) == 0o700, 'Worker data must be private and service-owned')
+
+
+def install():
+    trusted_program()
+    require(socket.gethostname().split('.')[0] == 'pho-rdpdl-23', 'This staging plan is pinned to BCC')
+    sandbox = Path('/opt/agentporter-bcc/bin/bwrap')
+    require(hashlib.sha256(sandbox.read_bytes()).hexdigest() ==
+            '10d4f16697cbb3b77cc7c7b18ea56c811cd4978f069c9baad02f6777d84565fd',
+            'BCC sandbox differs from the verified prerequisite')
+    account = pwd.getpwnam('agentporter-bcc-worker')
+    require((account.pw_uid, account.pw_gid) == (WORKER_UID, WORKER_GID), 'Worker account differs from reviewed identity')
+    require(set(os.getgrouplist(account.pw_name, account.pw_gid)) == {WORKER_GID}, 'Worker has unexpected groups')
+    require(subprocess.run(['/usr/bin/pgrep', '-u', str(WORKER_UID)], stdout=subprocess.DEVNULL).returncode == 1,
+            'Worker account already has processes; refuse provisioning race')
+    installed = Path(INPUTS['installed_release'])
+    data = Path(INPUTS['data'])
+    unit_path = Path('/etc/systemd/system') / UNIT
+    require(not installed.exists() and not installed.is_symlink() and not data.exists()
+            and not data.is_symlink() and not unit_path.exists() and not unit_path.is_symlink(),
+            'Staging installation already exists; preserve it for inspection')
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1', 8876))
+    # All changing source inputs enter root-private storage before use.
+    with tempfile.TemporaryDirectory(prefix='agentporter-bcc-install-', dir='/var/tmp') as temporary:
+        staging = Path(temporary)
+        for name, checksum in INPUTS['sha256'].items():
+            target = staging / name
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            copy_source(SOURCE / name, target, 2 * 1024**3 if name == 'release.tar.gz' else 1024**2, checksum)
+        root_directory(installed.parent)
+        installed.mkdir(mode=0o700)
+        extract_release(staging / 'release.tar.gz', installed)
+        base = Path('/var/lib/agentporter-bcc-worker')
+        worker_directory(data, base)
+        for name in ['home', 'config', 'state', 'cache', 'fixture', 'credentials']:
+            worker_directory(data / name, base)
+        for name in ['config.yaml', 'workspaces.yaml', 'public-client-policy.yaml', 'development-runtime.yaml']:
+            target = data / 'config' / name
+            shutil.copyfile(staging / 'templates' / name, target)
+            target.chmod(0o600)
+            os.chown(target, WORKER_UID, WORKER_GID)
+        for name in ['secrets.env', 'internal-client.key']:
+            target = data / 'config' / name
+            shutil.copyfile(staging / 'private' / name, target)
+            target.chmod(0o600)
+            os.chown(target, WORKER_UID, WORKER_GID)
+        for entry in CREDENTIALS:
+            target = Path(entry['destination'])
+            require(target.is_relative_to(data / 'credentials'), 'Credential destination outside private staging')
+            worker_directory(target.parent, base)
+            copy_source(Path(entry['source']), target, 131072, uid=WORKER_UID, gid=WORKER_GID)
+        fixture = data / 'fixture/README.md'
+        fixture.write_text('# BCC isolated staging fixture\nUse only this synthetic project for acceptance.\n')
+        fixture.chmod(0o600)
+        os.chown(fixture, WORKER_UID, WORKER_GID)
+        subprocess.run(['/usr/bin/git', '-c', 'core.hooksPath=/dev/null', 'init', '-q', '--template=', str(data / 'fixture')],
+                       user=WORKER_UID, group=WORKER_GID, extra_groups=(), cwd='/',
+                       env={'PATH': '/usr/bin:/bin', 'HOME': str(data / 'home'),
+                            'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null'}, check=True)
+        with unit_path.open('x') as target:
+            target.write((staging / UNIT).read_text())
+        unit_path.chmod(0o644)
+    subprocess.run(['/usr/bin/systemctl', 'daemon-reload'], check=True)
+    subprocess.run(['/usr/bin/systemctl', 'start', UNIT], check=True)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    for _ in range(30):
+        try:
+            with opener.open('http://127.0.0.1:8876/health', timeout=2) as response:
+                require(response.status == 200, 'Staging health failed')
+            print('STAGING_READY: 127.0.0.1:8876; only the synthetic bcc-staging workspace is authorized.')
+            print('Existing production gateway and BCC tunnel were not operated.')
+            return
+        except OSError:
+            time.sleep(1)
+    raise RuntimeError('Staging did not become healthy; preserve installed files and inspect the staging unit')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--apply', action='store_true')
+    args = parser.parse_args()
+    if args.apply:
+        install()
+    else:
+        print(json.dumps({'mode': 'plan', 'release': INPUTS['installed_release'], 'data': INPUTS['data'],
+                          'unit': UNIT, 'port': 8876, 'production_restart': False,
+                          'credential_copies': len(CREDENTIALS)}))

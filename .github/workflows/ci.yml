@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, audit-hardening]
+    branches: [main, audit-hardening, "production/**"]
   pull_request:
 
 permissions:
@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +22,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap ripgrep patch r-base
+          sudo apt-get install -y bubblewrap ripgrep patch r-base acl
 
       - uses: actions/setup-python@v5
         with:

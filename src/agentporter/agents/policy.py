@@ -66,10 +66,10 @@ class ExecutionPolicy:
     def for_workspace(
         cls, writable: bool, allow_commit: bool = False, allow_push: bool = False
     ) -> "ExecutionPolicy":
-        """Commit/push need writable workspace plus explicit human confirmation."""
+        """Writable workspace membership permits commits; agents never push."""
         if not writable:
             return cls(workspace_write=False)
-        return cls(git_commit=allow_commit, git_push=allow_push)
+        return cls(git_commit=True, git_push=False)
 
     def denied_commands(self) -> list[str]:
         denied = list(SENSITIVE_COMMANDS)
@@ -88,8 +88,8 @@ class ExecutionPolicy:
             "Execution Policy:\n"
             f"- Workspace edits: {'allowed' if self.workspace_write else 'NOT allowed (read-only)'}\n"
             "- Shell, tests, builds, git status/diff/log/show: allowed inside Project Root\n"
-            f"- git commit: {'allowed (confirmed by dispatcher)' if self.git_commit else 'NOT allowed without human confirmation'}\n"
-            f"- git push: {'allowed to existing remotes (confirmed by dispatcher)' if self.git_push else 'NOT allowed without human confirmation'}\n"
+            f"- git commit: {'allowed inside writable workspace' if self.git_commit else 'NOT allowed (read-only)'}\n"
+            "- git push: NOT allowed\n"
             "- Force push, remote changes, branch deletion: NOT allowed\n"
             "- Destructive deletes, credential/secret changes, system config, "
             "package installs, deploys, publishing, external messages: NOT allowed\n"

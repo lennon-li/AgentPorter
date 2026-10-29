@@ -149,3 +149,21 @@ def test_inference_approval_public_key_cannot_be_configured(tmp_path, monkeypatc
     cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / "st", cache_dir=tmp_path / "cache")
     assert not hasattr(cfg.scinet, "inference_approval_public_key")
     assert cfg.scinet.inference_approval_reviewer == "lennon"
+
+
+@pytest.mark.parametrize('setting, expected', [('', False), ('workspace_transactions: true', True), ('workspace_transactions: false', False)])
+def test_workspace_transactions_explicit_config(tmp_path, setting, expected):
+    cfg_dir = tmp_path / 'cfg'
+    cfg_dir.mkdir()
+    (cfg_dir / 'config.yaml').write_text('sandbox: {' + setting + '}\n')
+    cfg = Config(config_dir=cfg_dir, state_dir=tmp_path / 'state', cache_dir=tmp_path / 'cache')
+    assert cfg.sandbox.workspace_transactions is expected
+
+
+@pytest.mark.parametrize('setting', ["'true'", '1', '[]', '{}', 'null'])
+def test_workspace_transactions_rejects_non_boolean(tmp_path, setting):
+    cfg_dir = tmp_path / 'cfg'
+    cfg_dir.mkdir()
+    (cfg_dir / 'config.yaml').write_text('sandbox: {workspace_transactions: ' + setting + '}\n')
+    with pytest.raises(ValueError, match='workspace_transactions'):
+        Config(config_dir=cfg_dir, state_dir=tmp_path / 'state', cache_dir=tmp_path / 'cache')

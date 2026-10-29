@@ -1,5 +1,12 @@
 # AgentPorter named-agent roster and action authorization matrix
 
+> Historical governance baseline (2026-10-19). For the current development
+> implementation and installation limits, start with [the action map](A7DEV_ACTION_MAP.md)
+> and [consolidated status](A7DEV_CURRENT_STATE.md). Statements below about missing
+> confinement and policy overrides describe the earlier candidate. The current
+> source implements confined development workers and owner-installed restrictions;
+> a general trusted approval issuer and Git publication backend remain unavailable.
+
 **Release blocker:** No confined worker backend or trusted approval issuer
 has been implemented. Running a locally installed CLI is not authorization.
 Generic asynchronous host launches are rejected unless they match a
@@ -39,7 +46,7 @@ reports enforced read-only delegation.
 
 ## Operator-overridable matrix; non-exposed host capabilities
 
-**All 53 public actions have operator-overridable *default policy modes*.**
+**All 54 public actions have operator-overridable *default policy modes*.**
 The ALLOW / SCOPE / APPROVAL / LOCKED entries below are shipped defaults,
 not an immutable list of owner permissions. An authenticated operator may
 configure a stricter or more permissive mode for any exposed action, including
@@ -102,7 +109,7 @@ with OS-enforced restrictions or isolated execution identities. The current
 ChatGPT `Always ask` connector setting is a separate, client-side layer.
 This candidate must not be represented as voice-approval-ready.
 
-## Exhaustive live action inventory (53 MCP tools)
+## Exhaustive live action inventory (54 MCP tools)
 
 The mode column is the **initial configurable default**, not a permanent restriction. The protected operator control plane (not yet implemented) will own overrides.
 
@@ -140,8 +147,9 @@ The mode column is the **initial configurable default**, not a permanent restric
 | `mkdir` | **SCOPE** | Explicit writable workspace/path. |
 | `move_path` | **SCOPE** | Explicit writable workspace; conflict guard. |
 | `trash_path` | **SCOPE** | Recoverable trash only; no permanent delete. |
-| `exec_run` | **SCOPE** | Bubblewrap sandbox; MCP and REST default offline; attempts to enable generic networking are rejected. Arbitrary commands may write workspace content; future scope gate required. |
-| `exec_start` | **SCOPE** | Same as exec_run; keep job ID and bounded lifetime. |
+| `exec_run` | **SCOPE** | Bubblewrap commands remain offline; a separately operator-approved cranary GET/HEAD metadata broker is proposed, without generic shell internet access. Arbitrary commands may write workspace content; future scope gate required. |
+| `exec_start` | **SCOPE** | Offline-by-default; a proposed owner-approved metadata worker has bounded lifetime and cancellation. |
+| `https_download` | **SCOPE** | Separate owner-approved binary acquisition to a fixed research directory; bounded GET, SHA256 receipt, no redirects or overwrite. |
 | `job_cancel` | **SCOPE** | Only authorized job; report actual cancellation state. |
 | `git_add` | **SCOPE** | Stage only exact approved paths; no commit. |
 | `git_checkout` | **SCOPE** | Only approved branch/worktree, inspect dirty changes before switch. |
@@ -158,8 +166,8 @@ The mode column is the **initial configurable default**, not a permanent restric
 | `scinet_inference_submit` | **APPROVAL** | Signed exact stage + allocation quota. |
 | `git_fetch` | **APPROVAL** | Remote-only plus workspace metadata change; no read-only fetch. |
 | `git_pull` | **APPROVAL** | Branch and remote explicit, clean-tree and conflict checks. |
-| `git_commit` | **LOCKED** | Dedicated API endpoint denied by default; indirect execution bypass remains until full sandbox scope enforcement. |
-| `git_push` | **LOCKED** | Dedicated API endpoint denied by default; networked shell/worker bypass remains until full gate. |
+| `git_commit` | **SCOPE** | Writable workspace commits require no phone receipt; delegated commits use private Git state and a verified offline import. |
+| `git_push` | **LOCKED** | Agent publication is denied through REST/MCP and provider-scoped worker networking. |
 | `scinet_record_approvals` | **APPROVAL** | Existing per-stage, per-experiment fixed-reviewer confirmation mechanism; never treat speech or worker text as human approval. |
 
 ## Permanently excluded capabilities (not operator-overridable)
@@ -169,7 +177,7 @@ changes, account and package administration, credential or token disclosure,
 workspace traversal, installing hidden MCP servers, inherited privileged
 plugin execution, `git push --force`, destructive branch rewrites, bypassing
 model/account policy, and manufacturing human approvals must **never be public
-MCP/REST operations**. They are not among the 53 public action names, and no
+MCP/REST operations**. They are not among the 54 public action names, and no
 operator override may turn an excluded capability into a new public action.
 
 Absence from discovery alone does not guarantee containment: a generic shell,
@@ -201,7 +209,7 @@ turn this classification into enforceable voice-driven permissions.
    and forged approval/commit/push requests. Independent audit required.
 7. Activate with the trusted immutable deployment gate, and compare live
    release fingerprint, actual agent roster, and operation behavior.
-8. Build the protected operator-owned override policy store; cover all 53
+8. Build the protected operator-owned override policy store; cover all 54
    actions, default to the shipped modes, reject unknown action IDs, and deny
    attempts to introduce hard-excluded host operations into MCP or REST.
 9. Test both policy overrides and runtime invariant gates; a more permissive
@@ -209,9 +217,9 @@ turn this classification into enforceable voice-driven permissions.
 
 ### Catalog integrity
 
-Derived from the actual 53 registered AgentPorter tools available to the
+Derived from the actual 54 registered AgentPorter tools available to the
 connected a7 client on 2026-10-19. The condensed `get_capabilities` list
 advertises fewer tools and is **not** a reliable exhaustive action catalog.
-Maintain this document from a live schema export, and make the 53-name
+Maintain this document from a live schema export, and make the 54-name
 inventory a regression fixture so tool additions cannot silently become
 authorized by default.

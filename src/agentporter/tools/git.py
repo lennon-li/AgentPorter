@@ -6,7 +6,29 @@ from agentporter.sandbox.bubblewrap import BubblewrapSandbox
 MAX_GIT_OUTPUT = 200_000
 
 
-def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
+# Executed only inside the existing bounded sandbox. Config inspection does not
+# invoke filters; no repository helper may inherit canonical Git write access.
+_FILTER_GUARD = r"""import os, subprocess, sys
+query = ['git', '-c', 'safe.directory=/workspace', '-c', 'core.fsmonitor=false',
+         '-c', 'core.hooksPath=/dev/null', '-c', 'submodule.recurse=false',
+         'config', '--includes', '--name-only', '--get-regexp',
+         r'^filter\..*\.(clean|smudge|process)$']
+process = subprocess.Popen(query, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+output = process.stdout.read(4097)
+if output:
+    if process.poll() is None:
+        process.kill()
+    process.wait(timeout=2)
+    sys.stderr.write('Git mutation denied: repository executable filters require a separately approved backend.\n')
+    raise SystemExit(78)
+status = process.wait(timeout=2)
+if status != 1:
+    sys.stderr.write('Git mutation denied: repository configuration could not be safely inspected.\n')
+    raise SystemExit(78)
+os.execvp(sys.argv[1], sys.argv[1:])
+"""
+
+def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox, approved_commits=None, approved_pushes=None, approved_fetches=None):
     def _workspace(workspace_id: str):
         ws = registry.get(workspace_id)
         if not ws.allow_git:
@@ -14,16 +36,36 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         return ws
 
     def _run_git(ws_path: str, args: list[str], timeout: int = 10, writable: bool = False, network_access: bool = False, writable_git_metadata: bool = False) -> str:
+        if writable_git_metadata:
+            import os
+            from pathlib import Path
+            from agentporter.git_commits import _inspect_metadata, _mount_id
+            root = os.open(ws_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            try:
+                if os.path.lexists(Path(ws_path) / '.git'):
+                    try:
+                        metadata = os.open('.git', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=root)
+                    except OSError as error:
+                        raise PermissionError('Trusted Git mutations require in-project directory metadata') from error
+                    try:
+                        _inspect_metadata(metadata, _mount_id(root))
+                    finally:
+                        os.close(metadata)
+            finally:
+                os.close(root)
         # Repository-local Git configuration is treated as untrusted input.
         # Run Git inside the sandbox and override common executable helper mechanisms.
         argv = [
             "git",
+            *(["--git-dir=/workspace/.git", "--work-tree=/workspace"] if writable_git_metadata else []),
+            "-c", "safe.directory=/workspace",
             "-c", "core.fsmonitor=false",
             # No hooks from .git/hooks, core.hooksPath, or inherited config.
             # The dedicated Git-metadata writable mode must never run a
             # repository-supplied post-checkout command with ref write rights.
             "-c", "core.hooksPath=/dev/null",
             "-c", "core.untrackedCache=false",
+            "-c", "submodule.recurse=false",
             "-c", "diff.external=",
             "-c", "pager.status=false",
             "-c", "pager.diff=false",
@@ -31,6 +73,8 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
             "-c", "pager.show=false",
             *args,
         ]
+        if writable_git_metadata:
+            argv = ['/usr/bin/python3', '-I', '-S', '-c', _FILTER_GUARD, *argv]
         res = sandbox.run(
             workspace_path=ws_path,
             argv=argv,
@@ -52,7 +96,9 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
 
     def git_diff(workspace_id: str, staged: bool = False) -> str:
         ws = _workspace(workspace_id)
-        args = ["diff", "--staged"] if staged else ["diff"]
+        args = ["diff", "--no-ext-diff", "--no-textconv"]
+        if staged:
+            args.append("--staged")
         out = _run_git(ws.path, args)
         return out if out.strip() else "No diff."
 
@@ -66,20 +112,24 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         clean_ref = ref.strip()
         if not clean_ref or clean_ref.startswith("-") or len(clean_ref) > 256:
             raise ValueError("Invalid ref")
-        return _run_git(ws.path, ["show", "--stat", "-p", clean_ref])
+        return _run_git(ws.path, ["show", "--no-ext-diff", "--no-textconv", "--stat", "-p", clean_ref])
 
-    def git_fetch(workspace_id: str, remote: str = "origin") -> str:
+    def git_fetch(workspace_id: str, remote: str = "origin", branch: str = "",
+                  approval_receipt: str = '', prepare_only: bool = False) -> str:
         ws = _workspace(workspace_id)
         if not ws.writable:
             raise PermissionError(f"Workspace '{workspace_id}' is read-only")
-        # Network-enabled generic Bubblewrap execution is forbidden. Until a
-        # dedicated Git transport with scoped egress, credentials, metadata
-        # access and independent approval exists, refuse rather than attempt a
-        # permanently failing sandbox call or silently bypass network isolation.
-        raise PermissionError(
-            "Git fetch is locked: scoped network-capable Git backend and "
-            "independently verified approval are unavailable"
-        )
+        if approved_fetches is None:
+            raise PermissionError('Git fetch is locked: scoped network-capable Git backend and server-verified owner approval are unavailable')
+        if prepare_only:
+            import json
+            if approval_receipt:
+                raise ValueError('Preparation cannot also submit an approval receipt')
+            request = approved_fetches.prepare(workspace_id, remote, branch)
+            return json.dumps({'request': request.to_payload(), 'request_sha256': request.digest}, sort_keys=True)
+        if not approval_receipt:
+            raise PermissionError('Git fetch requires a server-verified exact owner approval receipt')
+        return approved_fetches.fetch(workspace_id, remote, branch, approval_receipt)
 
     def git_pull(workspace_id: str, remote: str = "origin", branch: str = "") -> str:
         ws = _workspace(workspace_id)
@@ -90,44 +140,39 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
             "independently verified approval are unavailable"
         )
 
-    def git_push(workspace_id: str, remote: str = "origin", branch: str = "", set_upstream: bool = False) -> str:
-        # Fail closed at the shared tool boundary reached by MCP and REST.
-        # A caller's tool permission/voice request is NOT a verified approval.
-        raise PermissionError(
-            "Git push is locked until a server-verified, scoped human approval "
-            "receipt is implemented"
-        )
-        if not ws.writable:
-            raise PermissionError(f"Workspace '{workspace_id}' is read-only")
-        clean_remote = remote.strip()
-        if not clean_remote or clean_remote.startswith("-") or len(clean_remote) > 256:
-            raise ValueError("Invalid remote")
-        args = ["push"]
-        if set_upstream:
-            args.append("-u")
-        args.append(clean_remote)
-        if branch.strip():
-            clean_branch = branch.strip()
-            if clean_branch.startswith("-") or len(clean_branch) > 256:
-                raise ValueError("Invalid branch")
-            args.append(clean_branch)
-        out = _run_git(ws.path, args, timeout=60, writable=True, network_access=True)
-        return out if out.strip() else f"Pushed to {clean_remote} successfully."
+    def git_push(workspace_id: str, remote: str = "origin", branch: str = "", set_upstream: bool = False,
+                 approval_receipt: str = '', prepare_only: bool = False) -> str:
+        raise PermissionError('Agent Git push is disabled by operator policy')
 
-    def git_commit(workspace_id: str, message: str, all_files: bool = False) -> str:
+    def git_commit(workspace_id: str, message: str, all_files: bool = False,
+                   approval_receipt: str = '', approval_timestamp: int | None = None,
+                   prepare_only: bool = False) -> str:
+        if approved_commits is not None and getattr(approved_commits, 'requires_receipt', True) is False:
+            import time
+            if prepare_only or approval_receipt or approval_timestamp is not None:
+                raise ValueError('Workspace commits do not use phone proposals or receipts')
+            if all_files:
+                raise ValueError('Stage explicit paths with git_add before committing')
+            return approved_commits.commit(workspace_id, message, int(time.time()), '')
+        if approved_commits is not None:
+            import json
+            import time
+            if all_files:
+                raise PermissionError('Owner-approved commits require explicitly staged paths')
+            if prepare_only:
+                if approval_receipt:
+                    raise ValueError('Preparation cannot also submit an approval receipt')
+                timestamp = int(time.time()) if approval_timestamp is None else approval_timestamp
+                request = approved_commits.prepare(workspace_id, message, timestamp)
+                return json.dumps({'request': request.to_payload(), 'request_sha256': request.digest}, sort_keys=True)
+            if not approval_receipt or approval_timestamp is None:
+                raise PermissionError('Git commit requires a server-verified exact owner approval receipt and timestamp')
+            return approved_commits.commit(workspace_id, message, approval_timestamp, approval_receipt)
         # Same fail-closed boundary as git_push; no untrusted boolean override.
         raise PermissionError(
             "Git commit is locked until a server-verified, scoped human approval "
             "receipt is implemented"
         )
-        if not ws.writable:
-            raise PermissionError(f"Workspace '{workspace_id}' is read-only")
-        clean_msg = message.strip()
-        if not clean_msg:
-            raise ValueError("Commit message cannot be empty")
-        args = ["commit", "-a", "-m", clean_msg] if all_files else ["commit", "-m", clean_msg]
-        out = _run_git(ws.path, args, timeout=30, writable=True)
-        return out if out.strip() else "Committed changes successfully."
 
     def git_add(workspace_id: str, paths: list[str]) -> str:
         ws = _workspace(workspace_id)
@@ -159,6 +204,19 @@ def create_git_tools(registry: WorkspaceRegistry, sandbox: BubblewrapSandbox):
         args = ["checkout", "-b", clean_branch] if create else ["checkout", clean_branch]
         out = _run_git(ws.path, args, timeout=30, writable=True, writable_git_metadata=True)
         return out if out.strip() else f"Switched to branch {clean_branch}."
+
+    if getattr(sandbox, 'transactional_writes', False) is True:
+        from agentporter.workspaces.leases import serialized_mutation
+        state = sandbox.state_dir / 'workspace-transactions'
+        if approved_fetches is None:
+            git_fetch = serialized_mutation(registry, state, git_fetch)
+        git_pull = serialized_mutation(registry, state, git_pull)
+        if approved_pushes is None:
+            git_push = serialized_mutation(registry, state, git_push)
+        if approved_commits is None:
+            git_commit = serialized_mutation(registry, state, git_commit)
+        git_add = serialized_mutation(registry, state, git_add)
+        git_checkout = serialized_mutation(registry, state, git_checkout)
 
     class GitTools(tuple):
         def __new__(cls, status, diff, log, show, fetch, pull, push, commit, add, branch, checkout):

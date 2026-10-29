@@ -5,6 +5,7 @@ import base64
 import mimetypes
 from agentporter.workspaces.registry import WorkspaceRegistry
 from agentporter.workspaces.paths import validate_workspace_path
+from agentporter.workspaces.bounded import read_regular, walk_files, MAX_SCAN_DEPTH
 
 IMAGE_EXTENSIONS = {
     ".png": "image/png",
@@ -35,10 +36,9 @@ def create_artifact_tools(registry: WorkspaceRegistry):
             return []
 
         results = []
-        for root, _, files in os.walk(artifact_dir):
-            for fn in files:
-                full_p = os.path.join(root, fn)
-                rel_p = os.path.relpath(full_p, ws.path)
+        for rel_p in walk_files(ws.path, path, MAX_SCAN_DEPTH):
+                full_p = os.path.join(ws.path, rel_p)
+                fn = os.path.basename(rel_p)
                 try:
                     validate_workspace_path(ws.path, rel_p)
                 except ValueError:
@@ -53,8 +53,6 @@ def create_artifact_tools(registry: WorkspaceRegistry):
                 })
                 if len(results) >= MAX_ARTIFACT_LIST:
                     break
-            if len(results) >= MAX_ARTIFACT_LIST:
-                break
         results.sort(key=lambda x: x["path"])
         return results
 
@@ -73,8 +71,7 @@ def create_artifact_tools(registry: WorkspaceRegistry):
                     f"Image artifact is {size} bytes; limit is {MAX_IMAGE_ARTIFACT_BYTES}"
                 )
             mime = IMAGE_EXTENSIONS[ext]
-            with open(full_path, "rb") as f:
-                data = f.read(MAX_IMAGE_ARTIFACT_BYTES + 1)
+            data = read_regular(ws.path, path, MAX_IMAGE_ARTIFACT_BYTES)
             return {
                 "path": path,
                 "type": "image",
@@ -83,8 +80,10 @@ def create_artifact_tools(registry: WorkspaceRegistry):
                 "base64_data": base64.b64encode(data).decode("ascii"),
             }
 
-        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read(MAX_TEXT_ARTIFACT_BYTES)
+        data = read_regular(ws.path, path, MAX_TEXT_ARTIFACT_BYTES)
+        content = data.decode('utf-8', errors='replace')
+        if len(content.encode('utf-8')) > MAX_TEXT_ARTIFACT_BYTES:
+            raise ValueError('Decoded artifact exceeds output budget')
         return {
             "path": path,
             "type": "text",

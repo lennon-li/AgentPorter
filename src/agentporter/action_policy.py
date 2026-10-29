@@ -50,7 +50,9 @@ SCOPE_ACTIONS = frozenset({
     "trash_path",
     "exec_run",
     "exec_start",
+    "https_download",
     "job_cancel",
+    "git_commit",
     "git_add",
     "git_checkout",
     "dispatch_agent",
@@ -73,7 +75,6 @@ APPROVAL_ACTIONS = frozenset({
 })
 
 LOCKED_ACTIONS = frozenset({
-    "git_commit",
     "git_push",
 })
 
@@ -108,7 +109,9 @@ _UniqueKeysLoader.add_constructor(
 class OperatorActionPolicy:
     """Read operator-owned mode choices; never mint operator authority."""
 
-    def __init__(self, config_dir, workspace_roots=()):
+    def __init__(self, config_dir, workspace_roots=(), *, approved_git_commits=False, approved_git_pushes=False):
+        self.approved_git_commits = approved_git_commits is True
+        self.approved_git_pushes = approved_git_pushes is True
         self.config_dir = Path(config_dir).resolve()
         for root in workspace_roots:
             root_path = Path(root).resolve()
@@ -153,7 +156,8 @@ class OperatorActionPolicy:
     def effective_mode(self, action):
         if action not in DEFAULT_ACTION_MODES:
             raise PermissionError(f"Unknown public action: {action}")
-        return self.overrides.get(action, DEFAULT_ACTION_MODES[action])
+        baseline = DEFAULT_ACTION_MODES[action]
+        return self.overrides.get(action, baseline)
 
     def check(self, action, arguments):
         """Enforce owner-deny overrides now; never fake missing approval proof.

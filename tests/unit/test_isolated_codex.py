@@ -145,8 +145,8 @@ def test_broker_does_not_accept_caller_publication_flags(tmp_path, monkeypatch):
     )), Mock())
     agent = broker.adapters["jax"]
     monkeypatch.setattr(agent, "detect", lambda: {"is_installed": True})
-    for field in ("allow_commit", "allow_push"):
-        with pytest.raises(PermissionError, match="operator-verified approval"):
+    for field in ("allow_push",):
+        with pytest.raises(PermissionError, match="push is disabled"):
             broker.dispatch_agent("jax", "task", "ws", read_only=False, **{field: True})
     broker.job_manager.start_confined_agent_job.assert_not_called()
 

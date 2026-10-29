@@ -848,7 +848,7 @@
             }
           },
           "403": {
-            "description": "Operator approval required; publication locked"
+            "description": "Exact independent owner approval and protected remote policy required"
           },
           "422": {
             "description": "Validation Error",
@@ -1607,6 +1607,130 @@
             "title": "Registered",
             "description": "Whether this named identity is registered on the host."
           },
+          "delegatable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delegatable",
+            "description": "Whether AgentPorter currently permits executing this named worker, distinct from installed/available."
+          },
+          "runtime_delegatable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Delegatable",
+            "description": "Runtime launch checks before public workspace authorization; provider quota is not verified."
+          },
+          "public_dispatch_workspaces": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Dispatch Workspaces",
+            "description": "Workspaces admitted by public policy and registry for read-only delegation; runtime restrictions still apply."
+          },
+          "public_writable_dispatch_workspaces": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Writable Dispatch Workspaces",
+            "description": "Workspaces admitted for local edits by public policy, registry, and development runtime; commit and push remain denied."
+          },
+          "public_dispatch_read_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Dispatch Read Only"
+          },
+          "workspace_dispatch_authorized": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Dispatch Authorized",
+            "description": "Public workspace authorization for a workspace-specific inventory request."
+          },
+          "readiness_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readiness Note"
+          },
+          "confinement_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confinement Status",
+            "description": "Reason delegation is blocked or description of verified confinement backend."
+          },
+          "availability_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availability Reason",
+            "description": "Verified runtime availability or reason launch is blocked."
+          },
+          "runtime_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Profile",
+            "description": "Verified development confinement profile, if configured."
+          },
           "routing_error": {
             "anyOf": [
               {
@@ -1828,30 +1952,6 @@
               }
             ],
             "title": "Supports Reasoning Override"
-          },
-          "delegatable": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Delegatable",
-            "description": "Whether AgentPorter currently permits executing this named worker, distinct from installed/available."
-          },
-          "confinement_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Confinement Status",
-            "description": "Reason delegation is blocked or description of verified confinement backend."
           }
         },
         "type": "object",
@@ -2014,13 +2114,13 @@
           "allow_commit": {
             "type": "boolean",
             "title": "Allow Commit",
-            "description": "Reserved; worker commit remains blocked until server-side operator approval exists.",
+            "description": "Compatibility flag; writable workers can commit without confirmation.",
             "default": false
           },
           "allow_push": {
             "type": "boolean",
             "title": "Allow Push",
-            "description": "Reserved; worker push remains blocked until server-side operator approval exists.",
+            "description": "Agent pushes are disabled; true is rejected.",
             "default": false
           },
           "read_only": {
@@ -2283,7 +2383,7 @@
           "network_access": {
             "type": "boolean",
             "title": "Network Access",
-            "description": "Generic execution is offline; true is rejected pending scoped network approval.",
+            "description": "Commands stay offline. True permits only owner-approved cranary curl -fsS GET or curl -sSI HEAD HTTPS metadata through a fixed broker; otherwise denied.",
             "default": false
           }
         },
@@ -2318,7 +2418,7 @@
           "network_access": {
             "type": "boolean",
             "title": "Network Access",
-            "description": "Generic execution is offline; true is rejected pending scoped network approval.",
+            "description": "Commands stay offline. True permits only owner-approved cranary curl -fsS GET or curl -sSI HEAD HTTPS metadata through a fixed broker; otherwise denied.",
             "default": false
           }
         },
@@ -2501,10 +2601,36 @@
           "all_files": {
             "type": "boolean",
             "title": "All Files",
-            "description": "Automatically stage modified/deleted files (-a).",
+            "description": "Stage explicit paths with git_add; true is unsupported.",
+            "default": false
+          },
+          "approval_receipt": {
+            "type": "string",
+            "maxLength": 8192,
+            "title": "Approval Receipt",
+            "description": "Legacy field; omit for workspace commits.",
+            "default": ""
+          },
+          "approval_timestamp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Timestamp",
+            "description": "Legacy field; omit for workspace commits."
+          },
+          "prepare_only": {
+            "type": "boolean",
+            "title": "Prepare Only",
+            "description": "Legacy field; workspace commits execute directly.",
             "default": false
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "message"
@@ -2527,11 +2653,33 @@
         "properties": {
           "remote": {
             "type": "string",
+            "maxLength": 128,
             "title": "Remote",
-            "description": "Remote repository name.",
+            "description": "Exact logical remote ID from owner policy.",
             "default": "origin"
+          },
+          "branch": {
+            "type": "string",
+            "maxLength": 1024,
+            "title": "Branch",
+            "description": "Exact protected remote refs/heads/... source.",
+            "default": ""
+          },
+          "approval_receipt": {
+            "type": "string",
+            "maxLength": 8192,
+            "title": "Approval Receipt",
+            "description": "Independent owner signature for this exact fetch request.",
+            "default": ""
+          },
+          "prepare_only": {
+            "type": "boolean",
+            "title": "Prepare Only",
+            "description": "Prepare an unsigned exact fetch request without changing local refs.",
+            "default": false
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "GitFetchRequest"
       },
@@ -2569,23 +2717,39 @@
         "properties": {
           "remote": {
             "type": "string",
+            "maxLength": 128,
             "title": "Remote",
-            "description": "Remote repository name.",
+            "description": "Exact logical remote ID from owner policy.",
             "default": "origin"
           },
           "branch": {
             "type": "string",
+            "maxLength": 1024,
             "title": "Branch",
-            "description": "Branch name to push.",
+            "description": "Exact protected remote refs/heads/... target.",
             "default": ""
           },
           "set_upstream": {
             "type": "boolean",
             "title": "Set Upstream",
-            "description": "Whether to set upstream branch (-u).",
+            "description": "Legacy flag; true is rejected because publication does not change local upstream configuration.",
+            "default": false
+          },
+          "approval_receipt": {
+            "type": "string",
+            "maxLength": 8192,
+            "title": "Approval Receipt",
+            "description": "Independent owner signature for this exact push request.",
+            "default": ""
+          },
+          "prepare_only": {
+            "type": "boolean",
+            "title": "Prepare Only",
+            "description": "Prepare an unsigned exact push request without publishing.",
             "default": false
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "GitPushRequest"
       },
@@ -2896,7 +3060,7 @@
           "status": {
             "type": "string",
             "title": "Status",
-            "description": "Current status (running, completed, failed, timed_out, cancelled)."
+            "description": "Current status, including running, finalizing, completed, failed, cancelled, cleanup_failed, or recovered."
           },
           "exit_code": {
             "anyOf": [
@@ -3653,7 +3817,7 @@
   ],
   "servers": [
     {
-      "url": "https://5mvx3k0t-8765.use.devtunnels.ms"
+      "url": "https://example-8765.use.devtunnels.ms"
     }
   ]
 }
