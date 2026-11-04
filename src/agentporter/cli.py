@@ -1,0 +1,350 @@
+"""Command-line interface for AgentPorter."""
+
+import os
+import sys
+import shutil
+import secrets
+import subprocess
+from pathlib import Path
+import click
+import uvicorn
+
+from agentporter import __version__
+from agentporter.config import Config
+from agentporter.server import create_asgi_app
+from agentporter.sandbox.bubblewrap import BubblewrapSandbox
+from agentporter.workspaces.registry import WorkspaceRegistry
+from agentporter.tools.jobs import JobManager
+from agentporter.agents.broker import AgentBroker
+from agentporter.tooling import tool_inventory, tool_version
+
+
+@click.group()
+@click.version_option(version=__version__, prog_name="agentporter")
+def main():
+    """AgentPorter: Secure local MCP gateway for development workspaces and agent delegation."""
+    pass
+
+
+@main.command()
+@click.option("--host", default=None, help="Host to bind server to (default: 127.0.0.1)")
+@click.option("--port", default=None, type=int, help="Port to listen on (default: 8765)")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def serve(host, port, config_dir):
+    """Start the AgentPorter MCP Streamable HTTP server."""
+    cfg = Config(config_dir=config_dir)
+    bind_host = host or cfg.server.host
+    bind_port = port or cfg.server.port
+
+    click.echo(f"Starting {cfg.server.name} v{__version__} on {bind_host}:{bind_port}")
+    click.echo(f"Config Directory: {cfg.config_dir}")
+    click.echo(f"State Directory:  {cfg.state_dir}")
+    click.echo(f"Auth Header:      {cfg.security.header_name} (legacy: {cfg.security.legacy_header_name})")
+
+    app = create_asgi_app(cfg)
+    uvicorn.run(app, host=bind_host, port=bind_port, log_level="info")
+
+
+@main.command()
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def doctor(config_dir):
+    """Run diagnostics on environment, sandbox backends, workspaces, and agents."""
+    cfg = Config(config_dir=config_dir)
+    click.echo("=" * 60)
+    click.echo(f"AgentPorter Doctor Diagnostic (v{__version__})")
+    click.echo("=" * 60)
+
+    # 1. Python Environment
+    click.echo(f"Python Version:       {sys.version.split()[0]} ({sys.executable})")
+
+    click.echo("\nTooling Surface:")
+    for tool in tool_inventory():
+        if tool["path"]:
+            version = tool_version(str(tool["path"]))
+            click.echo(f"  • {tool['name']:<12} {tool['path']} [{tool['status']}] {version}")
+        else:
+            click.echo(f"  • {tool['name']:<12} NOT FOUND [MISSING]")
+
+    # 2. Bubblewrap Sandbox Backend
+    bwrap_path = shutil.which("bwrap")
+    if bwrap_path:
+        bwrap_ver = "unknown"
+        try:
+            res = subprocess.run([bwrap_path, "--version"], capture_output=True, text=True, timeout=3)
+            bwrap_ver = res.stdout.strip()
+        except Exception:
+            pass
+        click.echo(f"Sandbox Backend:      bubblewrap ({bwrap_ver} at {bwrap_path}) [OK]")
+    else:
+        click.echo(f"Sandbox Backend:      bubblewrap NOT FOUND. Install via: sudo apt install bubblewrap [WARN]")
+
+    # 3. Ingress Tunnel Backend (Microsoft Dev Tunnels)
+    devtunnel_path = shutil.which("devtunnel") or shutil.which("devtunnel", path=str(Path.home() / "bin"))
+    if devtunnel_path:
+        dt_user = "Not logged in"
+        try:
+            res = subprocess.run([devtunnel_path, "user", "show"], capture_output=True, text=True, timeout=3)
+            dt_user = res.stdout.strip() or dt_user
+        except Exception:
+            pass
+        click.echo(f"Ingress Backend:      devtunnel ({devtunnel_path}) [{dt_user}]")
+    else:
+        click.echo("Ingress Backend:      devtunnel not found (optional, see docs/copilot-studio.md)")
+
+    # 4. Path Diagnostics
+    click.echo(f"Config Directory:     {cfg.config_dir} (exists: {cfg.config_dir.exists()})")
+    click.echo(f"State Directory:      {cfg.state_dir} (exists: {cfg.state_dir.exists()})")
+    click.echo(f"Secrets File:         {cfg.config_dir / 'secrets.env'} (exists: {(cfg.config_dir / 'secrets.env').exists()})")
+
+    # 4. Registered Workspaces
+    registry = WorkspaceRegistry(cfg.workspaces)
+    workspaces = registry.list_all()
+    click.echo(f"\nRegistered Workspaces ({len(workspaces)}):")
+    if not workspaces:
+        click.echo("  (None registered. Add to ~/.config/agentporter/workspaces.yaml)")
+    for ws in workspaces:
+        status_flag = "OK" if ws["exists"] else "MISSING PATH"
+        writable_flag = "RW" if ws["writable"] else "RO"
+        click.echo(f"  • {ws['workspace_id']} [{writable_flag}]: {ws['path']} ({status_flag})")
+
+    # 5. Worker Agents
+    job_mgr = JobManager(cfg.state_dir)
+    broker = AgentBroker(registry, job_mgr, config_dir=cfg.config_dir)
+    agents = broker.list_agents()
+    click.echo(f"\nDetected Worker Agents ({len(agents)}):")
+    for ag in agents:
+        avail_flag = f"Available (v{ag['cli_version']})" if ag["available"] else "Not installed"
+        click.echo(f"  • {ag['agent']:<10} [{ag['provider']}]: {avail_flag}")
+        click.echo(f"    Configured Model: {ag['configured_model']} (reasoning: {ag['reasoning_level']})")
+        click.echo(f"    Effective Model:  {ag['effective_model']}")
+        click.echo(f"    Default Routing:  {ag['default_routing']}")
+
+    # 6. Security Warnings
+    click.echo("\nSecurity Invariants:")
+    click.echo(f"  • Default Bind Address:  {cfg.server.host} (local only)")
+    click.echo(f"  • Auth Mode:             API Key Header ({cfg.security.header_name})")
+    click.echo(f"  • Network Isolation:     Disabled in sandbox (--unshare-net)")
+    click.echo("=" * 60)
+
+
+@main.command()
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+@click.option("--workspace", default=None, type=click.Path(), help="Optional initial workspace path")
+@click.option("--name", default=None, help="Workspace ID for the initial workspace")
+def init(config_dir, workspace, name):
+    """Initialize AgentPorter configuration, directories, and API keys."""
+    cfg = Config(config_dir=config_dir)
+    cfg.config_dir.mkdir(parents=True, exist_ok=True)
+    cfg.state_dir.mkdir(parents=True, exist_ok=True)
+
+    click.echo("AgentPorter initialized successfully:")
+    click.echo(f"  Config:  {cfg.config_dir}")
+    click.echo(f"  State:   {cfg.state_dir}")
+    click.echo(f"  API Key: {cfg.config_dir / 'secrets.env'}")
+
+    ws_file = cfg.config_dir / "workspaces.yaml"
+    if not ws_file.exists():
+        if workspace:
+            real_ws = os.path.realpath(os.path.expanduser(workspace))
+            ws_id = name or os.path.basename(real_ws) or "default"
+            cfg.add_workspace(ws_id, real_ws, writable=True, description="Initial workspace")
+            click.echo(f"  Workspace: '{ws_id}' -> {real_ws}")
+        else:
+            with open(ws_file, "w", encoding="utf-8") as f:
+                f.write("# AgentPorter Workspace Registry\nworkspaces: {}\n")
+            click.echo(f"  Workspace Registry: {ws_file}")
+
+
+@main.group(invoke_without_command=True)
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+@click.pass_context
+def workspaces(ctx, config_dir):
+    """Manage registered workspaces."""
+    if ctx.invoked_subcommand is None:
+        cfg = Config(config_dir=config_dir)
+        registry = WorkspaceRegistry(cfg.workspaces)
+        ws_list = registry.list_all()
+        click.echo(f"Registered Workspaces ({len(ws_list)}):")
+        if not ws_list:
+            click.echo("  (None registered. Use: agentporter workspaces add <id> <path>)")
+        for ws in ws_list:
+            click.echo(f"  • {ws['workspace_id']:<15} path={ws['path']} writable={ws['writable']}")
+
+
+@workspaces.command(name="list")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def workspaces_list(config_dir):
+    """List all registered workspaces."""
+    cfg = Config(config_dir=config_dir)
+    registry = WorkspaceRegistry(cfg.workspaces)
+    ws_list = registry.list_all()
+    click.echo(f"Registered Workspaces ({len(ws_list)}):")
+    for ws in ws_list:
+        click.echo(f"  • {ws['workspace_id']:<15} path={ws['path']} writable={ws['writable']}")
+
+
+@workspaces.command(name="add")
+@click.argument("workspace_id")
+@click.argument("path")
+@click.option("--read-only", is_flag=True, help="Configure workspace as read-only")
+@click.option("--description", default="", help="Optional description of the workspace")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def workspaces_add(workspace_id, path, read_only, description, config_dir):
+    """Register a new workspace."""
+    cfg = Config(config_dir=config_dir)
+    real_path = os.path.realpath(os.path.expanduser(path))
+    if not os.path.exists(real_path):
+        click.echo(f"Warning: path '{real_path}' does not currently exist", err=True)
+    cfg.add_workspace(
+        ws_id=workspace_id,
+        path=real_path,
+        writable=not read_only,
+        description=description,
+    )
+    click.echo(f"Added workspace '{workspace_id}' -> {real_path} (writable={not read_only})")
+
+
+@workspaces.command(name="remove")
+@click.argument("workspace_id")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def workspaces_remove(workspace_id, config_dir):
+    """Remove a registered workspace."""
+    cfg = Config(config_dir=config_dir)
+    if cfg.remove_workspace(workspace_id):
+        click.echo(f"Removed workspace '{workspace_id}'")
+    else:
+        click.echo(f"Error: Workspace '{workspace_id}' not found", err=True)
+        sys.exit(1)
+
+
+
+@main.command()
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def agents(config_dir):
+    """List available CLI agent workers."""
+    cfg = Config(config_dir=config_dir)
+    registry = WorkspaceRegistry(cfg.workspaces)
+    job_mgr = JobManager(cfg.state_dir)
+    broker = AgentBroker(registry, job_mgr, config_dir=cfg.config_dir)
+    for ag in broker.list_agents():
+        click.echo(f"Agent: {ag['agent']} ({ag['alias']})")
+        click.echo(f"  Provider:         {ag['provider']}")
+        click.echo(f"  Configured Model: {ag['configured_model']}")
+        click.echo(f"  Effective Model:  {ag['effective_model']}")
+        click.echo(f"  Default Routing:  {ag['default_routing']}")
+        click.echo(f"  Actual Model:     {ag['actual_model_used']}")
+        click.echo(f"  CLI Version:      {ag['cli_version']}")
+        click.echo(f"  Available:        {ag['available']}")
+        click.echo()
+
+
+@main.command(name="deploy-check")
+@click.option("--url", default=None, help="Server base URL (default: http://<config host>:<port>)")
+@click.option("--wait", default=0.0, type=float, help="Seconds to poll until the live server matches disk")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+@click.option("--expect-fingerprint", default=None, help="Expected live fingerprint (e.g. from a release RELEASE.json) instead of this process's disk")
+@click.option("--expect-path", default=None, help="Expected live package path (e.g. the release site-packages/agentporter)")
+@click.option("--expect-pid", default=None, type=int, help="Expected live server PID (systemd MainPID); catches a duplicate port owner")
+def deploy_check(url, wait, config_dir, expect_fingerprint, expect_path, expect_pid):
+    """Read-only: prove the live server runs the expected source (exit 0) or not (exit 1).
+
+    Never restarts, writes or deploys anything.
+    """
+    import json
+    import time
+    import httpx
+    from importlib import metadata
+    from agentporter.deployinfo import PACKAGE_ROOT, source_fingerprint
+
+    cfg = Config(config_dir=config_dir)
+    disk = expect_fingerprint or source_fingerprint()
+    want_path = Path(expect_path).resolve() if expect_path else PACKAGE_ROOT
+    click.echo(f"Expected path:     {want_path}")
+    try:
+        direct = metadata.distribution("agentporter").read_text("direct_url.json") or ""
+        editable = bool(json.loads(direct).get("dir_info", {}).get("editable")) if direct else False
+    except Exception:
+        editable = False
+    click.echo(f"Editable install:  {editable}")
+    click.echo(f"Expected fp:       {disk}")
+
+    base = (url or f"http://{cfg.server.host}:{cfg.server.port}").rstrip("/")
+    headers = {cfg.security.header_name: cfg.api_key}
+    deadline = time.monotonic() + max(wait, 0.0)
+    live, error = None, None
+    while True:
+        try:
+            # trust_env=False: never send the API key through env-configured proxies.
+            resp = httpx.get(f"{base}/api/v1/server/deploy-info", headers=headers, timeout=5.0,
+                             trust_env=False)
+            if resp.status_code == 200:
+                live, error = resp.json(), None
+            else:
+                live, error = None, f"HTTP {resp.status_code}"
+        except httpx.HTTPError as exc:
+            live, error = None, f"{type(exc).__name__}: {exc}"
+        if (live and live.get("loaded_fingerprint") == disk and not live.get("stale")
+                and (expect_pid is None or live.get("pid") == expect_pid)):
+            break
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(1.0)
+
+    if live is None:
+        click.echo(f"Live server:       unreachable or pre-fingerprint build ({error})")
+        click.echo("RESULT: UNVERIFIED - restart/activate the service, then re-run deploy-check.")
+        sys.exit(1)
+    click.echo(f"Live pid/started:  {live.get('pid')} @ {live.get('started_at')}")
+    click.echo(f"Live package path: {live.get('package_path')}")
+    click.echo(f"Live loaded fp:    {live.get('loaded_fingerprint')}")
+    for name, path in (live.get("modules") or {}).items():
+        click.echo(f"  {name}: {path}")
+    if expect_pid is not None and live.get("pid") != expect_pid:
+        click.echo(f"RESULT: MISMATCH - port served by pid {live.get('pid')}, not the unit's MainPID {expect_pid} (duplicate/stray server).")
+        sys.exit(1)
+    if Path(str(live.get("package_path"))).resolve() != want_path:
+        click.echo("RESULT: MISMATCH - live server imports a different package copy (shadow install).")
+        sys.exit(1)
+    if live.get("loaded_fingerprint") != disk or live.get("stale"):
+        click.echo("RESULT: STALE - live server code differs from the expected fingerprint.")
+        sys.exit(1)
+    click.echo("RESULT: ACTIVE - live server runs exactly the expected source.")
+
+
+@main.group()
+def key():
+    """Manage AgentPorter API authentication keys."""
+    pass
+
+
+@key.command(name="show")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+def key_show(config_dir):
+    """Display the active API key and accepted header names."""
+    cfg = Config(config_dir=config_dir)
+    click.echo(f"Primary Header: {cfg.security.header_name}")
+    click.echo(f"Legacy Header:  {cfg.security.legacy_header_name}")
+    click.echo(f"API Key:        {cfg.api_key}")
+
+
+@key.command(name="rotate")
+@click.option("--config-dir", default=None, type=click.Path(), help="Custom configuration directory")
+@click.option("--yes", "-y", is_flag=True, help="Confirm key rotation without prompt")
+def key_rotate(config_dir, yes):
+    """Rotate the API key and update secrets.env."""
+    if not yes:
+        click.confirm("Are you sure you want to rotate the API key? Existing clients will be disconnected.", abort=True)
+    cfg = Config(config_dir=config_dir)
+    new_key = secrets.token_urlsafe(32)
+    secrets_file = cfg.config_dir / "secrets.env"
+    cfg.config_dir.mkdir(parents=True, exist_ok=True)
+    with open(secrets_file, "w", encoding="utf-8") as f:
+        f.write("# AgentPorter generated API key\n")
+        f.write(f"AGENTPORTER_API_KEY={new_key}\n")
+    os.chmod(secrets_file, 0o600)
+    click.echo("API key successfully rotated.")
+    click.echo(f"New Key: {new_key}")
+
+
+if __name__ == "__main__":
+    main()
