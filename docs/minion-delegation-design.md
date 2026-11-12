@@ -213,6 +213,29 @@ Owner = Lennon. "Claude" = decided by Claude where the owner delegated the call.
 18. Designs are audited by Fable before implementation; production changes go through sealed packets with readiness trials and explicit owner root windows (owner).
 19. All decisions are recorded in this section by the end of each session (owner).
 
+**Phase A implementation (2026-11-12, Claude; owner delegated "your call, just document it")**
+20. Release bases are the *live* packages, not repo snapshots. The repo's `hosts/asgard/production/source` was the V15 snapshot; the live worker (`dispatch-20261107-v14-worker`, protocol-2 durable relay admission) differed in 12 files that no branch recorded. Commit `510e58c` records them verbatim; the Minion worker delta sits on top. The gateway (`hosts/asgard/gateway-overlay`) and the Nida broker native package (`hosts/asgard/nida-native`) are also overlays on their live releases. The main tree's `src/agentporter` merges gateway, broker and read extension and is not shipped as is.
+21. ChatGPT names `minion` in `dispatch_agent`. The gateway relays it to the worker like Jax/Liz. `RELAY_AGENT_IDS` = the seven named workers + `minion`. `minion` is never a cloud identity: no provider-egress admission, no commit, push or reasoning override (enforced in the gateway relay validation, the worker relay validation and the broker dispatch). Its admission is the worker's `nida-minion-worker.json`.
+22. Relay-admitted Minion jobs use the relay's pre-allocated job id and record agent `minion`, so protocol-2 identity checks hold. The Mac session starts inside the relay launch gate, and a cancelled admission never launches.
+23. Owner path rules apply to Minion exactly as to confined agents. The snapshot omits the transaction's owner-inaccessible prefixes (read, dispatch and execute denials), and publication enforces owner write rules.
+24. The Nida broker accepts a writable Mac route only on the `worker-wire` workspace, and only when the worker wire policy is loaded. Every other route stays read-only.
+25. The broker checks worker hardening by required unit lines, not by a whole-unit hash. Every release rewrites the worker unit's start gate, so a hash would silently disable Minion. The check also rejects other values for those keys, `IPAddressAllow=`, `PrivateNetwork=no` and any drop-in directory. Worker unit hardening: `SupplementaryGroups=agentporter-nida-access`, `IPAddressDeny=192.168.2.0/24 100.78.227.72/32` (Nida LAN + Nida tailnet; DNS goes through `127.0.0.53`).
+26. Fable code audit of Phase A (2026-11-12): no blockers. All five important findings were fixed:
+    - the snapshot mask matches the baseline;
+    - `WireBusy` is a typed `nida_busy` refusal recorded by the relay;
+    - `cleanup_failed` wire jobs are retried at worker start, and the broker answers forgotten jobs from its row (never assumes cleanup);
+    - the unit check is tightened (see 25);
+    - the request frame has a 5 s deadline, and there are 4 wire slots.
+
+    Minor fixes:
+    - service leak on prepare failure;
+    - a stuck wait in launch cleanup;
+    - a never-launched job is recorded as cancelled;
+    - stopping broker refuses wire calls;
+    - `job_status` carries `host`/`qualified_workspace` (FR5).
+
+    Must be proven in the trial, not statically: the snapshot through the idmapped publication view, and the real relay child's cgroup under `resource_runner`. Known limits: the `worker-wire` label allowlist means a broker policy edit and restart per new repo (FR1 friction); FR3 (an Asgard agent supervising Minion) is not addressed by Phase A.
+
 ## 8. Production changes log (2026-11-10/11)
 | When | Host | Change | Reversal |
 |---|---|---|---|
