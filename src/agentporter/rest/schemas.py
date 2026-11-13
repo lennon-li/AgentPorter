@@ -139,7 +139,7 @@ class AgentInfo(BaseModel):
     delegatable: Optional[bool] = Field(None, description="Whether AgentPorter currently permits executing this named worker, distinct from installed/available.")
     runtime_delegatable: Optional[bool] = Field(None, description="Runtime launch checks before public workspace authorization; provider quota is not verified.")
     public_dispatch_workspaces: Optional[List[str]] = Field(None, description="Workspaces admitted by public policy and registry for read-only delegation; runtime restrictions still apply.")
-    public_writable_dispatch_workspaces: Optional[List[str]] = Field(None, description="Workspaces admitted for local edits and commits by public policy, registry, and development runtime; push remains denied.")
+    public_writable_dispatch_workspaces: Optional[List[str]] = Field(None, description="Workspaces admitted for local edits by public policy, registry, and development runtime. Commit and push require separate authority.")
     public_dispatch_read_only: Optional[bool] = None
     workspace_dispatch_authorized: Optional[bool] = Field(None, description="Public workspace authorization for a workspace-specific inventory request.")
     readiness_note: Optional[str] = None
@@ -289,9 +289,9 @@ class GitCommitRequest(BaseModel):
     model_config = {"extra": "forbid"}
     message: str = Field(description="Commit message.")
     all_files: bool = Field(default=False, description="Stage explicit paths with git_add; true is unsupported.")
-    approval_receipt: str = Field(default='', max_length=8192, description="Legacy field; omit for workspace commits.")
-    approval_timestamp: Optional[int] = Field(default=None, description="Legacy field; omit for workspace commits.")
-    prepare_only: bool = Field(default=False, description="Legacy field; workspace commits execute directly.")
+    approval_receipt: str = Field(default='', max_length=8192, description="Exact owner receipt when a signed commit backend is enabled; cannot unlock a LOCKED action.")
+    approval_timestamp: Optional[int] = Field(default=None, description="Timestamp bound to an exact owner receipt when required by operator policy.")
+    prepare_only: bool = Field(default=False, description="Prepare an exact proposal only when the operator enables a signed commit backend.")
 
 class GitAddRequest(BaseModel):
     paths: List[str] = Field(description="File paths to stage for commit.")
@@ -312,6 +312,6 @@ class DispatchAgentRequest(BaseModel):
     purpose: str = Field(default="", description="Context or purpose for the dispatch.")
     model: Optional[str] = Field(None, description="Specific LLM model to use (if applicable).")
     reasoning_effort: Optional[str] = Field(None, description="Reasoning effort level (e.g., 'high', 'low').")
-    allow_commit: bool = Field(False, description="Compatibility flag; writable workers can commit without confirmation.")
+    allow_commit: bool = Field(False, description="Must be false. Worker flags cannot grant independent owner commit approval.")
     allow_push: bool = Field(False, description="Agent pushes are disabled; true is rejected.")
     read_only: bool = Field(True, description="Enforce read-only execution; set false explicitly for authorized workspace edits.")

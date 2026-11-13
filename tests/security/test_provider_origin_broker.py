@@ -4,6 +4,7 @@ import ssl
 import threading
 import json
 import subprocess
+import ctypes
 
 import pytest
 
@@ -51,6 +52,97 @@ def test_encoded_requests_cannot_change_the_inspected_body(encoding):
                               'api.openai.com', broker.provider_rules('codex_impl'))
     with pytest.raises(PermissionError, match='Encoded request bodies'):
         broker.validate_payload(request(b'\r\nContent-Encoding: ' + encoding), b'{}', 'api.openai.com')
+
+
+def zstd_body(data, *, known_size=True):
+    library=broker._zstd_library()
+    library.ZSTD_compressBound.argtypes=[ctypes.c_size_t];library.ZSTD_compressBound.restype=ctypes.c_size_t
+    library.ZSTD_createCCtx.restype=ctypes.c_void_p
+    library.ZSTD_CCtx_setParameter.argtypes=[ctypes.c_void_p,ctypes.c_int,ctypes.c_int];library.ZSTD_CCtx_setParameter.restype=ctypes.c_size_t
+    library.ZSTD_compress2.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p,ctypes.c_size_t];library.ZSTD_compress2.restype=ctypes.c_size_t
+    library.ZSTD_freeCCtx.argtypes=[ctypes.c_void_p];library.ZSTD_freeCCtx.restype=ctypes.c_size_t
+    source=ctypes.create_string_buffer(data);capacity=library.ZSTD_compressBound(len(data));output=ctypes.create_string_buffer(capacity)
+    context=library.ZSTD_createCCtx();assert context
+    try:
+        assert not library.ZSTD_isError(library.ZSTD_CCtx_setParameter(context,200,int(known_size)))
+        size=library.ZSTD_compress2(context,output,capacity,source,len(data));assert not library.ZSTD_isError(size)
+        return output.raw[:size]
+    finally:library.ZSTD_freeCCtx(context)
+
+
+def copilot_encoded_header(data):
+    host='api.business.githubcopilot.com'
+    header=(f'POST /v1/messages HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Encoding: zstd\r\nContent-Length: {len(data)}').encode()
+    return host,header
+
+
+@pytest.mark.parametrize('known_size',[False,True])
+def test_copilot_zstd_is_bounded_inspected_and_canonicalized(known_size):
+    plain=b'{"messages":[],"tools":[]}'
+    compressed=zstd_body(plain,known_size=known_size);host,header=copilot_encoded_header(compressed)
+    outgoing,_=broker.request_header(header,host,broker.provider_rules('copilot_agent'))
+    outgoing,decoded=broker.decode_request(outgoing,compressed,host)
+    assert decoded==plain and b'content-encoding' not in outgoing.lower()
+    assert outgoing.lower().count(b'content-length:')==1
+    assert b'Content-Length: '+str(len(plain)).encode() in outgoing
+    broker.validate_payload(outgoing.removesuffix(b'\r\n\r\n'),decoded,host)
+
+
+@pytest.mark.parametrize('known_size',[False,True])
+def test_zstd_bomb_cannot_exceed_existing_json_body_bound(monkeypatch,known_size):
+    compressed=zstd_body(b'X'*1024,known_size=known_size);host,header=copilot_encoded_header(compressed)
+    outgoing,_=broker.request_header(header,host,broker.provider_rules('copilot_agent'))
+    monkeypatch.setattr(broker,'MAX_BODY',128)
+    with pytest.raises(PermissionError):broker.decode_request(outgoing,compressed,host)
+
+
+@pytest.mark.parametrize('variant',['truncated','suffix','concatenated','invalid'])
+def test_zstd_requires_one_complete_regular_frame(variant):
+    encoded=zstd_body(b'{}')
+    encoded={'truncated':encoded[:-1],'suffix':encoded+b'EXTRA','concatenated':encoded+encoded,'invalid':b'not a zstd frame'}[variant]
+    host,header=copilot_encoded_header(encoded);outgoing,_=broker.request_header(header,host,broker.provider_rules('copilot_agent'))
+    with pytest.raises(PermissionError):broker.decode_request(outgoing,encoded,host)
+
+
+def test_copilot_compression_does_not_admit_hosted_tools_or_non_json():
+    encoded=zstd_body(json.dumps({'tools':[{'type':'web_search_20250305','name':'search'}]}).encode())
+    host,header=copilot_encoded_header(encoded);outgoing,_=broker.request_header(header,host,broker.provider_rules('copilot_agent'))
+    outgoing,plain=broker.decode_request(outgoing,encoded,host)
+    with pytest.raises(PermissionError):broker.validate_payload(outgoing.removesuffix(b'\r\n\r\n'),plain,host)
+    with pytest.raises(PermissionError):broker.request_header(header.replace(b'application/json',b'text/plain'),host,broker.provider_rules('copilot_agent'))
+
+
+@pytest.mark.parametrize('chunked',[False,True])
+def test_real_tls_copilot_forwards_only_inspected_decompressed_json(tmp_path,monkeypatch,chunked):
+    tmp_path.chmod(0o700);relay=broker.ProviderEgress(tmp_path/'compressed.sock',agent='copilot_agent')
+    observed=[];server_threads=[];plain=b'{"messages":[],"tools":[]}'
+    relay._upstream_context=ssl.create_default_context(cafile=str(relay.ca_bundle))
+    def connect(host):
+        observed.append(host);client,server=socket.socketpair()
+        def serve():
+            with relay._contexts[host].wrap_socket(server,server_side=True) as connection:
+                header,body=broker.read_header(connection)
+                while len(body)<len(plain):body+=connection.recv(len(plain)-len(body))
+                observed.append((header,body));connection.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}')
+        thread=threading.Thread(target=serve,daemon=True);thread.start();server_threads.append(thread);return client
+    monkeypatch.setattr(broker,'_connect_public',connect)
+    client=thread=None
+    try:
+        encoded=zstd_body(plain,known_size=False);host,header=copilot_encoded_header(encoded)
+        if chunked:
+            header=header.replace(b'Content-Length: '+str(len(encoded)).encode(),b'Transfer-Encoding: chunked')
+            wire=header+b'\r\n\r\n'+hex(len(encoded))[2:].encode()+b'\r\n'+encoded+b'\r\n0\r\n\r\n'
+        else:wire=header+b'\r\n\r\n'+encoded
+        client,thread,_=connect_client(relay,host);client.sendall(wire);data=bytearray()
+        while block:=client.recv(4096):data.extend(block)
+        assert data.startswith(b'HTTP/1.1 200 ') and data.endswith(b'{}')
+        assert observed[0]==host and observed[1][1]==plain
+        assert b'content-encoding' not in observed[1][0].lower() and b'transfer-encoding' not in observed[1][0].lower()
+    finally:
+        if client:client.close()
+        if thread:thread.join(2)
+        for server_thread in server_threads:server_thread.join(2)
+        relay.close()
 
 
 def test_authority_mismatch_and_disallowed_operations_rejected():
@@ -285,6 +377,21 @@ def test_copilot_agent_account_validation_is_narrowly_scoped():
                          ('GET', '/repos/a/b'), ('GET', '/copilot_internal/v2/token')]:
         assert not broker.operation_allowed(rules, 'api.github.com', method, path)
     assert not broker.operation_allowed(broker.provider_rules('codex_research'), 'api.github.com', 'GET', '/copilot_internal/user')
+
+
+def test_copilot_policy_bootstrap_preserves_operation_and_identity_scope():
+    rules=broker.provider_rules('copilot_agent')
+    assert broker.operation_allowed(rules,'api.github.com','GET','/copilot_internal/managed_settings')
+    assert broker.operation_allowed(rules,'api.business.githubcopilot.com','GET','/meta')
+    for host,path in [('api.github.com','/copilot_internal/managed_settings'),
+                      ('api.business.githubcopilot.com','/meta')]:
+        for method in ('POST','PUT','DELETE','PATCH'):
+            assert not broker.operation_allowed(rules,host,method,path)
+        assert not broker.operation_allowed(rules,host,'GET',path+'/extra')
+        assert not broker.operation_allowed(broker.provider_rules('codex_research'),host,'GET',path)
+    for path in ('/copilot_internal/team_customizations','/copilot/mcp_registry',
+                 '/copilot_internal/v2/token','/repos/a/b','/graphql'):
+        assert not broker.operation_allowed(rules,'api.github.com','GET',path)
 
 
 @pytest.mark.parametrize('agent',['codex_review','codex_impl','codex_research'])

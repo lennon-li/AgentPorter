@@ -48,7 +48,6 @@ SCOPE_ACTIONS = frozenset({
     "exec_start",
     "https_download",
     "job_cancel",
-    "git_commit",
     "git_add",
     "git_checkout",
     "git_fetch",
@@ -57,6 +56,7 @@ SCOPE_ACTIONS = frozenset({
 })
 
 APPROVAL_ACTIONS = frozenset({
+    "git_commit",
     "local_http_request",
 })
 
@@ -240,9 +240,8 @@ class OperatorActionPolicy:
             read_only = arguments.get("read_only", True)
             if type(read_only) is not bool:
                 raise PermissionError("Delegation read_only must be a boolean")
-            if read_only is False and self.effective_mode("git_commit",
-                    workspace_id=arguments.get("workspace_id"), agent=arguments.get("agent")) in {"LOCKED", "APPROVAL"}:
-                raise PermissionError("Writable delegation unavailable due to commit policy and current native capabilities")
+            if arguments.get('allow_commit') or arguments.get('allow_push'):
+                raise PermissionError('Worker commit/push flags cannot grant independent owner approval')
         if mode == "LOCKED" or baseline == "LOCKED":
             raise PermissionError(f"Action {action} is technically locked by protected policy")
         if mode == "APPROVAL" and baseline in {"ALLOW", "SCOPE"}:

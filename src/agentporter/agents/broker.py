@@ -280,6 +280,8 @@ class AgentBroker:
             )
         if allow_push:
             raise PermissionError("Delegated Git push is disabled")
+        if allow_commit:
+            raise PermissionError("Delegated commit flags are not owner approval; use the exact approved Git commit tool")
         effective_read_only = read_only or not ws.writable
         if (allow_commit or allow_push) and effective_read_only:
             raise PermissionError("Commit/push cannot be authorized for a read-only dispatch")
@@ -363,8 +365,8 @@ class AgentBroker:
                 '"branch":"refs/heads/main","repository":"<catalog new target>"}. '
                 'These operations execute directly under protected writable workspace policy; do not request '
                 'phone signatures, receipts, or approval waits. Only one catalog repository can be selected per job. '
-                'After success continue scoped edits/tests/commits; canonical publication occurs at successful '
-                'job cleanup. If refused, report the exact refusal without changing scope. '
+                'After success continue scoped edits and tests. Workspace file changes persist after successful '
+                'job cleanup. Commits require owner-run Git separately. If refused, report the exact refusal without changing scope. '
                 'Every agent Git push is denied; the owner alone publishes.\n'
             )
 

@@ -34,7 +34,7 @@ def test_capabilities_expose_one_pure_effective_row_for_every_action(temp_config
     assert next(row for row in rows if row['action']=='git_push')['mode']=='LOCKED'
 
 
-def test_public_inventory_and_dispatch_reflect_scoped_native_commit_restriction(configured):
+def test_scoped_commit_denial_preserves_edits_and_rejects_commit_flags(configured):
     config,_,dispatch=configured
     write_policy(config.config_dir,'project')
     with TestClient(server.create_asgi_app(config)) as client:
@@ -42,14 +42,17 @@ def test_public_inventory_and_dispatch_reflect_scoped_native_commit_restriction(
         response=client.get(endpoint+'list',headers=headers)
         assert response.status_code==200,response.text
         rows={row['agent']:row for row in response.json()}
-        assert rows['copilot_agent']['public_writable_dispatch_workspaces']==[]
-        assert rows['copilot_agent']['public_dispatch_read_only'] is True and rows['copilot_agent']['delegatable'] is True
-        assert 'protected dispatch/commit policy' in rows['copilot_agent']['writable_delegation_reason']
+        assert rows['copilot_agent']['public_writable_dispatch_workspaces']==['project']
+        assert rows['copilot_agent']['public_dispatch_read_only'] is False and rows['copilot_agent']['delegatable'] is True
+        assert not rows['copilot_agent'].get('writable_delegation_reason')
         assert rows['codex_impl']['public_writable_dispatch_workspaces']==['project']
-        assert client.post(endpoint+'dispatch',headers=headers,json={'agent':'copilot_agent','task':'no native commit capability','read_only':False}).status_code==403
+        assert client.post(endpoint+'dispatch',headers=headers,json={'agent':'copilot_agent','task':'cannot grant commit authority','read_only':False,'allow_commit':True}).status_code==403
         dispatch.assert_not_called()
+        assert client.post(endpoint+'dispatch',headers=headers,json={'agent':'copilot_agent','task':'authorized edit','read_only':False}).status_code==200
+        assert dispatch.call_args.kwargs['read_only'] is False and dispatch.call_args.kwargs['allow_commit'] is False
+        dispatch.return_value={'job_id':'synthetic-read-only-job','status':'running'}
         assert client.post(endpoint+'dispatch',headers=headers,json={'agent':'copilot_agent','task':'read-only remains allowed','read_only':True}).status_code==200
-        assert dispatch.call_count==1 and dispatch.call_args.kwargs['read_only'] is True
+        assert dispatch.call_count==2 and dispatch.call_args.kwargs['read_only'] is True
 
 
 @pytest.fixture
@@ -64,16 +67,14 @@ def restricted_receiver(monkeypatch,request):
     return request.getfixturevalue('receiving')
 
 
-def test_receiving_relay_enforces_its_own_scoped_commit_deny_before_dispatch(restricted_receiver):
+def test_receiving_relay_rejects_commit_flags_before_reservation(restricted_receiver):
     from tests.security.relay_fixture import plan
     f=restricted_receiver;f.release.set();ledger=RelayLedger(f.worker.state_dir)
     def data(key,agent='copilot_agent',read_only=False):
         return {'request_id':key,'workspace_id':plan.FIXTURE_ID,'agent':agent,'task':'scoped receiver policy','read_only':read_only}
-    code,_=f.raw('dispatch_agent',data('a'*32))
+    code,_=f.raw('dispatch_agent',dict(data('a'*32),allow_commit=True))
     assert code==403 and f.calls==[]
-    assert ledger.get_request_state('a'*32)==(None,plan.FIXTURE_ID,'copilot_agent',0)
-    assert ledger.reserve('a'*32,plan.FIXTURE_ID,'copilot_agent')==(None,plan.FIXTURE_ID,'copilot_agent')
-    assert f.raw('lookup_dispatch',{'request_id':'a'*32})[1]['status']=='not_launched'
+    assert ledger.get_request_state('a'*32) is None
     # The synthetic backend rejects after being called. Count distinguishes
     # that independent refusal from a policy gate wrongly denying allowed scopes.
     assert f.raw('dispatch_agent',data('b'*32,read_only=True))[0]==403
@@ -84,12 +85,12 @@ def test_receiving_relay_enforces_its_own_scoped_commit_deny_before_dispatch(res
     assert len(f.calls)==2 and ledger.get_request('d'*32) is None
 
 
-def test_gateway_independently_denies_writable_dispatch_before_relay_reservation(receiving):
+def test_gateway_rejects_commit_flags_before_relay_reservation(receiving):
     from tests.security.relay_fixture import plan
     f=receiving;f.release.set();write_policy(f.config.config_dir,plan.FIXTURE_ID)
     with TestClient(server.create_asgi_app(f.config)) as client:
         response=client.post('/api/v1/workspaces/'+plan.FIXTURE_ID+'/agents/dispatch',
-            headers={'X-AgentPorter-Key':f.config.api_key},json={'agent':'copilot_agent','task':'gateway policy','read_only':False})
+            headers={'X-AgentPorter-Key':f.config.api_key},json={'agent':'copilot_agent','task':'gateway policy','read_only':False,'allow_commit':True})
         assert response.status_code==403,response.text
     assert f.calls==[]
     with RelayLedger(f.config.state_dir)._db() as db:

@@ -43,7 +43,7 @@ SENSITIVE_COMMANDS: tuple[str, ...] = (
     "scp",
 )
 
-# Writable workspace policy permits commits; agents never receive push access.
+# Workspace edits and Git publication have separate authority.
 COMMIT_COMMANDS: tuple[str, ...] = ("git commit",)
 PUSH_COMMANDS: tuple[str, ...] = ("git push",)
 LOCAL_MUTATION_COMMANDS: tuple[str, ...] = (
@@ -69,10 +69,10 @@ class ExecutionPolicy:
     def for_workspace(
         cls, writable: bool, allow_commit: bool = False, allow_push: bool = False
     ) -> "ExecutionPolicy":
-        """Writable workspace membership permits commits; agents never push."""
+        """Worker flags cannot grant independent commit or push approval."""
         if not writable:
             return cls(workspace_write=False)
-        return cls(git_commit=True, git_push=False)
+        return cls(git_commit=False, git_push=False)
 
     def denied_commands(self) -> list[str]:
         denied = [command for command in SENSITIVE_COMMANDS
@@ -92,7 +92,7 @@ class ExecutionPolicy:
             "Execution Policy:\n"
             f"- Workspace edits: {'allowed' if self.workspace_write else 'NOT allowed (read-only)'}\n"
             "- Shell, tests, builds, git status/diff/log/show: allowed inside Project Root\n"
-            f"- git commit: {'allowed inside writable workspace' if self.git_commit else 'NOT allowed (read-only)'}\n"
+            "- git commit: requires a separate server-verified owner approval; do not commit in this job\n"
             "- git push: NOT allowed\n"
             f"- Local branch deletion, reset and clean: {'allowed inside private writable workspace' if self.workspace_write else 'NOT allowed (read-only)'}\n"
             "- Force push and remote configuration changes: NOT allowed\n"

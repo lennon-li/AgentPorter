@@ -236,7 +236,7 @@ def test_every_confined_worker_receives_local_write_policy(tmp_path, monkeypatch
     options = jobs.start_confined_agent_job.call_args.kwargs
     assert result['read_only'] is False
     assert options['policy'].workspace_write is True
-    assert options['policy'].git_commit is True
+    assert options['policy'].git_commit is False
     assert options['policy'].git_push is False
     assert options['agent'] == agent
     jobs.start_raw_job.assert_not_called()

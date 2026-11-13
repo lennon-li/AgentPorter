@@ -310,6 +310,8 @@ def discover(transaction):
                 from agentporter.git_clone_authority import CloneBirthAuthorization
                 if not isinstance(capability,CloneBirthAuthorization) or capability.transaction is not transaction:raise UnsafeWorkspaceDelta('Clone birth requires immutable host authority')
                 clone=capability.validate()
+            if clone is None:
+                raise UnsafeWorkspaceDelta('Repository creation requires independent owner approval')
             manifest=_manifest(path,budget=metadata_budget,deadline=deadline,clone=clone)
             from agentporter.sandbox.workspace_git import _HISTORY_INSPECT
             remaining=deadline-time.monotonic()

@@ -190,13 +190,42 @@ class DevelopmentRuntime:
                 raise PermissionError("Codex code-mode helper must be installed beside the matching Codex executable")
             code_mode_host = str(helper)
         credentials = spec.get("credentials")
-        if not isinstance(credentials, dict) or not credentials:
+        if not isinstance(credentials, dict) or (not credentials and spec.get('credential_broker') is None):
             raise PermissionError(f"separate development worker credentials unavailable: {agent}")
+        broker_config = spec.get('credential_broker')
+        if broker_config is not None:
+            providers={'codex_review':'codex','codex_impl':'codex','codex_research':'codex',
+                       'claude_agent':'claude','copilot_agent':'copilot'}
+            destinations={'codex':'.codex/auth.json','claude':'.claude/.credentials.json',
+                          'copilot':'.copilot-agent/config.json'}
+            if (agent not in providers
+                    or not isinstance(broker_config, dict)
+                    or set(broker_config) not in ({'socket_path', 'owner_uid', 'account'}, {'socket_path','owner_uid','account','provider'})
+                    or broker_config.get('provider','codex')!=providers[agent]
+                    or not isinstance(broker_config['socket_path'], str)
+                    or not Path(broker_config['socket_path']).is_absolute()
+                    or len(broker_config['socket_path'].encode()) > 100
+                    or type(broker_config['owner_uid']) is not int or broker_config['owner_uid'] <= 0
+                    or not isinstance(broker_config['account'], str)
+                    or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', broker_config['account'])
+                    or destinations[providers[agent]] in credentials
+                    or (providers[agent]!='codex' and credentials)):
+                raise PermissionError('Canonical credential broker must replace copied auth, with an exact owner/account')
         canonical_credentials = {}
         for target, source in credentials.items():
             if target not in self._CREDENTIAL_NAMES or not isinstance(source, str):
                 raise PermissionError(f"unsupported development credential destination: {target}")
             canonical_credentials[target] = str(self._regular(Path(source), credential=target != ".codex/config.toml"))
+        account = spec.get('credential_account')
+        if account is not None:
+            accounts = config.get('credential_accounts', {})
+            entry = accounts.get(account) if isinstance(accounts, dict) and isinstance(account, str) else None
+            if (not isinstance(account, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', account)
+                    or agent not in {'codex_review', 'codex_impl', 'codex_research'}
+                    or not isinstance(entry, dict) or set(entry) != {'auth_file'}
+                    or set(credentials) - {'.codex/auth.json', '.codex/config.toml'}
+                    or entry['auth_file'] != canonical_credentials.get('.codex/auth.json')):
+                raise PermissionError('Worker credential account must name its exact canonical Codex auth file')
         codex_config = None
         if spec.get("codex_config") is not None:
             codex_config = str(self._regular(Path(spec["codex_config"])))
@@ -208,6 +237,10 @@ class DevelopmentRuntime:
                            *([code_mode_host] if code_mode_host else [])]:
                 if Path(source) == registered or Path(source).is_relative_to(registered):
                     raise PermissionError("worker executable and credentials must be outside registered development workspaces")
+            if broker_config is not None:
+                control = Path(broker_config['socket_path']).resolve()
+                if control == registered or control.is_relative_to(registered):
+                    raise PermissionError('Credential socket cannot be exposed in a workspace')
         # Each identity has an independently provisioned authentication file.
         others = config.get("workers", {})
         def identity(source):
@@ -216,7 +249,7 @@ class DevelopmentRuntime:
 
         own_auth = {identity(source) for target, source in credentials.items()
                     if target != ".codex/config.toml"}
-        if not own_auth:
+        if not own_auth and broker_config is None:
             raise PermissionError(f"separate development worker authentication unavailable: {agent}")
         for name, other in others.items():
             if name != agent and isinstance(other, dict):
@@ -230,7 +263,13 @@ class DevelopmentRuntime:
                         if target != ".codex/config.toml" and isinstance(source, str) and Path(source).is_file():
                             other_auth.add(identity(source))
                 if own_auth.intersection(other_auth):
-                    raise PermissionError(f"development worker credentials are shared: {agent}/{name}")
+                    # Explicit same-account aliases may reuse one canonical
+                    # store. Different identities remain separate by default.
+                    if (account is None or other.get('credential_account') != account
+                            or name not in {'codex_review', 'codex_impl', 'codex_research'}
+                            or auth.get('.codex/auth.json') != canonical_credentials.get('.codex/auth.json')
+                            or set(auth) - {'.codex/auth.json', '.codex/config.toml'}):
+                        raise PermissionError(f"development worker credentials are shared: {agent}/{name}")
         if not isinstance(spec.get("runtime_mounts", []), list):
             raise PermissionError("runtime_mounts must be a list of installed code mounts")
         if ".config/opencode/opencode_free-key" in canonical_credentials:
@@ -652,6 +691,7 @@ class DevelopmentRuntime:
         os.chmod(root, 0o700)
         proxy = None
         headroom_proxy = None
+        credential_lease = None
         descriptors: list[int] = []
         cleaned = False
         from agentporter.provenance import ProviderModelEvidence
@@ -668,6 +708,11 @@ class DevelopmentRuntime:
                 headroom_proxy.close()
             for descriptor in descriptors:
                 os.close(descriptor)
+            if credential_lease is not None:
+                # The monitor calls this only after reaping the process group.
+                # A conflict deliberately raises before removing its private
+                # home: rotated authentication must remain recoverable.
+                credential_lease.finish()
             try:
                 (root / "opaque").chmod(0o700)
             except FileNotFoundError:
@@ -701,9 +746,18 @@ class DevelopmentRuntime:
                     if not isinstance(data, dict):
                         raise PermissionError("invalid Copilot authentication store")
                     target.write_text(json.dumps({k: v for k, v in data.items() if k in allowed}))
+                elif (destination == '.codex/auth.json' and not probe
+                      and agent in {'codex_review', 'codex_impl', 'codex_research'}):
+                    from agentporter.agents.credential_lease import CredentialLease
+                    credential_lease = CredentialLease(Path(source), target)
                 else:
                     shutil.copyfile(source, target)
                 target.chmod(0o600)
+            if spec.get('credential_broker') is not None and not probe:
+                from agentporter.agents.credential_broker import BrokerCredentialLease
+                destination={'codex':'.codex/auth.json','claude':'.claude/.credentials.json',
+                             'copilot':'.copilot-agent/config.json'}[spec['credential_broker'].get('provider','codex')]
+                credential_lease = BrokerCredentialLease(spec['credential_broker'], home/destination)
             if agent in {"codex_review", "codex_impl", "codex_research"} and config.get("egress_policy") == "provider_origin":
                 # Inspect every model request as bounded JSON, including when
                 # the canonical account uses the CLI's default configuration.
@@ -834,6 +888,10 @@ class DevelopmentRuntime:
                            "CODEX_HOME": "/home/worker/.codex", "XDG_CONFIG_HOME": "/home/worker/.config",
                            "XDG_DATA_HOME": "/home/worker/.local/share", "GIT_CONFIG_NOSYSTEM": "1",
                            "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0"}
+            # BCC and native terminals share reviewed installed code. Provider
+            # startup must not silently select or download a different CLI.
+            environment.update(DISABLE_AUTOUPDATER="1", COPILOT_AUTO_UPDATE="false",
+                               OPENCODE_DISABLE_AUTOUPDATE="true", AGY_CLI_DISABLE_AUTO_UPDATE="true")
             if agent == "copilot_agent":
                 environment.update(COPILOT_HOME="/home/worker/.copilot-agent", COPILOT_AGENT_COPILOT_HOME="/home/worker/.copilot-agent")
             if ".config/opencode/opencode_free-key" in spec["credentials"] and not probe:

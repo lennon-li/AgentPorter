@@ -59,7 +59,7 @@ def test_explicit_edit_opt_in_is_writable(broker):
 @pytest.mark.parametrize("flag", ["allow_commit", "allow_push"])
 def test_read_only_rejects_commit_or_push_override(broker, flag):
     gateway, _, jobs = broker
-    with pytest.raises(PermissionError, match="read-only dispatch|push is disabled"):
+    with pytest.raises(PermissionError, match="commit flags are not owner approval|push is disabled"):
         gateway.dispatch_agent("codex_review", "inspect only", "test", **{flag: True})
     jobs.start_confined_agent_job.assert_not_called()
 

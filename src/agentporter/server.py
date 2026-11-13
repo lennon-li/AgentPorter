@@ -198,8 +198,8 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _exec_run, _exec_start = create_execution_tools(
         registry, sandbox, job_manager, scoped_https=scoped_https
     )
-    from agentporter.git_commits import WorkspaceGitCommits
-    approved_commits = (WorkspaceGitCommits(registry, sandbox, job_manager=job_manager)
+    from agentporter.git_policy import load_approved_commits
+    approved_commits = (load_approved_commits(config.config_dir, registry, sandbox, job_manager)
                         if sandbox.transactional_writes and sandbox.resources is not None else None)
     from agentporter.git_remote_policy import load_owner_git_remotes
     from agentporter.git_pushes import ApprovedGitPushes
@@ -563,7 +563,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def git_commit(workspace_id: str, message: str, all_files: bool = False,
                    approval_receipt: str = '', approval_timestamp: int | None = None,
                    prepare_only: bool = False) -> str:
-        """Commit explicitly staged workspace changes without a phone receipt."""
+        """Commit explicitly staged changes with an exact server-verified owner receipt."""
         return _git_commit(workspace_id, message=message, all_files=all_files,
                            approval_receipt=approval_receipt, approval_timestamp=approval_timestamp,
                            prepare_only=prepare_only)
@@ -623,7 +623,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             if client_policy.scopes is not None:visible.intersection_update(client_policy.scopes)
             if workspace_id is not None:visible.intersection_update({workspace_id})
             if visible:
-                row['writable_delegation_reason']='Writable delegation is restricted by protected dispatch/commit policy and current native capabilities.'
+                row['writable_delegation_reason']='Writable delegation is restricted by protected dispatch policy and current native capabilities.'
             rows.append(row)
         return rows
 
@@ -776,7 +776,7 @@ def create_asgi_app(config: Config) -> ASGIApp:
             # embeddings must load the same protected receiver policy.
             receiving_operator_policy=OperatorActionPolicy(config.config_dir,
                 workspace_roots=[row['path'] for row in context['registry'].list_all()],
-                approved_git_commits=config.sandbox.workspace_transactions and context['job_manager'].resources is not None,
+                approved_git_commits=False,
                 approved_git_pushes=False)
         @app.post("/internal/delegation/v1", include_in_schema=False)
         async def internal_delegation(request: Request):

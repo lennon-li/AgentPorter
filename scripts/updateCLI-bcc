@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+controller=/usr/local/libexec/bcc-shared-cli.py
+if [ "${1:-}" = --status ]; then
+    exec /usr/bin/python3 -I -B "$controller" --status
+fi
+if [ "$#" -ne 0 ]; then
+    printf '%s\n' 'Usage: updateCLI [--status]' >&2
+    exit 2
+fi
+staging_parent="$HOME/.cache/bcc-shared-cli-staging"
+mkdir -p "$staging_parent"
+chmod 700 "$staging_parent"
+stage="$staging_parent/$(date -u +%Y%m%dT%H%M%S)-$$"
+/usr/bin/python3 -I -B "$controller" --prepare "$stage" --latest
+manifest_sha=$(/usr/bin/sha256sum "$stage/release/MANIFEST.json")
+manifest_sha=${manifest_sha%% *}
+sudo /usr/bin/python3 -I -B "$controller" --install "$stage/release" --manifest-sha256 "$manifest_sha"
+/usr/bin/python3 -I -B -c 'import pathlib,shutil,sys; p=pathlib.Path(sys.argv[1]); assert p.parent==pathlib.Path.home()/".cache/bcc-shared-cli-staging" and not p.is_symlink(); shutil.rmtree(p)' "$stage"
+/usr/bin/python3 -I -B "$controller" --status

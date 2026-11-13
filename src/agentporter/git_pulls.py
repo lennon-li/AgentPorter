@@ -746,6 +746,8 @@ class _PullPublicationIntent:
             # exact protected tracking old/new CAS remain independently bound.
             if observed['unmerged'] or observed['object_format'] != expected['object_format']:
                 raise PermissionError('Worker pull final candidate is unresolved or has another object format')
+            if any(observed[field] != expected[field] for field in ('head', 'branch')):
+                raise PermissionError('Approved inbound Git does not authorize a subsequent worker commit or checkout')
         elif _canonical(observed) != self.expected_private:
             raise PermissionError('Private pull candidate changed before final publication')
         service._assert_canonical(transaction, self.request)

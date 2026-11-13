@@ -60,7 +60,7 @@ action_modes:
 
 def test_commit_mode_uses_workspace_scope_and_preserves_owner_denial(tmp_path):
     enabled = OperatorActionPolicy(tmp_path, approved_git_commits=True)
-    assert enabled.check('git_commit', {'workspace_id': 'repo'}) == 'SCOPE'
+    assert enabled.check('git_commit', {'workspace_id': 'repo'}) == 'APPROVAL'
     with pytest.raises(PermissionError):
         enabled.check('git_push', {'workspace_id': 'repo'})
     _policy_file(tmp_path, 'version: 1\naction_modes:\n  git_commit: ALLOW\n')

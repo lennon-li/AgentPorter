@@ -8,11 +8,14 @@ method and path, then sends the request to a separately verified fixed origin.
 from __future__ import annotations
 
 import contextlib
+import ctypes
+from functools import lru_cache
 import json
 import logging
 import re
 import socket
 import ssl
+import stat
 import subprocess
 import threading
 import time
@@ -35,7 +38,9 @@ CODEX_API = frozenset({('POST', '/backend-api/codex/responses'),
                       # origin before opening either model transport.
                       ('GET', '/backend-api/wham/accounts/check')})
 COPILOT_API = frozenset({('POST', '/chat/completions'), ('POST', '/responses'),
-                        ('GET', '/models'), ('POST', '/v1/messages')})
+                        ('GET', '/models'), ('POST', '/v1/messages'),
+                        # Native CLI policy/feature bootstrap, read-only.
+                        ('GET', '/meta')})
 GOOGLE_API = frozenset((method, '/v1internal:' + operation)
     for method, operation in [('POST', 'loadCodeAssist'),
         ('POST', 'fetchAvailableModels'), ('POST', 'streamGenerateContent'),
@@ -60,7 +65,8 @@ RULES = {
         'api.individual.githubcopilot.com', 'api.business.githubcopilot.com',
         'api.enterprise.githubcopilot.com')},
 }
-RULES['copilot_agent']['api.github.com'] = frozenset({('GET', '/copilot_internal/user')})
+RULES['copilot_agent']['api.github.com'] = frozenset({('GET', '/copilot_internal/user'),
+    ('GET', '/copilot_internal/managed_settings')})
 RULES['codex_research'] = RULES['codex_impl']
 # The operator-approved confined codex_review profile uses its ChatGPT OAuth account
 # directly; admit the same exact OpenAI operations as the other Codex accounts.
@@ -176,7 +182,8 @@ def request_header(header: bytes, host: str, rules: dict) -> tuple[bytes, int]:
             (chunked and (transfer.lower() != b'chunked' or
                           b'content-length' in values or method != 'POST'))):
         raise ValueError('Ambiguous or unsupported body framing')
-    if b'content-encoding' in values and values[b'content-encoding'].lower() != b'identity':
+    encoding=values.get(b'content-encoding',b'identity').lower()
+    if encoding!=b'identity' and not (encoding==b'zstd' and _compressed_copilot_request(host,method,target,values)):
         raise PermissionError('Encoded request bodies are not admitted')
     length = values.get(b'content-length', b'0')
     if not re.fullmatch(rb'0|[1-9][0-9]{0,8}', length) or int(length) > MAX_BODY:
@@ -200,6 +207,73 @@ def request_header(header: bytes, host: str, rules: dict) -> tuple[bytes, int]:
         if name not in removed and not name.startswith((b'x-forwarded-', b'x-original-')):
             outgoing.append(name + b': ' + value)
     return b'\r\n'.join(outgoing) + b'\r\n\r\n', size
+
+
+def _compressed_copilot_request(host,method,target,values):
+    return (host in RULES['copilot_agent'] and method=='POST'
+            and (method,urlsplit(target).path) in COPILOT_API
+            and values.get(b'content-type',b'').split(b';',1)[0].strip().lower()==b'application/json')
+
+
+@lru_cache(maxsize=1)
+def _zstd_library():
+    # Use only the installed OS library, never a workspace or caller path.
+    candidates=('/lib/x86_64-linux-gnu/libzstd.so.1','/usr/lib/x86_64-linux-gnu/libzstd.so.1',
+                '/lib/aarch64-linux-gnu/libzstd.so.1','/usr/lib/aarch64-linux-gnu/libzstd.so.1')
+    for name in candidates:
+        path=Path(name)
+        if not path.exists():continue
+        path=path.resolve(strict=True)
+        for component in (path,*path.parents):
+            info=component.lstat()
+            if info.st_uid!=0 or info.st_mode&0o022 or (component==path and not stat.S_ISREG(info.st_mode)):
+                raise PermissionError('Untrusted request decoder')
+        library=ctypes.CDLL(str(path))
+        for name,args,result in (
+            ('ZSTD_getFrameContentSize',[ctypes.c_void_p,ctypes.c_size_t],ctypes.c_ulonglong),
+            ('ZSTD_findFrameCompressedSize',[ctypes.c_void_p,ctypes.c_size_t],ctypes.c_size_t),
+            ('ZSTD_isError',[ctypes.c_size_t],ctypes.c_uint),
+            ('ZSTD_decompress',[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p,ctypes.c_size_t],ctypes.c_size_t)):
+            function=getattr(library,name);function.argtypes=args;function.restype=result
+        return library
+    raise PermissionError('Bounded request decoder is unavailable')
+
+
+def decode_request(header,body,host):
+    """Canonicalize one bounded Copilot zstd frame before JSON inspection.
+
+    Single-pass libzstd decoding uses the caller's bounded output buffer rather
+    than allocating a frame-declared window (zstd.h's ZSTD_d_windowLogMax note).
+    Concatenated/skippable frames, suffix bytes and oversized output are denied.
+    Only decoded bytes and identity framing are forwarded to the provider.
+    """
+    lines=header.removesuffix(b'\r\n\r\n').split(b'\r\n')
+    values={line.partition(b':')[0].lower():line.partition(b':')[2].strip() for line in lines[1:]}
+    encoding=values.get(b'content-encoding',b'identity').lower()
+    if encoding==b'identity':return header,bytes(body)
+    method,target,_=lines[0].decode('ascii').split(' ')
+    if encoding!=b'zstd' or not _compressed_copilot_request(host,method,target,values):
+        raise PermissionError('Encoded request bodies are not admitted')
+    if not 0<len(body)<=MAX_BODY or bytes(body[:4])!=b'\x28\xb5\x2f\xfd':
+        raise PermissionError('Invalid compressed request body')
+    library=_zstd_library();source=ctypes.create_string_buffer(bytes(body))
+    frame=library.ZSTD_findFrameCompressedSize(source,len(body))
+    declared=library.ZSTD_getFrameContentSize(source,len(body))
+    unknown,error=(1<<64)-1,(1<<64)-2
+    if library.ZSTD_isError(frame) or frame!=len(body) or declared==error:
+        raise PermissionError('Invalid compressed request body')
+    if declared!=unknown and declared>MAX_BODY:
+        raise PermissionError('Compressed request body exceeds bound')
+    capacity=MAX_BODY+1 if declared==unknown else declared+1
+    output=ctypes.create_string_buffer(capacity)
+    count=library.ZSTD_decompress(output,capacity,source,len(body))
+    if library.ZSTD_isError(count) or count>MAX_BODY or (declared!=unknown and count!=declared):
+        raise PermissionError('Invalid or oversized compressed request body')
+    decoded=output.raw[:count]
+    canonical=[lines[0],*(line for line in lines[1:]
+        if line.partition(b':')[0].lower() not in {b'content-encoding',b'content-length'})]
+    canonical.append(b'Content-Length: '+str(count).encode('ascii'))
+    return b'\r\n'.join(canonical)+b'\r\n\r\n',decoded
 
 
 def read_chunked_body(connection, initial: bytes) -> bytes:
@@ -451,7 +525,8 @@ class ProviderEgress(PublicEgress):
                         raise ValueError('Truncated request body')
                     body.extend(block)
             phase = 'payload'
-            validate_payload(header, body, host)
+            outgoing,body=decode_request(outgoing,body,host)
+            validate_payload(outgoing.removesuffix(b'\r\n\r\n'), body, host)
             # No upstream connection exists until authority and operation pass.
             phase = 'upstream'
             raw = _connect_public(host)

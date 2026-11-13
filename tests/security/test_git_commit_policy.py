@@ -163,7 +163,7 @@ def test_staging_scope_does_not_authorize_public_commit(tmp_path):
         PRINCIPAL.reset(token)
 
 
-def test_authenticated_rest_and_mcp_commit_without_phone_receipts(tmp_path, monkeypatch):
+def test_authenticated_rest_and_mcp_require_independent_commit_receipts(tmp_path, monkeypatch):
     import os
     import yaml
     from types import SimpleNamespace
@@ -200,13 +200,27 @@ def test_authenticated_rest_and_mcp_commit_without_phone_receipts(tmp_path, monk
             headers = {'X-AgentPorter-Key': config.api_key}
             path = '/api/v1/workspaces/repo/git/commit'
             assert client.post(path, json={'message': 'unsigned'}).status_code == 401
-            committed = rpc(client, config.api_key, 'git_commit',
-                {'workspace_id': 'repo', 'message': 'Autonomous MCP commit'})
+            arguments = {'workspace_id': 'repo', 'message': 'Reviewed MCP commit'}
+            assert rpc(client, config.api_key, 'git_commit', arguments)['result'].get('isError')
+            prepared = rpc(client, config.api_key, 'git_commit', dict(arguments, prepare_only=True))
+            assert not prepared['result'].get('isError'), prepared
+            proposal = json.loads(prepared['result']['content'][0]['text'])
+            request = GitApprovalRequest.from_payload(proposal['request'])
+            committed = rpc(client, config.api_key, 'git_commit', dict(arguments,
+                approval_timestamp=request.to_payload()['parameters']['timestamp'],
+                approval_receipt=issue_git_approval(key, request)))
             assert not committed['result'].get('isError'), committed
             assert committed['result']['content'][0]['text'] == git(root, 'rev-parse', 'HEAD')
             (root / 'ordinary').write_text('Autonomous REST change')
             git(root, 'add', 'ordinary')
-            result = client.post(path, json={'message': 'Autonomous REST commit'}, headers=headers)
+            assert client.post(path, json={'message': 'Reviewed REST commit'}, headers=headers).status_code == 403
+            prepared = client.post(path, json={'message': 'Reviewed REST commit', 'prepare_only': True}, headers=headers)
+            assert prepared.status_code == 200, prepared.text
+            proposal = json.loads(prepared.json())
+            request = GitApprovalRequest.from_payload(proposal['request'])
+            result = client.post(path, json={'message': 'Reviewed REST commit',
+                'approval_timestamp': request.to_payload()['parameters']['timestamp'],
+                'approval_receipt': issue_git_approval(key, request)}, headers=headers)
             assert result.status_code == 200, result.text
             assert result.json() == git(root, 'rev-parse', 'HEAD')
             assert count(managers[0]) == 0

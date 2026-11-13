@@ -362,6 +362,27 @@ os.execvpe(sys.argv[1], sys.argv[1:], os.environ)
         deletions = validate_workspace_delta(self.upper, deletion_baseline=self.baseline, repository_births=births)
         for history in self.git_histories.values():
             history.prepare()
+            history_intent = history._pull_intent
+            if history_intent is None and any(
+                    history.plan['before'][field] != history.plan['after'][field]
+                    for field in ('head', 'branch', 'refs', 'stash_log')):
+                # Enforce after arbitrary worker code, including raw Git or
+                # Python writes that bypass CLI deny lists. Ordinary edits and
+                # index staging remain publishable; history needs its separate
+                # trusted backend and consumed authorization.
+                raise PermissionError('Worker Git history change requires independent owner approval')
+            if history_intent is not None:
+                expected = json.loads(history_intent.expected_private)
+                before, after = history.plan['before'], history.plan['after']
+                local_refs = set(before['refs']) | set(after['refs'])
+                unauthorized_ref = any(
+                    name != expected['branch']
+                    and (name.startswith(('refs/heads/', 'refs/tags/')) or name == 'refs/stash')
+                    and before['refs'].get(name) != after['refs'].get(name)
+                    for name in local_refs)
+                if (unauthorized_ref or before['stash_log'] != after['stash_log']
+                        or any(after[field] != expected[field] for field in ('head', 'branch'))):
+                    raise PermissionError('Approved inbound Git cannot expand worker history authority')
         changes = [];new_trees=[]
         for root, dirs, files in os.walk(self.upper):
             for name in list(dirs):

@@ -1,0 +1,18 @@
+[Unit]
+Description=BCC one shared installation of agent CLIs
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I -B /usr/local/libexec/bcc-shared-cli-update-runner.py
+WorkingDirectory=/
+UMask=0077
+TimeoutStartSec=2400
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/agent-clis /home/yeli/.cache/bcc-shared-cli-staging /run/lock
+InaccessiblePaths=/home/yeli/.codex /home/yeli/.codex-liz /home/yeli/.codex-prof /home/yeli/.claude /home/yeli/.claude.json /home/yeli/.copilot-phil /home/yeli/.config/agentporter
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

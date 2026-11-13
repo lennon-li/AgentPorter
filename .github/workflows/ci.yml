@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, audit-hardening]
+    branches: [main, bcc, audit-hardening]
   pull_request:
 
 permissions:

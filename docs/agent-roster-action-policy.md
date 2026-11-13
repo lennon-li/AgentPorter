@@ -35,10 +35,12 @@ immutable credential handling, resource budgets, or backend authorization.
 - **APPROVAL:** Requires the backend's independent operation-specific approval.
 - **LOCKED:** Denied; a caller boolean or conversational request cannot unlock it.
 
-Ordinary scoped fetch, pull, clone and local commit do not require phone
-signing. Clone is a typed `git_pull` operation. Every agent push remains denied;
-the owner publishes independently. A denied commit policy also prevents writable
-delegation because the native Git capability cannot selectively withhold commits.
+Ordinary scoped fetch, pull, clone and workspace edits do not require repeated
+approval. Clone is a typed `git_pull` operation. Commits require an exact,
+single-use receipt verified against the owner-installed signing key. Writable
+delegation remains available when commit permission is withheld: publication
+rejects changes to worker Git history independently of CLI command guards.
+Every agent push remains denied; the owner publishes independently.
 Client-side tool confirmation is a separate layer from server authorization.
 
 | Action | Default mode | Boundary / reason |
@@ -76,7 +78,7 @@ Client-side tool confirmation is a separate layer from server authorization.
 | `local_http_request` | **APPROVAL** | Explicit port + method + body review; loopback can mutate services. |
 | `git_fetch` | **SCOPE** | Exact protected remote/workspace authority; tracking-only acquisition, no phone signing. |
 | `git_pull` | **SCOPE** | Exact scoped pull/clone; private integration, conflict checks and verified publication, no phone signing. |
-| `git_commit` | **SCOPE** | Writable workspace commits require no phone receipt; delegated commits use private Git state and a verified offline import. |
+| `git_commit` | **APPROVAL** | Exact staged tree, repository state and message require a server-verified owner receipt; workspace writes do not authorize commits. |
 | `git_push` | **LOCKED** | Agent publication is denied through REST/MCP and provider-scoped worker networking. |
 
 ## Permanently excluded capabilities

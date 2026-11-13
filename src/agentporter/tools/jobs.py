@@ -297,6 +297,8 @@ class JobManager:
                 finally:
                     db.close()
                 if claimed:
+                    validate_grant=getattr(transaction,'_validate_publication_grant',None)
+                    if validate_grant is not None: validate_grant()
                     if (getattr(transaction, '_private_pull_pending', False) or getattr(transaction, '_private_clone_pending', False)):
                         if getattr(transaction,'_private_clone_pending',False):transaction.publish_approved_clone()
                         else:transaction.publish_approved_pull()

@@ -864,6 +864,10 @@ print('OPAQUE_SUBTREE_OK')
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == 'OPAQUE_SUBTREE_OK'
         assert private.stat().st_mode & 0o777 == 0
+        # Native process has exited; release this account before testing a
+        # second launch's filesystem failure rather than credential contention.
+        launch.cleanup()
+        launch = None
         with pytest.raises(PermissionError, match='cannot inspect'):
             runtime.prepare('codex_review', str(workspace), True, ['/usr/bin/python3', '--version'])
     finally:
@@ -1088,7 +1092,7 @@ def test_agy_agent_stages_only_explicit_antigravity_token(runtime_factory, monke
             expected_deny.update(f"command({prefix})" for prefix in ExecutionPolicy.for_workspace(True).denied_commands())
             assert "command(git push)" in policy["permissions"]["deny"]
             assert "command(git remote)" in policy["permissions"]["deny"]
-            assert "command(git commit)" not in policy["permissions"]["deny"]
+            assert "command(git commit)" in policy["permissions"]["deny"]
         else:
             expected_deny.update({"command(*)", "write_file(*)"})
         assert policy["permissions"]["allow"] == expected_allow

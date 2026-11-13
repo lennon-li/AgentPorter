@@ -142,7 +142,7 @@ def test_relay_dispatch_runs_confined_transaction(runtime_factory, temp_config, 
 
 
 @pytest.mark.parametrize('agent', ['codex_review', 'codex_impl', 'codex_research', 'copilot_agent', 'opencode_free', 'claude_agent', 'agy_agent'])
-def test_each_named_worker_can_commit_without_confirmation(runtime_factory, monkeypatch, agent):
+def test_each_named_worker_cannot_publish_an_unapproved_commit(runtime_factory, monkeypatch, agent):
     """Exercise each named worker's OS launch path with synthetic offline code."""
     from tests.security.test_git_approval_state import git
     runtime, _, _, workspace, _ = runtime_factory()
@@ -162,10 +162,10 @@ def test_each_named_worker_can_commit_without_confirmation(runtime_factory, monk
         policy=ExecutionPolicy.for_workspace(writable=True))
     wait(manager, job)
     result = manager.get_result(job)
-    assert result['status'] == 'completed', result.get('stderr')
-    assert result.get('stderr', '') == '', result.get('stderr')
-    assert git(workspace, 'rev-parse', 'HEAD') != old
-    assert git(workspace, 'rev-parse', 'HEAD') in result['stdout']
+    assert result['status'] == 'failed', result
+    assert 'Workspace edits rejected before publication' in result['stderr']
+    assert git(workspace, 'rev-parse', 'HEAD') == old
+    assert (workspace / 'source.txt').read_text() == 'source'
     assert git(workspace, 'status', '--short') == ''
     assert 'git push' in ExecutionPolicy.for_workspace(writable=True).denied_commands()
 
