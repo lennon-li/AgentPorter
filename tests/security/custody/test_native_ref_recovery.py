@@ -90,6 +90,8 @@ def test_native_namespace_change_recovers_original_files_retains_new_directories
         (root/'ordinary').write_text('owner initial stash');git(root,'stash','push','-m','baseline')
     state=initial.state_dir;state.chmod(0o700);JobManager(state)
     sandbox=BubblewrapSandbox(state,transactional_writes=True);sandbox.resources=RecordingResources()
+    from tests.security.custody.authorization_seams import allow_one_history_publication_for_recovery
+    history_seam=allow_one_history_publication_for_recovery(monkeypatch,root)
     original={str(path.relative_to(root/'.git')):path.stat().st_ino for path in (root/'.git').rglob('*')
               if path.is_file() and not path.is_relative_to(root/'.git/objects')}
     commands={'branch_create':'git branch added','branch_delete':'git branch -D delete-me',
@@ -100,6 +102,7 @@ def test_native_namespace_change_recovers_original_files_retains_new_directories
     with monkeypatch.context() as patch:
         patch.setattr(module,'_IMPORT',module._IMPORT.replace(marker,marker+'; os._exit(73)'))
         with pytest.raises(ResourceCleanupError):sandbox.run(str(root),['/bin/sh','-c',commands[kind]])
+    assert len(history_seam)==1
     tx=sandbox._unresolved_transactions[0];history=next(iter(tx.git_histories.values()));guard=history.guard
     stopped(tx);monkeypatch.setattr(recovery,'_verify_stopped_service',lambda:None)
     plan=recovery.recover_workspace(state,root);inspection=plan['git'][0]['inspection']

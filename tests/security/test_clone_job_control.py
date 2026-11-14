@@ -84,8 +84,6 @@ root=Path('/workspace/new-clone')
 assert (root/'remote-file').read_text()=='remote advanced\\n'
 assert (root/'continued').read_text()=='continued clone edit\\n'
 (root/'after-pull').write_text('postbirth pull edit\\n')
-for args in (['add','after-pull'],['commit','-qm','postbirth pull commit']):
- subprocess.run(['/usr/bin/git','-C',str(root),'-c','safe.directory='+str(root),'-c','user.name=Worker','-c','user.email=worker@example.invalid']+args,check=True)
 print('PULL_CONTINUED',flush=True)
 '''
 
@@ -132,6 +130,7 @@ def test_actual_clone_control_then_new_job_fetch_pull_without_service_restart(tm
  assert result['status']=='completed',result
  assert terminal(manager,next_job)['status']=='completed',manager.get_output(next_job)
  assert (target/'after-pull').read_text()=='postbirth pull edit\n'
+ assert git(target,'status','--short')=='?? after-pull'
  assert manager.approved_git_pulls is pulls and count(manager)==0
  assert metadata(selected)==selected_before and metadata(other)==other_before
  if outer_git:assert metadata(root/'.git')==owner
@@ -232,7 +231,7 @@ def test_clone_actual_gateway_requires_both_permissions_and_typed_receipt(tmp_pa
 
 @pytest.mark.parametrize('outer_git',[True,False])
 @pytest.mark.parametrize('allowed',[True,False])
-def test_real_local_init_caller_uses_authoritative_workspace_git_birth_gate(tmp_path,monkeypatch,runtime_factory,outer_git,allowed):
+def test_real_local_init_without_clone_approval_is_rejected(tmp_path,monkeypatch,runtime_factory,outer_git,allowed,caplog):
  root,selected,other,service,key,manager,_=configured_nested(tmp_path,monkeypatch,runtime_factory,outer_git=outer_git)
  service.registry.get('repo').allow_git=allowed
  if not allowed:manager.approved_git_pulls=None
@@ -250,14 +249,10 @@ print('LOCAL_INIT_PRIVATE',flush=True);time.sleep(.5)
  wait_output(manager,job,'LOCAL_INIT_PRIVATE');tx=manager._job_transactions[job]
  assert tx._allow_git_birth is allowed and not (root/'local-new').exists()
  status=terminal(manager,job)
- assert status['status']==('completed' if allowed else 'failed'),manager.get_output(job)
+ assert status['status']=='failed',manager.get_output(job)
+ assert 'Workspace edits rejected for' in caplog.text
  after=metadata(root)
- assert all(after[name]==value for name,value in before.items())
- if allowed:
-  assert git(root/'local-new','show','-s','--format=%s')=='local init commit'
-  assert (root/'local-new/local-file').read_text()=='local authorized init\n'
-  assert all(name.startswith('local-new/') for name in set(after)-set(before))
- else:assert after==before and not (root/'local-new').exists()
+ assert after==before and not (root/'local-new').exists()
  assert count(manager)==0
 
 

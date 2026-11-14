@@ -81,11 +81,11 @@ def test_excluded_commit_in_head_reflog_is_rejected(tmp_path):
         _reject_excluded_git_paths(metadata, root)
 
 
-def test_readonly_transaction_rejects_git_history_exposing_excluded_path(tmp_path):
+def test_readonly_transaction_refuses_exposed_git_metadata_before_history_scan(tmp_path):
     root, _ = repository(tmp_path)
     (root / '.venv').mkdir()
     (root / '.venv/installed.py').write_text('synthetic dependency')
     git(root, 'add', '.venv/installed.py')
     git(root, 'commit', '--quiet', '-m', 'synthetic excluded path')
-    with pytest.raises(PermissionError, match='excluded .venv'):
+    with pytest.raises(PermissionError, match='Git metadata requires a private worker view'):
         WorkspaceTransaction(root, tmp_path / 'state', writable=False)

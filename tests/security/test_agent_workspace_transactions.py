@@ -253,15 +253,30 @@ def test_confined_agent_job_persists_transaction_and_restart_retains_only_it(run
         transaction.close()
 
 
-def test_ordinary_readonly_confined_job_has_no_transaction_path(runtime_factory, monkeypatch):
+def test_ordinary_readonly_confined_job_records_and_cleans_private_view(runtime_factory, monkeypatch):
     runtime, _, _, workspace, _ = runtime_factory()
     no_probe(monkeypatch, runtime)
     manager = JobManager(runtime.state_dir, transactional_writes=True)
     manager.development_runtime = runtime
     manager.resources = RecordingResources()
+    prepared = []
+    original_prepare = runtime.prepare
+    def prepare(*args, **kwargs):
+        prepared.append(kwargs['workspace_transaction'])
+        return original_prepare(*args, **kwargs)
+    monkeypatch.setattr(runtime, 'prepare', prepare)
     _synthetic_launch(manager)
     job_id = manager.start_confined_agent_job(agent='codex_impl', workspace_id='selected',
         workspace_path=str(workspace), cmd=['/usr/bin/python3', '-c', 'pass'],
         policy=ExecutionPolicy.for_workspace(writable=False))
     assert wait(manager, job_id)['status'] == 'completed'
-    assert _transaction_column(manager, job_id) is None
+    # Read-only jobs also need a private Git view and the workspace lease.
+    # The recorded path is audit metadata; successful finalization removes it.
+    assert len(prepared) == 1
+    transaction = prepared[0]
+    assert transaction.writable is False
+    assert _transaction_column(manager, job_id) == str(transaction.directory)
+    assert transaction.directory.parent == runtime.state_dir / 'workspace-transactions'
+    assert not transaction.directory.exists()
+    assert job_id not in manager._job_transactions
+    assert manager.resources.lease.closed

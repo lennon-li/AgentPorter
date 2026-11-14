@@ -26,7 +26,7 @@ def test_real_gateway_receiver_cancel_native_job_and_reuse_admission(tmp_path,mo
     from tests.security.test_development_runtime import no_probe
     from tests.security.test_workspace_transactions import RecordingResources
 
-    runtime, _, _, fixture, _ = runtime_factory()
+    runtime, _, _, fixture, unrelated = runtime_factory()
     no_probe(monkeypatch, runtime)
     monkeypatch.setattr(runtime, 'require_production_egress', lambda agent=None: frozenset({'codex_impl'}))
     monkeypatch.setattr(plan, 'FIXTURE', str(fixture))
@@ -60,6 +60,10 @@ def test_real_gateway_receiver_cancel_native_job_and_reuse_admission(tmp_path,mo
         for job in list(manager.active_processes):manager.cancel(job)
     request.addfinalizer(stop_jobs)
     registry = WorkspaceRegistry(worker['workspaces.yaml']['workspaces'])
+    # Every supervised job now holds a private workspace transaction, including
+    # read-only jobs. Keep the unrelated process on its own registered fixture
+    # so this cancellation test does not bypass same-workspace serialization.
+    registry.register('unrelated',str(unrelated),writable=False,allow_agent_dispatch=True)
     # Match AgentBroker construction: the launcher and receiving API share the
     # authoritative registry, including the planner's canonical fixture ID.
     runtime.workspace_registry = registry
@@ -135,7 +139,10 @@ def test_real_gateway_receiver_cancel_native_job_and_reuse_admission(tmp_path,mo
         assert manager.get_status(jid)['status']=='running'
         with receiver_ledger._db() as db:db.execute('UPDATE jobs SET agent=? WHERE remote_id=?',('codex_impl',jid))
         # A well-formed remote ID without a relay reservation is never authority.
-        unowned=manager.start_confined_agent_job(agent='codex_impl',workspace_id=plan.FIXTURE_ID,workspace_path=str(fixture),
+        # A distinct synthetic account also preserves the exclusive credential
+        # lease held by the cancellable job; neither admission boundary should
+        # be disabled merely to create the unrelated cancellation target.
+        unowned=manager.start_confined_agent_job(agent='codex_review',workspace_id='unrelated',workspace_path=str(unrelated),
             cmd=['/usr/bin/python3','-c',"import time;print('UNRELATED_READY',flush=True);time.sleep(60)"],
             policy=ExecutionPolicy.for_workspace(writable=False))
         def raw_cancel(arguments):

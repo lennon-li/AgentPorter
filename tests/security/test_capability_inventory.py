@@ -12,6 +12,65 @@ from agentporter.tools.system import create_system_tools
 from agentporter.workspaces.registry import WorkspaceRegistry
 
 
+def install_synthetic_commit_authority(config, monkeypatch):
+    """Install a real owner policy with a fixture-only Ed25519 identity."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from agentporter.git_approvals import GitApprovalVerifier
+    from agentporter.sandbox.bubblewrap import BubblewrapSandbox
+
+    workspace = config.config_dir.parent / 'synthetic-git-workspace'
+    workspace.mkdir(parents=True, exist_ok=True)
+    config.workspaces = {'synthetic-git': {
+        'path': str(workspace), 'writable': True, 'allow_git': True,
+    }}
+    config.sandbox.workspace_transactions = True
+    config.state_dir.mkdir(parents=True, exist_ok=True)
+    config.state_dir.chmod(0o700)
+
+    signing_key = Ed25519PrivateKey.generate()
+    verification_key = signing_key.public_key()
+    ledger = config.state_dir / 'synthetic-git-approvals.sqlite3'
+    GitApprovalVerifier(verification_key, ledger)
+    public_bytes = verification_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    config.config_dir.mkdir(parents=True, exist_ok=True)
+    policy = config.config_dir / 'git-commit-policy.json'
+    policy.write_text(json.dumps({
+        'version': 1,
+        'author_name': 'Synthetic Fixture',
+        'author_email': 'fixture@example.invalid',
+        'verification_key': public_bytes.hex(),
+        'ledger_path': str(ledger),
+        'workspaces': ['synthetic-git'],
+    }))
+    policy.chmod(0o600)
+
+    client_policy = config.config_dir / 'public-client-policy.yaml'
+    client_policy.write_text(yaml.safe_dump({'version': 1, 'workspaces': {
+        'synthetic-git': {'path': str(workspace), 'operations': ['read', 'write', 'git_commit']},
+    }}))
+    client_policy.chmod(0o600)
+
+    monkeypatch.setattr('agentporter.resources.load_gateway_job_resources', lambda _: {
+        'memory_bytes': 4 * 1024**3, 'pids': 128,
+        'cpu_quota_us': 200000, 'cpu_period_us': 100000,
+    })
+    class SyntheticResources:
+        def __init__(self, settings, *, expected_service=None):
+            self.settings = dict(settings)
+        def recover(self):
+            return None
+    monkeypatch.setattr('agentporter.server.JobResources', SyntheticResources)
+    monkeypatch.setattr(BubblewrapSandbox, 'is_available', lambda self: True)
+    monkeypatch.setattr(
+        'agentporter.agents.development.DevelopmentRuntime._sandbox_executable',
+        lambda *args: '/fixture/bwrap',
+    )
+
+
 def test_original_factory_api_includes_https_download():
     capabilities, _, _ = create_system_tools(
         WorkspaceRegistry(), SimpleNamespace(is_available=lambda: False))
@@ -54,7 +113,7 @@ def test_git_inventory_reports_effective_global_gates(temp_config, monkeypatch):
 
     policy = temp_config.config_dir / 'action-policy.yaml'
     policy.write_text(yaml.safe_dump({'version': 1, 'action_modes': {
-        'git_commit': 'APPROVAL', 'git_push': 'ALLOW'}}))
+        'git_commit': 'LOCKED', 'git_push': 'ALLOW'}}))
     policy.chmod(0o600)
     _, context = build_mcp_server(temp_config)
     operations = context['tools']['get_capabilities']()['git_operations']
@@ -89,40 +148,32 @@ def test_push_inventory_remains_denied_with_permissive_policy_and_backend(temp_c
 
 
 def test_git_inventory_reports_conditional_commit_backend(temp_config, monkeypatch):
+    from agentporter.client_policy import PRINCIPAL
     from agentporter.sandbox.bubblewrap import BubblewrapSandbox
-    original_init = BubblewrapSandbox.__init__
-    def init_with_resources(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        self.resources = object()
-    monkeypatch.setattr(BubblewrapSandbox, '__init__', init_with_resources)
-    monkeypatch.setattr(BubblewrapSandbox, 'is_available', lambda self: True)
-    monkeypatch.setattr('agentporter.agents.development.DevelopmentRuntime._sandbox_executable', lambda *args: '/fixture/bwrap')
-    monkeypatch.setattr('agentporter.git_commits.WorkspaceGitCommits', lambda *args, **kwargs: object())
-    temp_config.sandbox.workspace_transactions = True
+    install_synthetic_commit_authority(temp_config, monkeypatch)
     _, context = build_mcp_server(temp_config)
-    result = context['tools']['get_capabilities']()
+    token = PRINCIPAL.set('public')
+    try:
+        result = context['tools']['get_capabilities']()
+    finally:
+        PRINCIPAL.reset(token)
     assert result['sandbox']['workspace_access'] == 'transactional'
     assert result['git_operations']['git_commit'] == {
         'backend_available': True, 'available': None,
-        'reason': 'authorization_conditional', 'mode': 'SCOPE'}
+        'reason': 'authorization_conditional', 'mode': 'APPROVAL'}
     assert result['git_operations']['git_push']['available'] is False
     monkeypatch.setattr(BubblewrapSandbox, 'is_available', lambda self: False)
-    assert context['tools']['get_capabilities']()['git_operations']['git_commit'] == {
-        'backend_available': True, 'available': False, 'reason': 'sandbox_unavailable'}
+    token = PRINCIPAL.set('public')
+    try:
+        assert context['tools']['get_capabilities']()['git_operations']['git_commit'] == {
+            'backend_available': True, 'available': False, 'reason': 'sandbox_unavailable'}
+    finally:
+        PRINCIPAL.reset(token)
 
 
 def test_read_only_client_and_policy_error_redaction(temp_config, monkeypatch):
     from agentporter.client_policy import PRINCIPAL
-    from agentporter.sandbox.bubblewrap import BubblewrapSandbox
-    original_init = BubblewrapSandbox.__init__
-    def init_with_resources(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        self.resources = object()
-    monkeypatch.setattr(BubblewrapSandbox, '__init__', init_with_resources)
-    monkeypatch.setattr(BubblewrapSandbox, 'is_available', lambda self: True)
-    monkeypatch.setattr('agentporter.agents.development.DevelopmentRuntime._sandbox_executable', lambda *args: '/fixture/bwrap')
-    monkeypatch.setattr('agentporter.git_commits.WorkspaceGitCommits', lambda *args, **kwargs: object())
-    temp_config.sandbox.workspace_transactions = True
+    install_synthetic_commit_authority(temp_config, monkeypatch)
     _, context = build_mcp_server(temp_config)
     context['client_policy'].scopes = {'read_only': frozenset({'read'})}
     token = PRINCIPAL.set('public')

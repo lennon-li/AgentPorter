@@ -123,15 +123,13 @@ if OPERATION=='fetch':
  assert subprocess.check_output(['/usr/bin/git','-C',str(root),'-c','safe.directory='+str(root),'rev-parse','refs/remotes/origin/reviewed'],text=True).strip()==EXPECTED_REMOTE
 if OPERATION=='pull':assert (root/'ordinary').read_text()=='remote\\n'
 (root/'continued').write_text('direct operation continued\\n')
-for args in (['add','continued'],['commit','-qm','direct scoped commit']):
- subprocess.run(['/usr/bin/git','-C',str(root),'-c','safe.directory='+str(root),'-c','user.name=Worker','-c','user.email=worker@example.invalid']+args,check=True)
 print('DIRECT_DONE',flush=True)
 '''
 
 
 @pytest.mark.parametrize('operation',['fetch','pull'])
 @pytest.mark.parametrize('algorithm',['sha1','sha256'])
-def test_native_worker_direct_operation_and_commit_use_original_admission(tmp_path,monkeypatch,runtime_factory,operation,algorithm):
+def test_native_worker_direct_operation_keeps_commit_owner_only(tmp_path,monkeypatch,runtime_factory,operation,algorithm):
     from tests.security.test_approved_git_pull import backend
     from tests.security.test_worker_git_runtime import configured as configure_runtime
     # The ordinary native runtime fixture installs only synthetic offline credentials.
@@ -157,9 +155,36 @@ def test_native_worker_direct_operation_and_commit_use_original_admission(tmp_pa
     assert result['status']=='completed',manager.get_output(job)
     assert 'DIRECT_DONE' in manager.get_output(job)['stdout']
     assert (root/'continued').read_text()=='direct operation continued\n'
-    assert git(root,'rev-parse','HEAD^')==(original if operation=='fetch' else remote['oid'])
+    assert git(root,'rev-parse','HEAD')==(original if operation=='fetch' else remote['oid'])
+    assert git(root,'status','--short')=='?? continued'
     assert git(root,'rev-parse','refs/remotes/origin/reviewed')==remote['oid']
     assert count(manager)==0 and job not in manager._worker_git_services
+
+
+def test_native_worker_raw_commit_is_rejected_without_publication(tmp_path,monkeypatch,runtime_factory,caplog):
+    from tests.security.test_worker_git_runtime import configured as configure_runtime
+    root,old,key,manager,remote=configure_runtime(tmp_path,monkeypatch,runtime_factory)
+    head=git(root,'rev-parse','HEAD');index=(root/'.git/index').read_bytes()
+    worker="""from pathlib import Path
+import subprocess
+root=Path('/workspace')
+(root/'unapproved').write_text('unapproved worker commit\\n')
+for args in (['add','unapproved'],['commit','-qm','unapproved worker commit']):
+ subprocess.run(['/usr/bin/git','-C',str(root),'-c','safe.directory='+str(root),'-c','user.name=Worker','-c','user.email=worker@example.invalid']+args,check=True)
+print('RAW_COMMIT_CREATED',flush=True)
+"""
+    job=manager.start_confined_agent_job(workspace_id='repo',workspace_path=str(root),agent='codex_impl',
+        cmd=['/usr/bin/python3','-c',worker],policy=ExecutionPolicy.for_workspace(writable=True),timeout_seconds=60)
+    result=terminal(manager,job)
+    output=manager.get_output(job)
+    assert result['status']=='failed',output
+    assert 'Worker Git history change requires independent owner approval' in caplog.text
+    assert 'RAW_COMMIT_CREATED' in output['stdout']
+    assert git(root,'rev-parse','HEAD')==head
+    assert git(root,'rev-parse','refs/heads/reviewed')==head
+    assert (root/'.git/index').read_bytes()==index
+    assert not (root/'unapproved').exists()
+    assert count(manager)==0
 
 
 def test_native_clone_client_executes_without_prepare_wait_or_phone(tmp_path,monkeypatch,runtime_factory):
@@ -172,7 +197,7 @@ def test_native_clone_client_executes_without_prepare_wait_or_phone(tmp_path,mon
         cmd=['/usr/bin/python3','-c',worker],policy=ExecutionPolicy.for_workspace(writable=True),timeout_seconds=90)
     assert terminal(manager,job)['status']=='completed',manager.get_output(job)
     assert (root/'new-clone/continued').read_text()=='direct operation continued\n'
-    assert git(root/'new-clone','rev-parse','HEAD^')==remote['oid'] and count(manager)==0
+    assert git(root/'new-clone','rev-parse','HEAD')==remote['oid'] and count(manager)==0
 
 
 def public_server_config(temp_config,service,manager,monkeypatch,operations):
@@ -188,12 +213,22 @@ def public_server_config(temp_config,service,manager,monkeypatch,operations):
     return temp_config
 
 
-def test_real_rest_fetch_mcp_pull_commit_and_push_denial(temp_config,tmp_path,monkeypatch,runtime_factory):
+def test_real_rest_fetch_mcp_pull_owner_commit_and_push_denial(temp_config,tmp_path,monkeypatch,runtime_factory):
     from agentporter import server
     from fastapi.testclient import TestClient
     from tests.security.test_closeout_client_policy import rpc
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import Encoding,PublicFormat
+    from agentporter.git_approvals import GitApprovalRequest,GitApprovalVerifier,issue_git_approval
     root,old,key,manager,remote=configured(tmp_path,monkeypatch,runtime_factory)
     pulls,fetches,clones=activate(old,manager,operations=['fetch','pull'])
+    owner_key=Ed25519PrivateKey.generate()
+    ledger=tmp_path/'owner-commit'/'claims.db'
+    GitApprovalVerifier(owner_key.public_key(),ledger)
+    policy=Path(old.authority._config_dir)/'git-commit-policy.json'
+    policy.write_text(json.dumps({'version':1,'author_name':'Synthetic Owner','author_email':'owner@example.invalid',
+        'verification_key':owner_key.public_key().public_bytes(Encoding.Raw,PublicFormat.Raw).hex(),
+        'ledger_path':str(ledger),'workspaces':['repo']}));policy.chmod(0o600)
     config=public_server_config(temp_config,pulls,manager,monkeypatch,['read','write','git_read','git_write','git_fetch','git_pull','git_clone','git_commit'])
     with TestClient(server.create_asgi_app(config)) as client:
         headers={'X-AgentPorter-Key':config.api_key};endpoint='/api/v1/workspaces/repo/git/'
@@ -203,13 +238,38 @@ def test_real_rest_fetch_mcp_pull_commit_and_push_denial(temp_config,tmp_path,mo
         result=rpc(client,config.api_key,'git_pull',{'workspace_id':'repo','branch':REF})
         assert not result['result'].get('isError'),result
         assert git(root,'rev-parse','HEAD')==remote['oid']
-        (root/'api-commit').write_text('no phone commit\n')
+        (root/'api-commit').write_text('owner reviewed commit\n')
         git(root,'add','api-commit')
-        result=rpc(client,config.api_key,'git_commit',{'workspace_id':'repo','message':'direct API commit'})
+        message='synthetic owner approved MCP commit'
+        denied=rpc(client,config.api_key,'git_commit',{'workspace_id':'repo','message':message})
+        assert denied['result']['isError'],denied
+        prepared=rpc(client,config.api_key,'git_commit',{'workspace_id':'repo','message':message,'prepare_only':True})
+        proposal=json.loads(prepared['result']['content'][0]['text'])
+        request=GitApprovalRequest.from_payload(proposal['request'])
+        timestamp=request.to_payload()['parameters']['timestamp']
+        result=rpc(client,config.api_key,'git_commit',{'workspace_id':'repo','message':message,
+            'approval_timestamp':timestamp,'approval_receipt':issue_git_approval(owner_key,request)})
         assert not result['result'].get('isError'),result
-        assert git(root,'show','-s','--format=%s')=='direct API commit'
+        assert git(root,'show','-s','--format=%s')==message
+        (root/'api-rest-commit').write_text('owner reviewed REST commit\n')
+        git(root,'add','api-rest-commit')
+        rest_message='synthetic owner approved REST commit'
+        denied=client.post(endpoint+'commit',headers=headers,json={'message':rest_message})
+        assert denied.status_code==403,denied.text
+        prepared=client.post(endpoint+'commit',headers=headers,json={'message':rest_message,'prepare_only':True})
+        assert prepared.status_code==200,prepared.text
+        proposal=json.loads(prepared.json())
+        request=GitApprovalRequest.from_payload(proposal['request'])
+        timestamp=request.to_payload()['parameters']['timestamp']
+        result=client.post(endpoint+'commit',headers=headers,json={'message':rest_message,
+            'approval_timestamp':timestamp,'approval_receipt':issue_git_approval(owner_key,request)})
+        assert result.status_code==200,result.text
+        assert git(root,'show','-s','--format=%s')==rest_message
         assert client.post(endpoint+'push',headers=headers,json={'branch':REF,'approval_receipt':'old-signed-receipt'}).status_code==403
-        assert rpc(client,config.api_key,'git_push',{'workspace_id':'repo','branch':REF,'approval_receipt':'old-signed-receipt'})['result']['isError']
+        denied=rpc(client,config.api_key,'git_push',{'workspace_id':'repo','branch':REF,'approval_receipt':'old-signed-receipt'})
+        denial=json.loads(denied['result']['content'][0]['text'])
+        assert denial=={'status':'denied','executed':False,'error':
+            {'code':'POLICY_DENIED','action':'git_push','mode':'LOCKED','reason':'action_locked'}},denied
         assert client.post(endpoint+'fetch',headers=headers,json={'branch':REF,'authorization_mode':'workspace'}).status_code==422
         caps=rpc(client,config.api_key,'get_capabilities',{})
         content=json.loads(caps['result']['content'][0]['text'])

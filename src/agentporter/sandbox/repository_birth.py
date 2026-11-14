@@ -265,6 +265,19 @@ def validate_tree_records(records, tree):
     return prefixes
 
 
+def _validate_birth_authority(transaction, repository):
+    """Validate the existing consumed owner clone grant for a Git birth."""
+    capability=getattr(transaction,'_approved_clone_births',{}).get(repository)
+    clone=None
+    if capability is not None:
+        from agentporter.git_clone_authority import CloneBirthAuthorization
+        if not isinstance(capability,CloneBirthAuthorization) or capability.transaction is not transaction:raise UnsafeWorkspaceDelta('Clone birth requires immutable host authority')
+        clone=capability.validate()
+    if clone is None:
+        raise UnsafeWorkspaceDelta('Repository creation requires independent owner approval')
+    return capability,clone
+
+
 def discover(transaction):
     if not transaction._allow_git_birth: return None
     if transaction.git_sandbox is None: raise UnsafeWorkspaceDelta('Git birth requires supervised Git validation')
@@ -304,14 +317,7 @@ def discover(transaction):
                     if _directory_record(existing_fd,'.')!=existing_record:raise UnsafeWorkspaceDelta('Original empty target changed since job start')
                     st=os.fstat(existing_fd);existing_identity=(st.st_dev,st.st_ino)
                 finally:os.close(existing_fd)
-            capability=getattr(transaction,'_approved_clone_births',{}).get(repository)
-            clone=None
-            if capability is not None:
-                from agentporter.git_clone_authority import CloneBirthAuthorization
-                if not isinstance(capability,CloneBirthAuthorization) or capability.transaction is not transaction:raise UnsafeWorkspaceDelta('Clone birth requires immutable host authority')
-                clone=capability.validate()
-            if clone is None:
-                raise UnsafeWorkspaceDelta('Repository creation requires independent owner approval')
+            capability,clone=_validate_birth_authority(transaction,repository)
             manifest=_manifest(path,budget=metadata_budget,deadline=deadline,clone=clone)
             from agentporter.sandbox.workspace_git import _HISTORY_INSPECT
             remaining=deadline-time.monotonic()

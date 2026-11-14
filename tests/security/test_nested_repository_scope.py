@@ -1,4 +1,4 @@
-"""Native parent-project job, exact preexisting nested fixture pull and continued commit."""
+"""Native parent-project jobs and exact preexisting nested-repository pulls."""
 import hashlib,json,os,subprocess,sys
 from pathlib import Path
 import pytest,yaml
@@ -86,7 +86,6 @@ assert Path('/tmp/agentporter-worker-view-test').read_text()=='worker private tm
 root=Path('/workspace/acceptance/selected');assert (root/'ordinary').read_text()=='remote\\n',repr((root/'ordinary').read_bytes())
 (root/'continued').write_text('continued edit\\n')
 subprocess.run(['/usr/bin/git','-C',str(root),'-c','safe.directory='+str(root),'-c','user.name=Worker','-c','user.email=worker@example.invalid','add','continued'],check=True)
-subprocess.run(['/usr/bin/git','-C',str(root),'-c','safe.directory='+str(root),'-c','user.name=Worker','-c','user.email=worker@example.invalid','commit','-qm','continued nested commit'],check=True)
 print('CONTINUED',flush=True)
 '''
 
@@ -94,7 +93,7 @@ print('CONTINUED',flush=True)
 @pytest.mark.parametrize('algorithm',['sha1','sha256'])
 @pytest.mark.parametrize('mode',['ff-only','merge','rebase'])
 @pytest.mark.parametrize('outer_git',[True,False])
-def test_actual_parent_project_job_nested_pull_then_commit_preserves_other_histories(tmp_path,monkeypatch,runtime_factory,outer_git,algorithm,mode,dual=False):
+def test_actual_parent_project_job_nested_pull_then_edit_preserves_other_histories(tmp_path,monkeypatch,runtime_factory,outer_git,algorithm,mode,dual=False):
  root,selected,other,service,key,manager,remote=configured_nested(tmp_path,monkeypatch,runtime_factory,outer_git=outer_git,algorithm=algorithm,mode=mode,divergent=mode!='ff-only',dual=dual)
  parent_namespaces={name:os.readlink('/proc/self/ns/'+name) for name in ('user','mnt','net','pid','ipc','uts')}
  outer_before=metadata(root/'.git') if outer_git else None
@@ -117,7 +116,7 @@ def test_actual_parent_project_job_nested_pull_then_commit_preserves_other_histo
  reply=tools.git_pull('repo',branch='refs/heads/reviewed',mode=mode,job_id=job,request_sha256=request.digest,approval_receipt=issue_git_approval(key,request))
  assert reply['status']=='completed',reply
  status=terminal(manager,job);assert status['status']=='completed',manager.get_output(job)
- assert git(selected,'show','-s','--format=%s')=='continued nested commit'
+ assert git(selected,'status','--short')=='A  continued'
  assert git(selected,'rev-parse','refs/remotes/origin/reviewed')==remote['oid']
  assert (selected/'continued').read_text()=='continued edit\n'
  assert metadata(other)==other_before
@@ -132,9 +131,42 @@ def test_actual_parent_project_job_nested_pull_then_commit_preserves_other_histo
  assert all(int(proof[name],16)==0 for name in ('CapEff','CapPrm','CapInh','CapBnd','CapAmb'))
  assert {name:os.readlink('/proc/self/ns/'+name) for name in parent_namespaces}==parent_namespaces
  assert all(proof['namespaces'][name]!=parent_namespaces[name] for name in parent_namespaces)
- if mode!='ff-only':assert git(selected,'show','HEAD~1:local')=='local'
+ if mode!='ff-only':assert git(selected,'show','HEAD:local')=='local'
  assert not list((manager.state_dir/'workspace-transactions').glob('*.pending.json'))
  assert not list((manager.state_dir/'workspace-transactions').glob('*.git-pending.json'))
+
+
+def test_signed_pull_rejects_post_pull_worker_commit_and_retains_exact_candidate(tmp_path,monkeypatch,runtime_factory,caplog):
+ """Consumed pull authority retains its guard and candidate for owner reconciliation."""
+ root,selected,other,service,key,manager,remote=configured_nested(tmp_path,monkeypatch,runtime_factory)
+ before=metadata(root)
+ worker=WORKER.replace("print('CONTINUED',flush=True)",
+  "subprocess.run(['/usr/bin/git','-C',str(root),'-c','safe.directory='+str(root),'-c','user.name=Worker','-c','user.email=worker@example.invalid','commit','-qm','unapproved post-pull commit'],check=True)\nprint('UNAPPROVED_COMMIT',flush=True)")
+ job=manager.start_confined_agent_job(workspace_id='repo',workspace_path=str(root),agent='codex_impl',
+  cmd=['/usr/bin/python3','-c',worker.replace('MODE',repr('ff-only'))],policy=ExecutionPolicy.for_workspace(writable=True),timeout_seconds=90)
+ prepared=json.loads(wait_output(manager,job,'"status": "prepared"')['stdout'].splitlines()[0])
+ request=GitApprovalRequest.from_payload(prepared['request'])
+ transaction=manager._job_transactions[job]
+ tools=create_git_tools(service.registry,service.sandbox,approved_pulls=service,job_manager=manager)
+ reply=tools.git_pull('repo',branch='refs/heads/reviewed',job_id=job,
+  request_sha256=request.digest,approval_receipt=issue_git_approval(key,request))
+ assert reply['status']=='completed',reply
+ status=terminal(manager,job)
+ assert status['status']=='cleanup_failed',manager.get_output(job)
+ assert 'Approved inbound Git does not authorize a subsequent worker commit or checkout' in caplog.text
+ assert 'UNAPPROVED_COMMIT' in manager.get_output(job)['stdout']
+ assert metadata(root)==before
+ assert count(manager)==1 and transaction._private_pull_pending
+ guards=list((manager.state_dir/'workspace-transactions').glob('*.git-pending.json'))
+ assert len(guards)==1
+ guard=json.loads(guards[0].read_text())
+ assert guard['request_sha256']==request.digest
+ assert guard['candidate_directory']==str(transaction.directory)
+ candidate=Path(guard['candidate_directory'])
+ durable=json.loads((candidate/'pull-private-result.json').read_text())
+ assert durable['request_sha256']==request.digest and durable['canonical_published'] is False
+ service.verifier.assert_consumed(guard['approval_nonce'],request)
+
 
 def test_owner_policy_nested_prepare_binds_actual_repository(tmp_path,monkeypatch,runtime_factory):
  root,selected,other,service,key,manager,remote=configured_nested(tmp_path,monkeypatch,runtime_factory)
@@ -211,7 +243,7 @@ def test_fixed_bootstrap_rejects_substituted_capabilities_before_provider(tmp_pa
  assert not list((manager.state_dir/'workspace-transactions').glob('*.pending.json'))
 
 
-def test_nested_actual_gateway_relay_receipt_and_continued_commit(tmp_path,monkeypatch,runtime_factory,temp_config):
+def test_nested_actual_gateway_relay_receipt_and_continued_edit(tmp_path,monkeypatch,runtime_factory,temp_config):
     import asyncio
     from types import SimpleNamespace
     import httpx
@@ -268,7 +300,7 @@ def test_nested_actual_gateway_relay_receipt_and_continued_commit(tmp_path,monke
     with TestClient(server.create_asgi_app(gateway),client=('127.0.0.1',12345)) as client:
         headers={'X-AgentPorter-Key':gateway.api_key}
         response=client.post('/api/v1/workspaces/repo/agents/dispatch',headers=headers,
-            json={'agent':'codex_impl','task':'native signed pull then edit and commit','read_only':False})
+            json={'agent':'codex_impl','task':'native signed pull then edit','read_only':False})
         assert response.status_code==200,response.text
         public=response.json()['job_id'];assert public.startswith('rjob_')
         ledger=production_relay.RelayLedger(gateway.state_dir)
@@ -289,7 +321,8 @@ def test_nested_actual_gateway_relay_receipt_and_continued_commit(tmp_path,monke
         assert (selected/'continued').read_text()=='continued edit\n'
         assert metadata(root/'.git')==root_before and metadata(other)==other_before
         assert ((root/'ordinary').read_bytes(),(root/'owner-staged').read_bytes())==owner_before
-        assert git(selected,'rev-parse','HEAD^')==remote['oid']
+        assert git(selected,'rev-parse','HEAD')==remote['oid']
+        assert git(selected,'status','--short')=='A  continued'
         assert git(selected,'rev-parse','refs/remotes/origin/reviewed')==remote['oid']
         assert count(manager)==0
 
@@ -381,7 +414,7 @@ def test_nested_signed_symbolic_tracking_interruption_has_exact_original_recover
 
 
 def test_actual_root_and_nested_owner_grants_coexist_with_one_irrevocable_job_selection(tmp_path,monkeypatch,runtime_factory):
- test_actual_parent_project_job_nested_pull_then_commit_preserves_other_histories(tmp_path,monkeypatch,runtime_factory,True,'sha256','rebase',dual=True)
+ test_actual_parent_project_job_nested_pull_then_edit_preserves_other_histories(tmp_path,monkeypatch,runtime_factory,True,'sha256','rebase',dual=True)
 
 
 def test_actual_fetch_rest_selects_child_among_root_and_child_grants(tmp_path,monkeypatch,runtime_factory):

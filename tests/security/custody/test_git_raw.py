@@ -342,12 +342,15 @@ def test_offline_combined_plan_inspects_git_and_retains_all_guards(tmp_path,monk
     initial.state_dir.chmod(0o700)
     sandbox=BubblewrapSandbox(initial.state_dir,transactional_writes=True)
     sandbox.resources=RecordingResources()
+    from tests.security.custody.authorization_seams import allow_one_history_publication_for_recovery
+    history_seam=allow_one_history_publication_for_recovery(monkeypatch,root)
     marker="publication_event('index_published')"
     assert module._IMPORT.count(marker)==1
     monkeypatch.setattr(module,'_IMPORT',module._IMPORT.replace(marker,marker+'; os._exit(73)'))
     with pytest.raises(ResourceCleanupError):
         sandbox.run(str(root),['/bin/sh','-c',
             'printf "combined recovery fixture" > ordinary && git add ordinary && git commit -qm "combined recovery"'])
+    assert len(history_seam)==1
     assert len(sandbox._unresolved_transactions)==1
     transaction=sandbox._unresolved_transactions[0]
     guard=next(iter(transaction.git_histories.values())).guard
@@ -517,6 +520,8 @@ def unchanged_git_interruption(tmp_path,monkeypatch,native_stage='before_locks')
     from agentporter.tools.jobs import JobManager
     root,_,initial=setup(tmp_path);initial.state_dir.chmod(0o700)
     sandbox=BubblewrapSandbox(initial.state_dir,transactional_writes=True);sandbox.resources=RecordingResources()
+    from tests.security.custody.authorization_seams import allow_one_history_publication_for_recovery
+    history_seam=allow_one_history_publication_for_recovery(monkeypatch,root)
     marker="publication_event('"+native_stage+"')"
     assert module._IMPORT.count(marker)==1
     with monkeypatch.context() as patch:
@@ -524,6 +529,7 @@ def unchanged_git_interruption(tmp_path,monkeypatch,native_stage='before_locks')
         with pytest.raises(ResourceCleanupError):
             sandbox.run(str(root),['/bin/sh','-c',
                 'printf "recovery before native mutation" > ordinary && git add ordinary && git commit -qm "before recovery"'])
+    assert len(history_seam)==1
     transaction=sandbox._unresolved_transactions[0]
     history=next(iter(transaction.git_histories.values()));guard=history.guard
     manager=JobManager(sandbox.state_dir)
@@ -975,6 +981,8 @@ def test_integrated_original_preservation_crash_recovers_exact_before(tmp_path,m
     original={name:(root/'.git'/name).stat().st_ino for name in ('index','HEAD')}
     manager=JobManager(initial.state_dir)
     sandbox=BubblewrapSandbox(initial.state_dir,transactional_writes=True);sandbox.resources=RecordingResources()
+    from tests.security.custody.authorization_seams import allow_one_history_publication_for_recovery
+    allow_one_history_publication_for_recovery(monkeypatch,root)
     child=os.fork()
     if child==0:
         write=originals._write

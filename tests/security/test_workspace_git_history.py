@@ -53,6 +53,7 @@ def test_private_commit_import_preserves_exact_identity_and_protected_config(tmp
 def test_private_hooks_and_remote_configuration_never_import(tmp_path):
     root, item = history(tmp_path)
     try:
+        (item.private / 'hooks').mkdir()
         (item.private / 'hooks/pre-commit').write_text('private-only hook')
         private_git(item, 'config', 'remote.attacker.url', 'https://example.invalid/')
         (root / 'ordinary').write_text('agent edit')
@@ -115,7 +116,7 @@ def test_new_private_branch_is_imported_without_changing_other_branches(tmp_path
         item.close()
 
 
-def test_native_shell_commit_is_private_until_job_quiesces_then_imported(tmp_path):
+def test_native_shell_commit_is_rejected_before_history_publication(tmp_path):
     root, _, initial = setup(tmp_path)
     sandbox = BubblewrapSandbox(initial.state_dir, transactional_writes=True)
     sandbox.resources = RecordingResources()
@@ -123,13 +124,13 @@ def test_native_shell_commit_is_private_until_job_quiesces_then_imported(tmp_pat
     sandbox.resources.lease.on_close = lambda: None
     result = sandbox.run(str(root), ['/bin/sh', '-c',
         'cd /workspace && printf "native edit" > ordinary && git add ordinary && git commit -qm "Native agent commit"'])
-    assert result['exit_code'] == 0, result
-    assert git(root, 'rev-parse', 'HEAD') != old
-    assert git(root, 'show', '-s', '--format=%s') == 'Native agent commit'
+    assert result['exit_code'] != 0 and 'independent owner approval' in result['stderr'], result
+    assert git(root, 'rev-parse', 'HEAD') == old
+    assert (root / 'ordinary').read_text() == 'initial'
     assert git(root, 'status', '--short') == ''
 
 
-def test_nested_repository_native_commit_is_imported(tmp_path):
+def test_nested_repository_native_commit_is_rejected_before_history_publication(tmp_path):
     root, _, initial = setup(tmp_path)
     outer = tmp_path / 'workspace'
     outer.mkdir()
@@ -137,10 +138,12 @@ def test_nested_repository_native_commit_is_imported(tmp_path):
     root = outer / 'nested'
     sandbox = BubblewrapSandbox(initial.state_dir, transactional_writes=True)
     sandbox.resources = RecordingResources()
+    old = git(root, 'rev-parse', 'HEAD')
     result = sandbox.run(str(outer), ['/bin/sh', '-c',
         'cd /workspace/nested && printf "nested edit" > ordinary && git -c safe.directory=/workspace/nested add ordinary && git -c safe.directory=/workspace/nested commit -qm "Nested agent commit"'])
-    assert result['exit_code'] == 0, result
-    assert git(root, 'show', '-s', '--format=%s') == 'Nested agent commit'
+    assert result['exit_code'] != 0 and 'independent owner approval' in result['stderr'], result
+    assert git(root, 'rev-parse', 'HEAD') == old
+    assert (root / 'ordinary').read_text() == 'initial'
     assert git(root, 'status', '--short') == ''
 
 
@@ -156,14 +159,17 @@ def test_failed_native_job_discards_commit_and_edits(tmp_path):
     assert (root / 'ordinary').read_text() == 'initial'
 
 
-def test_private_hook_cannot_change_canonical_control_files(tmp_path):
+def test_private_hook_and_commit_are_rejected_without_canonical_control_changes(tmp_path):
     root, _, initial = setup(tmp_path)
     sandbox = BubblewrapSandbox(initial.state_dir, transactional_writes=True)
     sandbox.resources = RecordingResources()
+    old = git(root, 'rev-parse', 'HEAD')
     original = (root / '.git/config').read_bytes()
     result = sandbox.run(str(root), ['/bin/sh', '-c',
-        'cd /workspace && printf "bad-hook" > .git/hooks/pre-commit && '
+        'cd /workspace && mkdir -p .git/hooks && printf "bad-hook" > .git/hooks/pre-commit && '
         'printf changed > ordinary && git add ordinary && git commit -qm "Protected canonical controls"'])
-    assert result['exit_code'] == 0, result
+    assert result['exit_code'] != 0 and 'independent owner approval' in result['stderr'], result
+    assert git(root, 'rev-parse', 'HEAD') == old
+    assert (root / 'ordinary').read_text() == 'initial'
     assert (root / '.git/config').read_bytes() == original
     assert not (root / '.git/hooks/pre-commit').exists()

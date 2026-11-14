@@ -110,14 +110,25 @@ def share(root,outside,packed=False):
     before={}
     for n,p in enumerate((root/'.git/objects').rglob('*')):
         if p.is_file() and p.relative_to(root/'.git').parts[:2] != ('objects','info'):
+            # Newer Git versions also write reverse indexes. The supported
+            # shared-source exception covers object data and its pack index;
+            # leave optional sidecars private to the source repository.
+            if p.parent.name=='pack' and p.suffix not in {'.pack','.idx'}:
+                continue
             p.chmod(0o444);os.link(p,outside/str(n));before[p]=signature(p.stat()),hashlib.sha256(p.read_bytes()).hexdigest()
     return before
 
 
 @pytest.mark.parametrize('packed',[False,True])
+@pytest.mark.parametrize('reverse_index',[False,True])
 @pytest.mark.parametrize('repository',['sha1','sha256'],indirect=True)
-def test_shared_source_objects_become_private_inodes_and_commit_safely(repository,tmp_path,packed):
-    root,sandbox=repository;before=share(root,tmp_path/'outside',packed)
+def test_shared_source_objects_become_private_inodes_and_commit_safely(repository,tmp_path,packed,reverse_index):
+    root,sandbox=repository
+    git(root,'config','pack.writeReverseIndex','true' if reverse_index else 'false')
+    before=share(root,tmp_path/'outside',packed)
+    sidecars={p:(signature(p.stat()),hashlib.sha256(p.read_bytes()).hexdigest())
+              for p in (root/'.git/objects/pack').glob('*.rev')}
+    if packed and reverse_index:assert sidecars
     fd=os.open(root/'.git',snapshots.FLAGS)
     try:
         with pytest.raises(PermissionError):_inspect_metadata(fd,_mount_id(fd))
@@ -135,15 +146,21 @@ def test_shared_source_objects_become_private_inodes_and_commit_safely(repositor
         assert git(root,'log','-1','--format=%s')=='private'
         for source,(record,digest) in before.items():
             assert signature(source.stat())==record and hashlib.sha256(source.read_bytes()).hexdigest()==digest
+        for source,(record,digest) in sidecars.items():
+            private=item.private/source.relative_to(root/'.git')
+            assert source.stat().st_nlink==private.stat().st_nlink==1
+            assert source.stat().st_ino!=private.stat().st_ino
+            assert signature(source.stat())==record and hashlib.sha256(source.read_bytes()).hexdigest()==digest
     finally:item.close()
 
 
-@pytest.mark.parametrize('kind',['plaintext_secret','wrong_oid','writable','sidecar','control','index'])
+@pytest.mark.parametrize('kind',['plaintext_secret','wrong_oid','writable','sidecar','reverse_index','control','index'])
 def test_bad_shared_sources_never_reach_worker(repository,tmp_path,kind):
     root,sandbox=repository;outside=tmp_path/'outside';outside.mkdir()
     if kind=='plaintext_secret':path=root/'.git/objects/aa'/('b'*38);body=b'SYNTHETIC_SECRET_NOT_A_GIT_OBJECT'
     elif kind=='wrong_oid':path=root/'.git/objects/aa'/('b'*38);body=zlib.compress(b'blob 7\0secret\n')
     elif kind=='sidecar':path=root/'.git/objects/pack'/('pack-'+'a'*40+'.bitmap');body=b'sidecar'
+    elif kind=='reverse_index':path=root/'.git/objects/pack'/('pack-'+'a'*40+'.rev');body=b'reverse-index-sidecar'
     elif kind=='control':path=root/'.git/config';body=None
     elif kind=='index':path=root/'.git/index';body=None
     else:path=root/'.git/objects/aa'/('b'*38);body=b'writable'

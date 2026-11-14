@@ -11,7 +11,7 @@ from tests.security.test_git_approval_state import git,setup
 from tests.security.test_workspace_transactions import RecordingResources
 
 
-def fixture(tmp_path,outer_git=True,allow=True,existing=False):
+def fixture(tmp_path,outer_git=True,allow=True,existing=False,monkeypatch=None):
     if outer_git:
         root,_,initial=setup(tmp_path)
         (root/'staged-owner').write_text('owner staged\n');git(root,'add','staged-owner')
@@ -24,6 +24,10 @@ def fixture(tmp_path,outer_git=True,allow=True,existing=False):
         (root/'existing').chmod(0o750)  # Keep the mode-race fixture independent of umask.
     sandbox=BubblewrapSandbox(state,transactional_writes=True);sandbox.resources=RecordingResources()
     tx=WorkspaceTransaction(root,state/'workspace-transactions',git_sandbox=sandbox,allow_git_birth=allow)
+    if monkeypatch is not None:
+        # Explicitly isolate birth mechanics beneath the owner-approval gate.
+        from tests.security.custody.authorization_seams import allow_birth_for_recovery
+        allow_birth_for_recovery(monkeypatch,tx)
     return root,state,sandbox,tx
 
 
@@ -47,8 +51,8 @@ git -c safe.directory=/workspace/new/fixture -c user.name=Worker -c user.email=w
 
 
 @pytest.mark.parametrize('outer_git',[True,False])
-def test_new_repository_commit_publishes_only_new_checked_tree(tmp_path,outer_git):
-    root,state,sandbox,tx=fixture(tmp_path,outer_git)
+def test_new_repository_commit_publishes_only_new_checked_tree(tmp_path,monkeypatch,outer_git):
+    root,state,sandbox,tx=fixture(tmp_path,outer_git,monkeypatch=monkeypatch)
     before=metadata(root)
     try:
         result=run(sandbox,root,tx,SCRIPT);assert result['exit_code']==0,result
@@ -84,8 +88,8 @@ def test_default_path_still_refuses_new_git_metadata(tmp_path):
  "ln -s /etc/passwd new/fixture/.git/evil",
  "git -C new/fixture update-ref refs/replace/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa HEAD",
 ])
-def test_unapproved_new_metadata_is_refused_before_canonical_changes(tmp_path,attack):
-    root,state,sandbox,tx=fixture(tmp_path,False)
+def test_unsafe_new_metadata_is_refused_before_canonical_changes(tmp_path,monkeypatch,attack):
+    root,state,sandbox,tx=fixture(tmp_path,False,monkeypatch=monkeypatch)
     try:
         result=run(sandbox,root,tx,SCRIPT+'\ncd /workspace\n'+attack);assert result['exit_code']==0,result
         with pytest.raises(PermissionError):tx.publish()
@@ -94,11 +98,13 @@ def test_unapproved_new_metadata_is_refused_before_canonical_changes(tmp_path,at
     finally:tx.close()
 
 
-def test_existing_empty_target_retains_original_directory_then_publishes_birth(tmp_path):
+def test_existing_empty_target_retains_original_directory_then_publishes_birth(tmp_path,monkeypatch):
     root=tmp_path/'workspace';root.mkdir();(root/'existing').mkdir(mode=0o750);state=tmp_path/'state'
     original=(root/'existing').stat().st_ino
     sandbox=BubblewrapSandbox(state,transactional_writes=True);sandbox.resources=RecordingResources()
     tx=WorkspaceTransaction(root,state/'workspace-transactions',git_sandbox=sandbox,allow_git_birth=True)
+    from tests.security.custody.authorization_seams import allow_birth_for_recovery
+    allow_birth_for_recovery(monkeypatch,tx)
     try:
         script=SCRIPT.replace('new/fixture','existing')
         assert run(sandbox,root,tx,script)['exit_code']==0
@@ -111,10 +117,12 @@ def test_existing_empty_target_retains_original_directory_then_publishes_birth(t
     finally:tx.close()
 
 
-def test_existing_nonempty_target_refuses_without_replacing_owner_directory(tmp_path):
+def test_existing_nonempty_target_refuses_without_replacing_owner_directory(tmp_path,monkeypatch):
     root=tmp_path/'workspace';root.mkdir();(root/'existing').mkdir();(root/'existing/owner').write_text('owner')
     sandbox=BubblewrapSandbox(tmp_path/'state',transactional_writes=True);sandbox.resources=RecordingResources()
     tx=WorkspaceTransaction(root,sandbox.state_dir/'workspace-transactions',git_sandbox=sandbox,allow_git_birth=True)
+    from tests.security.custody.authorization_seams import allow_birth_for_recovery
+    allow_birth_for_recovery(monkeypatch,tx)
     try:
         assert run(sandbox,root,tx,SCRIPT.replace('new/fixture','existing'))['exit_code']==0
         with pytest.raises(PermissionError,match='empty existing'):tx.publish()
@@ -124,7 +132,7 @@ def test_existing_nonempty_target_refuses_without_replacing_owner_directory(tmp_
 
 def test_copied_birth_cannot_adopt_metadata_changed_after_validation(tmp_path,monkeypatch):
     from agentporter.sandbox import workspace_directories as dirs
-    root,state,sandbox,tx=fixture(tmp_path,False)
+    root,state,sandbox,tx=fixture(tmp_path,False,monkeypatch=monkeypatch)
     original=dirs._tree;changed=[]
     try:
         assert run(sandbox,root,tx,SCRIPT)['exit_code']==0
@@ -143,7 +151,7 @@ def interrupted_birth(tmp_path,monkeypatch,point,existing=False):
     from agentporter.sandbox import workspace_directories as dirs,workspace_recovery as recovery
     from agentporter.tools.jobs import JobManager
     from tests.security.custody.test_integration import stopped
-    root,state,sandbox,tx=fixture(tmp_path,False,existing=existing)
+    root,state,sandbox,tx=fixture(tmp_path,False,existing=existing,monkeypatch=monkeypatch)
     manager=JobManager(state)
     tx._birth_original_inode=(root/'existing').stat().st_ino if existing else None
     assert run(sandbox,root,tx,SCRIPT.replace('new/fixture','existing') if existing else SCRIPT)['exit_code']==0
@@ -248,8 +256,8 @@ def test_empty_target_capture_recovery_preserves_owner_late_directory_work(tmp_p
 
 @pytest.mark.parametrize('algorithm',['sha1','sha256'])
 @pytest.mark.parametrize('samples',[False,True])
-def test_default_init_samples_and_both_object_formats_are_checked(tmp_path,algorithm,samples):
-    root,state,sandbox,tx=fixture(tmp_path,False)
+def test_default_init_samples_and_both_object_formats_are_checked(tmp_path,monkeypatch,algorithm,samples):
+    root,state,sandbox,tx=fixture(tmp_path,False,monkeypatch=monkeypatch)
     script=SCRIPT.replace('git init -q --template= --initial-branch=main',
         'git init -q '+('' if samples else '--template= ')+'--initial-branch=main --object-format='+algorithm)
     try:
@@ -272,8 +280,8 @@ def test_read_only_transaction_never_honors_birth_opt_in(tmp_path):
 
 
 @pytest.mark.parametrize('change',['bytes','inode','mode'])
-def test_existing_empty_target_owner_change_after_job_start_is_not_adopted(tmp_path,change):
-    root,state,sandbox,tx=fixture(tmp_path,False,existing=True)
+def test_existing_empty_target_owner_change_after_job_start_is_not_adopted(tmp_path,monkeypatch,change):
+    root,state,sandbox,tx=fixture(tmp_path,False,existing=True,monkeypatch=monkeypatch)
     try:
         assert run(sandbox,root,tx,SCRIPT.replace('new/fixture','existing'))['exit_code']==0
         target=root/'existing'
@@ -288,8 +296,8 @@ def test_existing_empty_target_owner_change_after_job_start_is_not_adopted(tmp_p
     finally:tx.close()
 
 
-def test_canonical_new_target_inserted_by_owner_is_never_replaced(tmp_path):
-    root,state,sandbox,tx=fixture(tmp_path,False)
+def test_canonical_new_target_inserted_by_owner_is_never_replaced(tmp_path,monkeypatch):
+    root,state,sandbox,tx=fixture(tmp_path,False,monkeypatch=monkeypatch)
     try:
         assert run(sandbox,root,tx,SCRIPT)['exit_code']==0
         (root/'new/fixture').mkdir(parents=True);(root/'new/fixture/owner-later').write_text('owner')
@@ -300,8 +308,8 @@ def test_canonical_new_target_inserted_by_owner_is_never_replaced(tmp_path):
     finally:tx.close()
 
 
-def test_new_repository_cannot_publish_excluded_development_paths_in_history(tmp_path):
-    root,state,sandbox,tx=fixture(tmp_path,False)
+def test_new_repository_cannot_publish_excluded_development_paths_in_history(tmp_path,monkeypatch):
+    root,state,sandbox,tx=fixture(tmp_path,False,monkeypatch=monkeypatch)
     try:
         script=SCRIPT+'''cd /workspace/new/fixture
 mkdir .venv
@@ -315,11 +323,13 @@ git -c safe.directory=/workspace/new/fixture -c user.name=Worker -c user.email=w
     finally:tx.close()
 
 
-def test_owner_replaces_canonical_birth_parent_with_symlink_before_publication(tmp_path):
+def test_owner_replaces_canonical_birth_parent_with_symlink_before_publication(tmp_path,monkeypatch):
     root=tmp_path/'workspace';root.mkdir();(root/'parent/repo').mkdir(parents=True)
     outside=tmp_path/'outside';(outside/'repo').mkdir(parents=True);(outside/'repo/owner').write_text('outside owner')
     sandbox=BubblewrapSandbox(tmp_path/'state',transactional_writes=True);sandbox.resources=RecordingResources()
     tx=WorkspaceTransaction(root,sandbox.state_dir/'workspace-transactions',git_sandbox=sandbox,allow_git_birth=True)
+    from tests.security.custody.authorization_seams import allow_birth_for_recovery
+    allow_birth_for_recovery(monkeypatch,tx)
     try:
         assert run(sandbox,root,tx,SCRIPT.replace('new/fixture','parent/repo'))['exit_code']==0
         (root/'parent').rename(root/'retained-parent');(root/'parent').symlink_to(outside,target_is_directory=True)
@@ -330,10 +340,10 @@ def test_owner_replaces_canonical_birth_parent_with_symlink_before_publication(t
 
 
 @pytest.mark.parametrize('change',['repository_type','digest_type','remote_ref','branch_escape','mode','repeat'])
-def test_durable_birth_evidence_rejects_malformed_or_expanded_scope(tmp_path,change):
+def test_durable_birth_evidence_rejects_malformed_or_expanded_scope(tmp_path,monkeypatch,change):
     from copy import deepcopy
     from agentporter.sandbox.repository_birth import discover,validate_payloads
-    root,state,sandbox,tx=fixture(tmp_path,False)
+    root,state,sandbox,tx=fixture(tmp_path,False,monkeypatch=monkeypatch)
     try:
         assert run(sandbox,root,tx,SCRIPT)['exit_code']==0
         records=discover(tx).for_tree(tx.upper/'new');records=deepcopy(records)
@@ -347,7 +357,7 @@ def test_durable_birth_evidence_rejects_malformed_or_expanded_scope(tmp_path,cha
     finally:tx.close()
 
 
-def test_birth_preserves_existing_sibling_repository_and_outer_owner_history(tmp_path):
+def test_birth_preserves_existing_sibling_repository_and_outer_owner_history(tmp_path,monkeypatch):
     root,_,initial=setup(tmp_path)
     sibling=root/'sibling';sibling.mkdir()
     git(sibling,'init','-q','--template=','--initial-branch=main')
@@ -356,6 +366,8 @@ def test_birth_preserves_existing_sibling_repository_and_outer_owner_history(tmp
     (root/'ordinary').write_text('outer owner dirty')
     sandbox=BubblewrapSandbox(initial.state_dir,transactional_writes=True);sandbox.resources=RecordingResources()
     tx=WorkspaceTransaction(root,sandbox.state_dir/'workspace-transactions',git_sandbox=sandbox,allow_git_birth=True)
+    from tests.security.custody.authorization_seams import allow_birth_for_recovery
+    allow_birth_for_recovery(monkeypatch,tx)
     before_outer,before_sibling=metadata(root),metadata(sibling)
     try:
         assert len(tx.git_histories)==2

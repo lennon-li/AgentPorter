@@ -76,7 +76,11 @@ def test_authenticated_push_scope_and_exact_receipts_across_rest_mcp(tmp_path, m
             assert client.post(path, json=base, headers=headers).status_code == 403
             args = {'workspace_id': 'repo', **base, 'prepare_only': True}
             prepared = rpc(client, config.api_key, 'git_push', args)
-            assert prepared['result'].get('isError'), prepared
+            assert prepared['result'].get('isError') is False, prepared
+            denial = json.loads(prepared['result']['content'][0]['text'])
+            assert denial == {'status': 'denied', 'executed': False, 'error': {
+                'code': 'POLICY_DENIED', 'action': 'git_push',
+                'mode': 'LOCKED', 'reason': 'action_locked'}}, prepared
             assert client.post(path, json={**base, 'prepare_only': True}, headers=headers).status_code == 403
             assert client.post(path, json={**base, 'approval_receipt': 'legacy-receipt'}, headers=headers).status_code == 403
             assert remote['sent'] == []

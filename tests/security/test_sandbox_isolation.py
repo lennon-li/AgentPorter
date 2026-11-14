@@ -125,7 +125,7 @@ def test_sandbox_environment_clean(tmp_path: Path):
     res = sandbox.run(str(tmp_path), ["bash", "-c", "env"])
     assert res["exit_code"] == 0
     assert "SECRET_HOST_TOKEN_TEST" not in res["stdout"]
-    assert "PATH=/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin" in res["stdout"]
+    assert "PATH=/opt/agentporter/verification/bin:/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin" in res["stdout"]
     assert "USER=sandbox" in res["stdout"]
 
 

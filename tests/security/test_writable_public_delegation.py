@@ -109,7 +109,8 @@ def test_inventory_distinguishes_readonly_and_writable_grants(configured):
 def test_mcp_accepts_same_scoped_edit_and_rejects_publication(configured):
     import json
     config, _, dispatch = configured
-    with TestClient(create_asgi_app(config)) as client:
+    app = create_asgi_app(config)
+    with TestClient(app) as client:
         def call(**extra):
             response = client.post('/mcp', headers={
                 'X-AgentPorter-Key': config.api_key, 'Accept': 'application/json, text/event-stream'},
@@ -124,8 +125,13 @@ def test_mcp_accepts_same_scoped_edit_and_rejects_publication(configured):
         assert not call().get('isError')
         assert dispatch.call_args.kwargs['read_only'] is False
         dispatch.reset_mock()
+        with pytest.raises(PermissionError, match='Worker commit/push flags cannot grant independent owner approval'):
+            app.app.state.tools['dispatch_agent'](
+                agent='codex_impl', workspace_id='project',
+                task='Authorized local edit', read_only=False, allow_push=True,
+            )
         refused = call(allow_push=True)
         assert refused['isError'] is True
-        assert 'cannot push' in json.dumps(refused)
+        assert refused['content'] == [{'type': 'text', 'text': 'Error executing tool dispatch_agent'}]
         assert call(workspace_id='unadmitted')['isError'] is True
         dispatch.assert_not_called()
