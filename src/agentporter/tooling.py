@@ -91,3 +91,5 @@ def add_tooling_mounts(args: list[str]) -> None:
         destination = f"/opt/agentporter/bin/{name}"
         if source != destination:
             args.extend(["--symlink", source, destination])
+    from agentporter.verification_runtime import add_verification_runtime
+    add_verification_runtime(args)

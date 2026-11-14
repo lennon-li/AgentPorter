@@ -692,6 +692,14 @@ class WorkspaceGitHistory:
             config = os.read(self.mount.config, 8192)
             self.clean_config.write_bytes(config + b'[user]\nname = AgentPorter\nemail = agents@agentporter.invalid\n')
             (self.private / 'config').write_bytes(self.clean_config.read_bytes())
+            # Host hooks and linked-worktree administration are not history.
+            import shutil
+            for name in ('hooks', 'worktrees'):
+                path = self.private / name
+                if path.is_dir():
+                    shutil.rmtree(path)
+                elif path.exists():
+                    path.unlink()
             if self.shared_sources:
                 self._validate_shared_objects()
             _reject_excluded_git_paths(self.private, self.workspace)

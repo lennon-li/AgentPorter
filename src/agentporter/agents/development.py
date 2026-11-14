@@ -863,6 +863,8 @@ class DevelopmentRuntime:
                 # only that exact reviewed configuration from this release.
                 args += ["--ro-bind", str(toolkit / "packages/Rscript"), "/etc/R"]
             mapped_executable = None
+            from agentporter.verification_runtime import add_verification_runtime
+            add_verification_runtime(args)
             for mount in spec.get("runtime_mounts", []):
                 source, target = self._code_mount(mount, spec["executable"])
                 args += ["--ro-bind", source, target]
@@ -883,7 +885,7 @@ class DevelopmentRuntime:
                 # verified outer bwrap deliberately forbids. Remove only the
                 # adapter-owned boolean flag, never prompt text or probe argv.
                 worker = [worker[0], *cmd[1:3], *cmd[4:]]
-            environment = {"PATH": "/opt/agentporter/tools/bin:/opt/agentporter/runtime/bin:/usr/local/bin:/usr/bin:/bin", "HOME": "/home/worker",
+            environment = {"PATH": "/opt/agentporter/verification/bin:/opt/agentporter/tools/bin:/opt/agentporter/runtime/bin:/usr/local/bin:/usr/bin:/bin", "HOME": "/home/worker",
                            "USER": "worker", "LOGNAME": "worker", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
                            "CODEX_HOME": "/home/worker/.codex", "XDG_CONFIG_HOME": "/home/worker/.config",
                            "XDG_DATA_HOME": "/home/worker/.local/share", "GIT_CONFIG_NOSYSTEM": "1",

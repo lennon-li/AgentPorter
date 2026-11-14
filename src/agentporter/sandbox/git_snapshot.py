@@ -74,7 +74,22 @@ class SnapshotBudget:
                 for entry in entries:
                     self.check()
                     path = prefix + entry.name
+                    # This exact root namespace contains AgentPorter run
+                    # telemetry, not Git authority. It stays on the host and
+                    # is deliberately absent from the worker's metadata copy.
+                    # Same-named directories under refs, worktrees, or any
+                    # other Git subtree remain fully inspected and copied.
                     info = entry.stat(follow_symlinks=False)
+                    if prefix == '' and entry.name == 'agent-dispatch':
+                        if not stat.S_ISDIR(info.st_mode):
+                            raise PermissionError('Git telemetry namespace must be a real directory')
+                        child = os.open(entry.name, FLAGS, dir_fd=fd)
+                        try:
+                            if signature(os.fstat(child)) != signature(info) or _mount_id(child) != mount:
+                                raise PermissionError('Git telemetry namespace changed or crosses a mount')
+                        finally:
+                            os.close(child)
+                        continue
                     if path in {'commondir', 'reftable', 'objects/info/alternates',
                                 'objects/info/http-alternates'} or entry.name.endswith('.lock'):
                         raise PermissionError('Unsupported Git snapshot layout or active lock')
@@ -139,6 +154,16 @@ class SnapshotBudget:
                     self.check()
                     path = prefix + entry.name
                     info = entry.stat(follow_symlinks=False)
+                    if prefix == '' and entry.name == 'agent-dispatch':
+                        if not stat.S_ISDIR(info.st_mode):
+                            raise PermissionError('Git telemetry namespace must be a real directory')
+                        child = os.open(entry.name, FLAGS, dir_fd=fd)
+                        try:
+                            if signature(os.fstat(child)) != signature(info) or _mount_id(child) != mount:
+                                raise PermissionError('Git telemetry namespace changed or crosses a mount')
+                        finally:
+                            os.close(child)
+                        continue
                     key = path + '/' if stat.S_ISDIR(info.st_mode) else path
                     if signature(info) != records.get(key):
                         raise PermissionError('Git source changed after preflight')

@@ -125,6 +125,97 @@ def _read_private_document(source, *, jsonc=False):
     return _document(raw)
 
 
+def _copilot_access_document(data, expected=None):
+    """Validate Copilot account aliases and return one bounded auth document."""
+    def aliases(names):
+        return [(name, data[name]) for name in names if name in data]
+
+    def identity(value):
+        if not isinstance(value, dict):
+            raise PermissionError('Malformed Copilot account identity')
+        login, host = value.get('login'), value.get('host')
+        if (not isinstance(login, str) or not login or len(login) > 256
+                or not isinstance(host, str) or host not in {'github.com', 'https://github.com'}):
+            raise PermissionError('Malformed Copilot account identity')
+        return {'login': login, 'host': host}
+
+    def same_identity(left, right):
+        return (left['login'].casefold() == right['login'].casefold()
+                and left['host'].removeprefix('https://').casefold()
+                == right['host'].removeprefix('https://').casefold())
+
+    last_values = aliases(('lastLoggedInUser', 'last_logged_in_user'))
+    list_values = aliases(('loggedInUsers', 'logged_in_users'))
+    if not last_values and not list_values:
+        raise PermissionError('Copilot account identity is unavailable')
+    canonical_identity = None
+    for _, value in last_values:
+        current = identity(value)
+        if canonical_identity and not same_identity(current, canonical_identity):
+            raise PermissionError('Conflicting Copilot account aliases')
+        canonical_identity = canonical_identity or current
+    for _, value in list_values:
+        if not isinstance(value, list) or len(value) != 1:
+            raise PermissionError('Copilot account list must contain one selected account')
+        current = identity(value[0])
+        if canonical_identity and not same_identity(current, canonical_identity):
+            raise PermissionError('Conflicting Copilot account aliases')
+        canonical_identity = canonical_identity or current
+    if expected is not None and canonical_identity['login'].casefold() != expected.casefold():
+        raise PermissionError('Native Copilot account binding changed')
+
+    result = {'lastLoggedInUser': canonical_identity,
+              'loggedInUsers': [canonical_identity]}
+    for names, output in ((('authTokens', 'auth_tokens'), 'authTokens'),
+                          (('copilotTokens', 'copilot_tokens'), 'copilotTokens')):
+        values = aliases(names)
+        canonical_map = None
+        emitted_map = None
+        for _, value in values:
+            if not isinstance(value, dict) or len(value) > 1:
+                raise PermissionError('Copilot token map must contain at most one entry')
+            checked = {}
+            emitted = {}
+            for key, token in value.items():
+                if not isinstance(key, str):
+                    raise PermissionError('Malformed or foreign Copilot token entry')
+                owner_key = None
+                prefix = 'https://github.com:'
+                suffix = ':github' if output == 'authTokens' else ''
+                if key.startswith(prefix) and (not suffix or key.endswith(suffix)):
+                    owner_key = key[len(prefix):len(key)-len(suffix) if suffix else None]
+                if owner_key is not None:
+                    if owner_key.casefold() != canonical_identity['login'].casefold():
+                        raise PermissionError('Malformed or foreign Copilot token entry')
+                    normalized_key = 'selected-account'
+                elif key in {'github.com', 'https://github.com'}:
+                    normalized_key = 'selected-account'
+                elif key.casefold() == canonical_identity['login'].casefold():
+                    normalized_key = 'selected-account'
+                else:
+                    raise PermissionError('Malformed or foreign Copilot token entry')
+                if output == 'authTokens' and isinstance(token, dict):
+                    if set(token) != {'token'}:
+                        raise PermissionError('Malformed Copilot auth-token record')
+                    token_value = token.get('token')
+                    emitted_token = {'token': token_value}
+                else:
+                    token_value = token
+                    emitted_token = token
+                if not isinstance(token_value, str) or not token_value or len(token_value) > 65536:
+                    raise PermissionError('Malformed or foreign Copilot token entry')
+                checked[normalized_key] = token_value
+                emitted[key] = emitted_token
+            if canonical_map is not None and checked != canonical_map:
+                raise PermissionError('Conflicting Copilot token aliases')
+            canonical_map = checked
+            if emitted_map is None:
+                emitted_map = emitted
+        if canonical_map is not None:
+            result[output] = emitted_map
+    return result
+
+
 def _provider_access_document(spec):
     """Fresh native provider auth, without settings, hooks or Claude refresh."""
     provider=spec['provider']
@@ -144,20 +235,7 @@ def _provider_access_document(spec):
         return {'claudeAiOauth':{k:v for k,v in token.items() if k in allowed}}
     if provider=='copilot':
         data=_read_private_document(spec['auth_file'],jsonc=True)
-        user=data.get('lastLoggedInUser',{})
-        if (not isinstance(user,dict) or str(user.get('login','')).casefold()!=spec['account_id'].casefold()
-                or user.get('host') not in {'github.com','https://github.com'}):
-            raise PermissionError('Native Copilot account binding changed')
-        users=data.get('loggedInUsers',[])
-        if (not isinstance(users,list) or any(not isinstance(item,dict)
-                or str(item.get('login','')).casefold()!=spec['account_id'].casefold()
-                or item.get('host') not in {'github.com','https://github.com'} for item in users)
-                or any(not isinstance(data.get(key,{}),dict) or len(data.get(key,{}))>1
-                       for key in ('authTokens','copilotTokens'))):
-            raise PermissionError('Copilot native store contains another account')
-        allowed={'authTokens','copilotTokens','loggedInUsers','lastLoggedInUser',
-                 'copilot_tokens','logged_in_users','last_logged_in_user'}
-        return {k:v for k,v in data.items() if k in allowed}
+        return _copilot_access_document(data, spec['account_id'])
     raise PermissionError('Unknown native credential provider')
 
 
@@ -544,9 +622,11 @@ class BrokerCredentialLease:
                         raise PermissionError('Claude access credential is unbounded or contains renewal authority')
                 else:
                     allowed={'authTokens','copilotTokens','loggedInUsers','lastLoggedInUser',
-                             'copilot_tokens','logged_in_users','last_logged_in_user'}
-                    if set(data)-allowed or not isinstance(data.get('lastLoggedInUser'),dict):
+                             'auth_tokens','copilot_tokens','logged_in_users','last_logged_in_user'}
+                    if set(data)-allowed:
                         raise PermissionError('Copilot credential contains non-authentication settings')
+                    data = _copilot_access_document(data)
+                    raw = json.dumps(data, separators=(',', ':'), allow_nan=False).encode()
             else:
                 raise PermissionError('Unknown credential provider')
             if response['status'] == 'issued':

@@ -30,6 +30,7 @@ def _metadata(fd):
 
 def _snapshot(root,*,blobs=None,allow_locks=False,copy_guard=None):
     git=os.open('.git',_FLAGS,dir_fd=root)
+    git_mount=_mount_id(git)
     budget=[100_000,256*1024*1024];files={};directories={}
     def walk(fd,prefix,depth):
         if depth>64:raise PermissionError('Raw Git baseline exceeds depth limit')
@@ -39,12 +40,27 @@ def _snapshot(root,*,blobs=None,allow_locks=False,copy_guard=None):
             # Content-addressed objects are retained by the existing pack path;
             # they are never authority for identifying mutable metadata.
             if prefix=='' and name=='objects':continue
+            info=os.stat(name,dir_fd=fd,follow_symlinks=False)
+            # The root agent-dispatch namespace contains run telemetry only.
+            # Keep it out of raw baselines and their durable blob copies so
+            # append-only output cannot invalidate capture or enter workers.
+            # This excludes no Git control path; nested same-named paths are
+            # still covered by the complete metadata baseline.
+            if prefix=='' and name=='agent-dispatch':
+                if not stat.S_ISDIR(info.st_mode):
+                    raise PermissionError('Git telemetry namespace must be a real directory')
+                child=os.open(name,_FLAGS,dir_fd=fd)
+                try:
+                    if (_file_signature(os.fstat(child))!=_file_signature(info)
+                            or _mount_id(child)!=git_mount):
+                        raise PermissionError('Git telemetry namespace changed or crosses a mount')
+                finally:os.close(child)
+                continue
             if name.endswith('.lock') and not allow_locks:
                 raise PermissionError('Raw Git baseline conflicts with a native lock')
             budget[0]-=1
             if budget[0]<0:raise PermissionError('Raw Git baseline exceeds entry limit')
             relative=prefix+name
-            info=os.stat(name,dir_fd=fd,follow_symlinks=False)
             if stat.S_ISDIR(info.st_mode):
                 child=os.open(name,_FLAGS,dir_fd=fd)
                 try:

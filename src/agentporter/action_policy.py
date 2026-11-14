@@ -16,6 +16,7 @@ from pathlib import Path
 import yaml
 
 from agentporter.agents.roster import PUBLIC_AGENT_IDS
+from agentporter.policy_errors import ActionPolicyDenied
 
 ALLOW_ACTIONS = frozenset({
     "get_capabilities",
@@ -243,7 +244,7 @@ class OperatorActionPolicy:
             if arguments.get('allow_commit') or arguments.get('allow_push'):
                 raise PermissionError('Worker commit/push flags cannot grant independent owner approval')
         if mode == "LOCKED" or baseline == "LOCKED":
-            raise PermissionError(f"Action {action} is technically locked by protected policy")
+            raise ActionPolicyDenied(action, 'LOCKED')
         if mode == "APPROVAL" and baseline in {"ALLOW", "SCOPE"}:
             raise PermissionError(f"Action {action} requires unavailable independent approval")
         if mode == "SCOPE" and baseline == "ALLOW" and not arguments.get("workspace_id"):

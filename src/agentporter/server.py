@@ -1,3 +1,4 @@
+from agentporter.interface_catalog import RepositorySelector, LocalBranchSelector
 """Model Context Protocol (MCP) Streamable HTTP server for AgentPorter."""
 
 import os
@@ -306,6 +307,8 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """Return gateway capabilities and effective owner-approved HTTPS scope."""
         result = _get_capabilities()
         result["action_matrix"] = operator_policy.snapshot()
+        from agentporter.interface_catalog import add_catalog_diagnostics
+        add_catalog_diagnostics(result, mcp, operator_policy)
         git_operations = {}
         for action, backend in (("git_commit", approved_commits),):
             backend_available = backend is not None
@@ -511,7 +514,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_fetch")
     def git_fetch(workspace_id: str, remote: str = "origin", branch: str = "",
-                  approval_receipt: str = '', prepare_only: bool = False,repository: str | None = None) -> str:
+                  approval_receipt: str = '', prepare_only: bool = False,repository: RepositorySelector = None) -> str:
         """Fetch one protected branch authorized by writable workspace policy."""
         return _git_fetch(workspace_id, remote=remote, branch=branch,
                           approval_receipt=approval_receipt, prepare_only=prepare_only,
@@ -522,7 +525,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def git_pull(workspace_id: str, remote: str = "origin", branch: str = "",
                  approval_receipt: str = '', prepare_only: bool = False,
                  mode: Literal['ff-only','merge','rebase'] | None = None,job_id: str = '',request_sha256: str = '',
-                 operation: Literal['pull','clone'] = 'pull',local_branch: str | None = None,repository: str | None = None) -> dict:
+                 operation: Literal['pull','clone'] = 'pull',local_branch: LocalBranchSelector = None,repository: RepositorySelector = None) -> dict:
         """Execute an exact workspace-authorized pull or clone; pull is the default."""
         options={}
         if operation=='clone':
@@ -698,6 +701,11 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             "dispatch_agent": dispatch_agent,
         }
     }
+    from agentporter.interface_catalog import align_mcp_argument_schemas
+    align_mcp_argument_schemas(mcp)
+    from agentporter.policy_errors import install_mcp_policy_results
+    install_mcp_policy_results(mcp)
+
     return mcp, context
 
 

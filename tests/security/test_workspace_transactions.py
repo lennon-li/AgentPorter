@@ -103,7 +103,7 @@ def test_existing_nested_git_history_cannot_be_applied(tmp_path):
     nested = root / 'nested/.git/refs/heads'
     nested.mkdir(parents=True)
     (nested / 'main').write_text('canonical')
-    with pytest.raises(PermissionError, match='excluded-path inspection failed'):
+    with pytest.raises(PermissionError, match='private worker view'):
         transactions.WorkspaceTransaction(root, state)
     assert (nested / 'main').read_text() == 'canonical'
 
@@ -212,7 +212,7 @@ def test_synchronous_nested_history_write_is_not_published(tmp_path):
     (nested / 'main').write_text('canonical')
     sandbox = BubblewrapSandbox(state, transactional_writes=True)
     sandbox.resources = RecordingResources()
-    with pytest.raises(PermissionError, match='excluded-path inspection failed'):
+    with pytest.raises(PermissionError, match='Incomplete Git metadata cannot be delegated'):
         sandbox.run(str(root), ['/bin/sh', '-c', 'printf bypass > /workspace/nested/.git/refs/heads/main'])
     assert (nested / 'main').read_text() == 'canonical'
 

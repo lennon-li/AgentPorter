@@ -53,7 +53,7 @@ def test_async_nested_git_ref_write_is_rejected(tmp_path):
     refs = root / 'nested/.git/refs/heads'
     refs.mkdir(parents=True)
     (refs / 'main').write_text('canonical')
-    with pytest.raises(PermissionError, match='excluded-path inspection failed'):
+    with pytest.raises(PermissionError, match='Incomplete Git metadata cannot be delegated'):
         start(manager, sandbox, root, 'printf bypass > /workspace/nested/.git/refs/heads/main')
     assert (refs / 'main').read_text() == 'canonical'
 

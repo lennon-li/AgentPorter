@@ -219,7 +219,9 @@ def test_push_remains_denied_in_actual_mcp_and_rest(temp_config,tmp_path):
     with TestClient(create_asgi_app(temp_config)) as client:
         payload={'workspace_id':'repo','branch':'refs/heads/main','approval_receipt':'previous-receipt'}
         result=rpc(client,temp_config.api_key,'git_push',payload)
-        assert result['result'].get('isError'),result
+        denied=result['result']['structuredContent']
+        assert denied['status']=='denied' and denied['executed'] is False
+        assert denied['error']['code']=='POLICY_DENIED' and denied['error']['action']=='git_push'
         response=client.post('/api/v1/workspaces/repo/git/push',json={k:v for k,v in payload.items() if k!='workspace_id'},
             headers={'X-AgentPorter-Key':temp_config.api_key})
         assert response.status_code==403,response.text

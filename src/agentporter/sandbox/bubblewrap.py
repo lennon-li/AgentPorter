@@ -159,7 +159,7 @@ class BubblewrapSandbox(SandboxBackend):
         # Network-dependent operations must use independently approved,
         # purpose-built tools, never host-user credential inheritance.
         args.append("--unshare-net")
-        path_env = "/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin"
+        path_env = "/opt/agentporter/verification/bin:/opt/agentporter/bin:/usr/local/bin:/usr/bin:/bin"
 
         args.extend([
             "--clearenv",
