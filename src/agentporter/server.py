@@ -939,6 +939,13 @@ def create_asgi_app(config: Config) -> ASGIApp:
                 return JSONResponse({"detail": "Delegation relay request denied"}, status_code=403)
 
 
+    from agentporter.policy_errors import WorkspaceBusyError
+
+    @app.exception_handler(WorkspaceBusyError)
+    async def workspace_busy_response(request, exc: WorkspaceBusyError):
+        return JSONResponse(status_code=409, content=exc.detail,
+                            headers={'Retry-After': str(exc.detail['error']['retry_after_seconds'])})
+
     @app.exception_handler(PermissionError)
     async def permission_error_response(request, exc: PermissionError):
         """Return authorization denials as 403 rather than HTTP 500."""

@@ -19,6 +19,7 @@ import tempfile
 import time
 
 from agentporter.resources import ResourceCleanupError
+from agentporter.policy_errors import WorkspaceBusyError
 from agentporter.workspaces.leases import workspace_key
 from agentporter.sandbox.workspace_delta import (
     UnsafeWorkspaceDelta, _require_public_path, publish_workspace_file,
@@ -101,7 +102,9 @@ class WorkspaceTransaction:
             try:
                 fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
-                raise PermissionError('Workspace already has an active transaction') from error
+                os.close(self._lock)
+                self._lock = -1
+                raise WorkspaceBusyError() from error
             if os.path.lexists(self._pending) or os.path.lexists(state / (key + '.git-pending.json')):
                 raise ResourceCleanupError('Workspace publication requires owner recovery')
             from agentporter.sandbox.recovery_guards import find_unfinished
@@ -220,7 +223,8 @@ class WorkspaceTransaction:
                 os.close(self._projection_fd)
             if self._root_fd is not None:
                 os.close(self._root_fd)
-            os.close(self._lock)
+            if self._lock >= 0:
+                os.close(self._lock)
             self._closed = True
             raise
 

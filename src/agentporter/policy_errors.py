@@ -12,6 +12,22 @@ class ActionPolicyDenied(PermissionError, ToolError):
         super().__init__(f'Action {action} is technically locked by protected policy; POLICY_DENIED: ' + json.dumps(self.detail, sort_keys=True))
 
 
+class WorkspaceBusyError(PermissionError, ToolError):
+    """A valid execution request could not acquire its workspace transaction."""
+
+    def __init__(self):
+        self.detail = {
+            'status': 'busy', 'launched': False, 'executed': False,
+            'error': {
+                'code': 'WORKSPACE_BUSY',
+                'reason': 'workspace_transaction_active',
+                'message': 'Workspace already has an active transaction.',
+                'retry_after_seconds': 3,
+            },
+        }
+        super().__init__(json.dumps(self.detail, sort_keys=True))
+
+
 def install_mcp_policy_results(mcp):
     """Represent an expected refusal as data, avoiding client argument-error mapping.
 
@@ -19,7 +35,7 @@ def install_mcp_policy_results(mcp):
     changes; REST and direct Python callers retain the PermissionError contract.
     """
     from functools import wraps
-    from typing import Literal, Union
+    from typing import Any, Dict, Literal, Union
     from pydantic import BaseModel, TypeAdapter
     class DenialDetail(BaseModel):
         code: Literal['POLICY_DENIED']
@@ -30,8 +46,18 @@ def install_mcp_policy_results(mcp):
         status: Literal['denied']
         executed: Literal[False]
         error: DenialDetail
+    class BusyDetail(BaseModel):
+        code: Literal['WORKSPACE_BUSY']
+        reason: Literal['workspace_transaction_active']
+        message: str
+        retry_after_seconds: Literal[3]
+    class BusyResult(BaseModel):
+        status: Literal['busy']
+        launched: Literal[False]
+        executed: Literal[False]
+        error: BusyDetail
     from mcp.types import CallToolResult, TextContent
-    for name in ('git_commit', 'git_push'):
+    for name in ('git_commit', 'git_push', 'exec_run', 'exec_start'):
         tool = mcp._tool_manager.get_tool(name)
         if tool is None:
             continue
@@ -40,7 +66,19 @@ def install_mcp_policy_results(mcp):
         # its existing result wrapper. No authorization check is bypassed.
         prior = tool.fn_metadata.output_model
         if prior is not None:
-            output = Union[prior, DenialResult]
+            variants = [prior]
+            if name in ('git_commit', 'git_push'):
+                variants.append(DenialResult)
+            if name in ('exec_run', 'exec_start'):
+                variants.append(BusyResult)
+            output = Union[tuple(variants)]
+            tool.fn_metadata.output_model = output
+            tool.fn_metadata.output_schema = dict(TypeAdapter(output).json_schema(), type='object')
+        elif name in ('exec_run', 'exec_start'):
+            # These tools have historically returned dictionaries with evolving
+            # fields. Preserve arbitrary successful metadata while documenting
+            # the bounded busy variant explicitly.
+            output = Union[Dict[str, Any], BusyResult]
             tool.fn_metadata.output_model = output
             tool.fn_metadata.output_schema = dict(TypeAdapter(output).json_schema(), type='object')
         original = tool.fn
@@ -53,5 +91,8 @@ def install_mcp_policy_results(mcp):
                     value = {'status': 'denied', 'executed': False, 'error': exc.detail}
                     return CallToolResult(content=[TextContent(type='text', text=json.dumps(value))],
                                           structured_content=value, is_error=False)
+                except WorkspaceBusyError as exc:
+                    return CallToolResult(content=[TextContent(type='text', text=json.dumps(exc.detail))],
+                                          structured_content=exc.detail, is_error=False)
             return wrapped
         tool.fn = protect(original)

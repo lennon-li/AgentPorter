@@ -73,6 +73,18 @@ class JobStartResponse(BaseModel):
     job_id: str = Field(description="Background job ID.")
     status: str = Field(description="Initial status.")
 
+class WorkspaceBusyDetail(BaseModel):
+    code: Literal["WORKSPACE_BUSY"]
+    reason: Literal["workspace_transaction_active"]
+    message: str
+    retry_after_seconds: Literal[3]
+
+class WorkspaceBusyResponse(BaseModel):
+    status: Literal["busy"]
+    launched: Literal[False]
+    executed: Literal[False]
+    error: WorkspaceBusyDetail
+
 class JobStatusResponse(BaseModel):
     job_id: str = Field(description="Job ID.")
     status: str = Field(description="Current status, including running, finalizing, completed, failed, cancelled, cleanup_failed, or recovered.")

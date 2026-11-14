@@ -1,6 +1,6 @@
 # ChatGPT operations on BCC / B6
 
-Updated 2026-11-13 after the ChatGPT audit. This manual describes the activated
+Updated 2026-11-14 after the ChatGPT audit. This manual describes the activated
 BCC consolidation and its corrected isolation/interface guarantees.
 For REST/Actions, the running gateway `/openapi.json` is authoritative: 31
 advertised operations with `bcc_` operation IDs. For MCP, use the running
@@ -10,9 +10,65 @@ advertised operations with `bcc_` operation IDs. For MCP, use the running
 is historical evidence, not proof of the current connection. Keep the existing connection's API key
 in its authentication header, never in prompts, URLs, files, or job packets.
 
-## Generation 16 deployment status (2026-11-13)
+## Current production audit status (2026-11-14)
 
-Generation 16 is active on BCC. The sealed rollout exited 0 and the post-rollout
+**Generation 17 is active. Full production acceptance is incomplete:** Ming's
+native Claude access has expired and awaits owner renewal; actual external
+ChatGPT verification after this deployment has not been reported. Commit and
+push remain locked. Jax uses its personal subscription and Prof its separate
+academic research account; their native stores and enrolled identities remain
+distinct. No account identifiers or credentials are included in this manual.
+
+The external audit's failed Jax job
+`rjob_d0141416000040008000000000000001` was correlated with a protected worker
+log category `credential_broker_refused`. Its native login had matched Prof's
+enrollment instead of Jax's. The owner restored Jax through the normal personal
+login flow; both original broker enrollments were retained. A new read-only Jax
+job on generation 16 completed with exit 0 and 88 portable passes. After the
+generation 17 deployment, `rjob_fe2043fca168fa8e345a6adc8ebd60b0` completed in
+23.308 seconds with exit 0: 91 selected cases, 88 passed, 3 deselected, zero
+failed/skipped. Python was 3.13.18 and pytest 9.1.1. These are authenticated
+**local** calls, not a new external ChatGPT acceptance. The provider-resolved
+`actual_model` remains `unknown` despite requested/configured Terra.
+
+The initial ordinary execution transient was workspace transaction contention:
+the gateway recorded `flock` EAGAIN while another ordinary job was running.
+The external audit repeated that runtime call once successfully; its Jax job
+was not retried. Generation 17 now reports this condition as `WORKSPACE_BUSY`
+with `executed:false`, `launched:false` and a three-second retry hint. Both MCP
+execution tools and both REST routes were freshly exercised under real lock
+contention, and ordinary execution succeeded after the holder exited. The
+transaction lock remains enforced. See the execution guidance below.
+
+Fresh local live checks found 31 REST operations, 55 MCP tools, matching seven
+critical request schemas, structured locked Git denials, and matching loaded/
+disk release fingerprints. Protected checks verified both release seals,
+shared CLI/daemon inode selection, updater controls, all 39 configured paths,
+and completed Jax cleanup: process/transaction absent, admission released,
+relay terminal/inactive, zero job envelopes in both service cgroups. The
+rollout's rollback rehearsal passed and admission guards were released.
+
+Source verification passed 2,928 tests with 9 skipped; two additional rollout
+fault tests passed. Production-derived candidate checks passed 8 tests per
+role, then 90 worker security cases with fixture-only public identity mapping.
+These fixture tests are separate from live provider execution. Fresh worker-UID
+credential issuance passed for Jax, Liz, Prof and Phil with all five native auth
+files unchanged; Codex snapshots excluded refresh authority. Ming's matching
+native identity was rejected before issuance because its access lifetime is
+below the protected 1,260-second requirement. Owner renewal through the existing
+Ming account is pending; do not bypass the check or substitute an account.
+
+Fresh terminal Jax/Phil Qman collectors returned `live:true`, `status:ok`,
+`mode:live_first`, no database use and unchanged DB/WAL/SHM bytes and metadata.
+No CLI update or model call was triggered by the host custody/updater/Qman
+checks. Prof live Qman remains unauthorized; its quota, reset and entitlement
+remain unknown. See [the claim-by-claim audit record](BCC_PRODUCTION_AUDIT_2026-11-14.md)
+for exact tests, evidence, source/deployment differences, rollback and external
+acceptance calls. Generation 16's dated acceptance below is historical.
+
+## Historical generation 16 deployment status (2026-11-13)
+
+Generation 16 was activated on BCC on 2026-11-13. The sealed rollout exited 0 and the post-rollout
 host receipt verified the gateway and worker release seals, current PIDs and
 fingerprints, root/worker UID bindings, shared CLI and native-daemon inode
 parity, updater state, and all 38 configured workspaces. Protected-state inspection
@@ -74,6 +130,15 @@ For example, `bcc_exec_run` with workspace `agentporter` and
 `argv:["git","status","--short"]` inspects the repository. Shell command strings
 are not argv arrays. Tools available in a terminal are not proof that a confined
 worker exposes those tools.
+
+A busy workspace returns a normal MCP result with `status:"busy"`,
+`launched:false`, `executed:false`, and
+`error:{code:"WORKSPACE_BUSY",reason:"workspace_transaction_active",retry_after_seconds:3}`.
+REST `/exec/run` and `/exec/start` return HTTP 409 and `Retry-After: 3` for this
+same condition. Wait for the known holder to finish before making a new bounded
+request. Do not interpret contention as malformed arguments or bypass the
+workspace lock. An uncertain dispatch still requires reconciliation of its exact
+request/job handle before any retry.
 
 ## Delegate and verify an edit
 
@@ -309,6 +374,11 @@ The producer binds the lease to the enrolled account; the receiving broker
 canonicalizes that identity before issuing bounded access.
 
 ## Evidence and limits
+
+The 2026-11-14 evidence and open actions are in
+[`BCC_PRODUCTION_AUDIT_2026-11-14.md`](BCC_PRODUCTION_AUDIT_2026-11-14.md).
+They supersede any assumption that the dated generation 16 acceptance means
+the present dispatch path is currently accepted.
 
 The generation 16 claim-by-claim matrix, deployment, exact incremental diff,
 rollback command, owner-reported external acceptance and repeatable spot-check calls are in
