@@ -82,21 +82,13 @@ def test_invalid_copilot_aliases_fail_closed(field, value):
         credential_broker._copilot_access_document(document, 'fixture-owner')
 
 
-def test_receiver_rejects_conflicting_alias_before_creating_credential(tmp_path, monkeypatch):
+def test_receiver_rejects_conflicting_alias_before_creating_credential(tmp_path):
     socket_path = tmp_path / 'broker.sock'
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(str(socket_path))
     socket_path.chmod(0o600)
     listener.listen(1)
-    accepted = threading.Event()
-
-    def serve():
-        connection, _ = listener.accept()
-        accepted.set()
-        connection.close()
-
-    thread = threading.Thread(target=serve)
-    thread.start()
+    listener.settimeout(2)
     bad_document = {
         'lastLoggedInUser': account(), 'loggedInUsers': [account()],
         'authTokens': {'github.com': 'SYNTHETIC AUTH'},
@@ -104,16 +96,32 @@ def test_receiver_rejects_conflicting_alias_before_creating_credential(tmp_path,
     }
     response = {'status': 'issued', 'lease_id': 'lease-' + 'a' * 32,
                 'auth_b64': base64.b64encode(json.dumps(bad_document).encode()).decode()}
-    monkeypatch.setattr(credential_broker, '_receive', lambda _channel: response)
+    requests, server_errors = [], []
+
+    def serve():
+        try:
+            connection, _ = listener.accept()
+            with connection:
+                connection.settimeout(2)
+                # Complete the real framed handshake before closing. An early
+                # close can race the client's send and mask alias validation.
+                requests.append(credential_broker._receive(connection))
+                credential_broker._send(connection, response)
+        except Exception as error:
+            server_errors.append(type(error).__name__)
+
+    thread = threading.Thread(target=serve)
+    thread.start()
     target = tmp_path / 'worker' / 'config.json'
     try:
-        with pytest.raises(PermissionError):
+        with pytest.raises(PermissionError, match='Conflicting Copilot account aliases'):
             credential_broker.BrokerCredentialLease(
                 {'owner_uid': os.getuid(), 'socket_path': str(socket_path),
                  'account': 'prof', 'provider': 'copilot'}, target)
         assert not target.exists()
-        assert accepted.wait(2)
+        assert requests == [{'version': 1, 'op': 'begin', 'account': 'prof'}]
     finally:
         listener.close()
         thread.join(2)
         assert not thread.is_alive()
+        assert not server_errors
