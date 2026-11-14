@@ -1,19 +1,23 @@
 # BCC Astra findings repair, generation 16
 
-**Status: deployed; local controls verified; final acceptance remains pending.**
+**Status: generation 16 repair accepted for the tested scope; evidence limits retained.**
 The sealed generation 16 controller exited 0 and the post-deployment host/live
 receipts confirm generation 16 is active. After the owner renewed temporary
 administrator access, the parent finalized the protected local verification
 receipt and current-release pointer. Fresh protected-state inspection confirmed
 the rollback rehearsal, released admissions, restored discovery timer, and
-healthy generation 16 services. The protected phase remains
-`active_pending_live_acceptance`. The incremental `repair.diff` and
+healthy generation 16 services. The protected phase is `accepted` for the
+bounded repair checks documented here. The incremental `repair.diff` and
 `final-preservation.json` record 14 session-owned changed paths, 111 untouched
 preexisting dirty paths, and preserved `.trash/`, branch, HEAD, and unstaged index.
 After the observed quota reset, Jax completed a real read-only verification job
-with exit 0 and 88 portable tests passed. External ChatGPT confirmation remains
-outstanding. Do not describe this repair as fully accepted or every Astra
-finding as externally verified.
+with exit 0 and 88 portable tests passed. The owner subsequently supplied an
+actual external ChatGPT report confirming generation 16 and a second completed
+Jax response. The parent reconciled that exact job and verified its cleanup on
+the host. Acceptance combines local tests, owner-reported external execution,
+and host checks; it does not establish independent external verification of
+every production guarantee. The public API still has no explicit successful
+cleanup receipt, and provider-resolved model metadata remains `unknown`.
 
 ## Deployed change and seals
 
@@ -48,9 +52,10 @@ released admissions, and restored discovery timer. The protected generation 16
 `/var/lib/agentporter-bcc/consolidation-current.json` now record generation 16;
 the earlier pointer is saved in the control directory as
 `previous-consolidation-current.json`. See `local-finalization-result.json`.
-The active controller phase remains `active_pending_live_acceptance` because
-external ChatGPT confirmation is outstanding. The post-fix Jax model-response
-and delegated Git/runtime checks passed after the observed quota reset.
+The active controller phase is `accepted` for this repair's tested scope.
+The post-fix local and external Jax model-response/Git/runtime checks passed;
+the external job's cleanup was independently inspected on the host. See the
+external acceptance section below for the distinct evidence types and limits.
 
 The controller now persists `service_stop_intent` before service stops. If an
 exception occurs after that intent, it restores even when no config snapshots
@@ -113,15 +118,18 @@ bytes unchanged.
 | Live Jax/Terra Qman after reset | Fresh collection at 2026-11-14 00:55:20 UTC; primary 100% remaining and weekly 84%; no cache/database | `jax-postreset-quota.json`; session identity checked; persistent binding and model entitlement remain unverified by Qman. |
 | Post-fix Jax model and delegated checks | Completed; exit 0; 14.31 seconds; 88 passed, 0 failures/errors/skips; Git private-view checks and canonical-state preservation passed | `jax-postreset-acceptance.json`; job `rjob_a6cad7616d73a3f531072c4dcc2ce6ec`. Requested/configured model and native CLI header are `gpt-6.1-terra`, low effort; provider-resolved model remains `unknown`. This was actual local production delegation, not external ChatGPT. |
 | Terminal native Qman collections | Supported no-model live Jax invocation passed with 2 windows; Phil live-first invocation passed with 3 windows; DB and sidecars unchanged; 0 model calls | `post16-native-qman-jax-supported.json`, `post16-native-qman.json`. The earlier Jax CLI diagnostic exited 2 on unsupported `--model`/live options (`post16-native-qman-jax-diagnostic.json`); this was an invocation syntax issue, not a provider failure. |
-| External ChatGPT acceptance | Pending | Parent's four safe acceptance calls have not yet been confirmed here. Local authenticated BCC checks do not establish external connection behavior. |
-| Protected deployment records | Finalized; services and package seals rechecked | `local-finalization-result.json`; phase remains `active_pending_live_acceptance`, without claiming the outstanding live checks passed. |
+| External ChatGPT connection and execution | Owner reported generation 16, 55 MCP tools, 38 existing workspaces, structured Git denials, Python/pytest, 88 portable passes in both ordinary and delegated execution, and a completed Jax response | `artifacts/bcc-external-gen16-acceptance-20261113/external-owner-report.json`; actual external execution reported by owner, not a raw tool transcript or independent external host audit. |
+| External job reconciliation and cleanup | Parent confirmed completed/exit 0, 31.107 seconds; relay inactive, admission released, leader/process group absent, transaction removed, and worker job resource envelopes absent | Same directory: `status.json`, `result.json`, `cleanup-host-reconciliation.json`; fresh local API and host observations. No explicit public cleanup-success field was added. |
+| Host follow-up after external report | Shared CLI/terminal/worker/native-daemon inode checks, distinct bindings, package seals/PIDs/fingerprints, updater configuration and 38 workspace paths passed again | Same directory: `host-recheck.json`; fresh host inspection, not externally reproduced custody/refresh/database tests. Earlier credential and terminal Qman tests retain their original timestamps. |
+| Protected deployment records | Accepted for the stated repair scope; evidence hashes and service seals checked | Root `ACCEPTANCE.json` and current-release pointer; historical `local-finalization-result.json` records the earlier pending phase. Full independent production certification is not claimed. |
 | Final source preservation diff | 14 session-owned paths; 111 preexisting dirty paths unchanged; no foreign changes | `repair.diff` and `final-preservation.json`; `.trash/`, current branch/HEAD, and unstaged index preserved. |
 
 The Astra recheck in `astra-fix-review.md` cleared the controller recovery
 blocker after reviewing the corrected stop-intent and restore paths. That is a
-bounded source/controller review, not proof of external ChatGPT acceptance.
+bounded source/controller review; the owner-reported external acceptance is
+recorded separately below.
 
-## Post-reset Jax result and remaining external verification
+## Post-reset Jax result and external acceptance
 
 No Jax model dispatch was launched while the primary window was exhausted.
 After the reset hint passed, a new live B6 consultation observed 100% primary
@@ -157,8 +165,40 @@ matches the requested/configured model; the API's provider-resolved model is
 still `unknown`, so no independent provider model attestation is claimed.
 The probe's `model_calls_from_probe:0` refers to its Python checks; the
 surrounding Jax agent did execute a model request. Native sandbox-launch tests
-were not run inside that delegated namespace. External ChatGPT confirmation
-remains pending.
+were not run inside that delegated namespace.
+
+The owner subsequently reported actual external ChatGPT execution on generation
+16, including job `rjob_c0161319000040008000000000000001`. The parent fetched
+the same job's status/result and confirmed completed/exit 0 in 31.107 seconds.
+Its final response reports 91 portable tests collected, 88 passed, 3 deselected,
+0 failed/skipped, plus the expected Git/host exclusions. The external audit
+also reports the same ordinary test counts, the explicit commit/push denial
+envelopes, fresh live Jax quota with no cached fallback, and unchanged sampled
+Git status/diff hashes. Its work-preservation baseline was taken after admission,
+and the connection did not expose the complete delegated command trace.
+
+Fresh host reconciliation mapped that public job to
+`job_26cfd66e9fdda468061273a4`, confirmed the relay inactive and worker admission
+released, and found no leader/process-group members, private transaction, or
+worker job resource envelopes remaining. This closes the host cleanup check;
+the external API's lack of an explicit successful cleanup field remains an
+observability limitation. No cleanup action or new model dispatch was needed.
+
+The external report did not independently reproduce native account custody,
+refresh/writeback, Copilot native-field compatibility, updater privilege
+boundaries, terminal Qman database preservation, live REST/schema parity, or
+the Git-layout/publication fixtures. Their local evidence remains separately
+identified, with its original timestamps. A new host installation check did
+reverify shared executable inodes, enrolled-binding separation, service seals,
+fingerprints, updater configuration, and registered paths. No real CLI update,
+account switch, or provider model attestation is claimed. Earlier generic
+`INVALID_ARGUMENT` observations remain historical; none occurred in the reported
+generation 16 external checks. The earlier Jax launch root cause and fix are
+documented above, without claiming that the external audit traced that cause.
+
+The owner report and parent follow-up are saved under
+`artifacts/bcc-external-gen16-acceptance-20261113/`. No raw external tool
+transcript is invented. The following calls are retained for future spot checks:
 
 Refresh the actual ChatGPT connection's tool discovery, then run these four
 safe acceptance calls, using its discovered `bcc_` aliases if present:

@@ -19,8 +19,9 @@ parity, updater state, and all 38 configured workspaces. Protected-state inspect
 confirms the rollback rehearsal passed, admissions were released, and the
 discovery timer was restored. After renewed temporary administrator access, the
 parent finalized the protected local verification receipt and current-release
-pointer for generation 16. The phase remains `active_pending_live_acceptance`
-until the outstanding live checks pass. Local post-release checks returned HTTP 200,
+pointer for generation 16. After owner-reported external verification and fresh
+host cleanup reconciliation, the protected phase is `accepted` for the stated
+repair scope. Local post-release checks returned HTTP 200,
 passed 88 portable tests, confirmed dispatch telemetry
 was absent from the private Git baseline, and freshly compared 31 REST
 operations with 55 MCP tools across seven critical schemas. Commit and push
@@ -32,8 +33,20 @@ collection showed available capacity, Jax job
 14.31 seconds with exit 0 and 88 portable tests passed. The requested/configured
 model and native CLI header matched `gpt-6.1-terra`, low effort; the API's
 provider-resolved model remains `unknown`. Canonical Git state and existing
-work were unchanged. External ChatGPT confirmation remains pending. The current receipts are in
+work were unchanged. The current local receipts are in
 `artifacts/bcc-astra-fixes-20261113T232839Z/`.
+
+The owner subsequently reported actual external ChatGPT verification, including
+completed Jax job `rjob_c0161319000040008000000000000001`, exit 0 in 31.1 seconds,
+and 88 portable passes in both ordinary and delegated execution. The parent
+reconciled that same job and independently checked host cleanup: inactive relay,
+released admission, no leader/process group, removed transaction, and no worker
+job resource envelopes remaining. The public API still exposes no separate
+successful cleanup receipt. The external report did not independently rerun
+host-only custody, updater, database or publication checks; local evidence for
+those claims remains distinct. Provider-resolved model metadata is still
+`unknown`. External and follow-up receipts are in
+`artifacts/bcc-external-gen16-acceptance-20261113/`.
 
 ## Discover and select scope
 
@@ -172,8 +185,8 @@ exhausted. At 2026-11-14 00:55:20 UTC, fresh no-cache B6 quota showed 100%
 primary and 84% weekly capacity. The subsequent single Jax job completed the
 88-test portable selection and private Git-view checks successfully; see
 `jax-postreset-acceptance.json` in the generation 16 evidence directory. This
-proves the observed execution, not general model entitlement or an external
-ChatGPT connection. Any further dispatch requires fresh quota and must retain
+proves that local execution, not general model entitlement. The later
+owner-reported external Jax execution is recorded above. Any further dispatch requires fresh quota and must retain
 the authorized account and model.
 
 ## Approval and Git publication
@@ -298,7 +311,7 @@ canonicalizes that identity before issuing bounded access.
 ## Evidence and limits
 
 The generation 16 claim-by-claim matrix, deployment, exact incremental diff,
-rollback command and outstanding external acceptance calls are in
+rollback command, owner-reported external acceptance and repeatable spot-check calls are in
 [`BCC_ASTRA_FIXES_2026-11-13.md`](BCC_ASTRA_FIXES_2026-11-13.md).
 The earlier generation 15 audit is preserved in
 [`BCC_CHATGPT_AUDIT_2026-11-13.md`](BCC_CHATGPT_AUDIT_2026-11-13.md).
