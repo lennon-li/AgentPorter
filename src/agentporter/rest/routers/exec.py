@@ -3,8 +3,7 @@ from fastapi import APIRouter, Request
 from typing import Dict, Any
 from agentporter.rest.schemas import (
     ExecRunRequest, ExecStartRequest, JobOutputRequest, HTTPSDownloadRequest,
-    ExecResponse, JobStartResponse, JobStatusResponse, JobOutputResponse, JobResultResponse, GenericActionResponse, JobCancelResponse,
-    WorkspaceBusyResponse,
+    ExecResponse, JobStartResponse, JobStatusResponse, JobOutputResponse, JobResultResponse, GenericActionResponse, JobCancelResponse
 )
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/exec", tags=["Exec"])
@@ -14,17 +13,13 @@ jobs_router = APIRouter(prefix="/jobs", tags=["Jobs"])
 def https_download(workspace_id: str, req: HTTPSDownloadRequest, request: Request):
     return request.app.state.tools["https_download"](workspace_id=workspace_id, **req.model_dump())
 
-@router.post("/run", response_model=ExecResponse, responses={
-    409: {"model": WorkspaceBusyResponse, "description": "Another transaction is active for this workspace."},
-})
+@router.post("/run", response_model=ExecResponse)
 def exec_run(workspace_id: str, req: ExecRunRequest, request: Request):
     return request.app.state.tools["exec_run"](
         workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds, network_access=req.network_access
     )
 
-@router.post("/start", response_model=JobStartResponse, responses={
-    409: {"model": WorkspaceBusyResponse, "description": "Another transaction is active for this workspace."},
-})
+@router.post("/start", response_model=JobStartResponse)
 def exec_start(workspace_id: str, req: ExecStartRequest, request: Request):
     return request.app.state.tools["exec_start"](
         workspace_id=workspace_id, argv=req.argv, cwd=req.cwd, timeout_seconds=req.timeout_seconds, network_access=req.network_access

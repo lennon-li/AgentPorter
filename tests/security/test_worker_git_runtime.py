@@ -1,4 +1,4 @@
-"""Real offline delegated worker -> owner receipt -> continued edits."""
+"""Real offline delegated worker -> owner receipt -> continued edit/commit."""
 import json
 from pathlib import Path
 import time
@@ -34,13 +34,7 @@ def configured(tmp_path,monkeypatch,runtime_factory):
 def wait_output(manager,job_id,needle):
     deadline = time.monotonic()+12
     while time.monotonic()<deadline:
-        try:
-            output=manager.get_output(job_id)
-        except KeyError:
-            # The v14 receiver acknowledges a durable queued admission before
-            # its asynchronous launcher creates the runtime job row.
-            time.sleep(.01)
-            continue
+        output=manager.get_output(job_id)
         if needle in output['stdout']:
             return output
         if output['status'] not in {'running','launching','finalizing'}:
@@ -77,11 +71,12 @@ assert reply['outcome']['candidate_status']=='integrated',reply
 assert Path('/workspace/ordinary').read_text()=='remote\\n'
 Path('/workspace/after-pull').write_text('worker continued edit\\n')
 subprocess.run(['/usr/bin/git','-c','user.name=Worker','-c','user.email=worker@example.invalid','add','after-pull'],check=True)
-print('CONTINUED_EDIT',flush=True)
+subprocess.run(['/usr/bin/git','-c','user.name=Worker','-c','user.email=worker@example.invalid','commit','-qm','post pull edit'],check=True)
+print('CONTINUED_COMMIT',flush=True)
 '''
 
 
-def test_native_job_pull_owner_receipt_then_edit_publishes_without_worker_commit(tmp_path,monkeypatch,runtime_factory):
+def test_native_job_pull_owner_receipt_then_edit_commit_publishes_coherently(tmp_path,monkeypatch,runtime_factory):
     root,service,key,manager,remote=configured(tmp_path,monkeypatch,runtime_factory)
     original=git(root,'rev-parse','HEAD')
     job=manager.start_confined_agent_job(workspace_id='repo',workspace_path=str(root),agent='codex_impl',
@@ -98,9 +93,9 @@ def test_native_job_pull_owner_receipt_then_edit_publishes_without_worker_commit
     status=terminal(manager,job)
     assert status['status']=='completed',manager.get_output(job)
     assert (root/'after-pull').read_text()=='worker continued edit\n'
-    assert git(root,'rev-parse','HEAD')==remote['oid']
+    assert git(root,'rev-parse','HEAD^')==remote['oid']
     assert git(root,'rev-parse','refs/remotes/origin/reviewed')==remote['oid']
-    assert 'after-pull' in git(root,'status','--porcelain')
+    assert git(root,'status','--porcelain')==''
     assert count(manager)==0
     assert job not in manager._worker_git_services
 
@@ -219,15 +214,13 @@ def test_push_remains_denied_in_actual_mcp_and_rest(temp_config,tmp_path):
     with TestClient(create_asgi_app(temp_config)) as client:
         payload={'workspace_id':'repo','branch':'refs/heads/main','approval_receipt':'previous-receipt'}
         result=rpc(client,temp_config.api_key,'git_push',payload)
-        denied=result['result']['structuredContent']
-        assert denied['status']=='denied' and denied['executed'] is False
-        assert denied['error']['code']=='POLICY_DENIED' and denied['error']['action']=='git_push'
+        assert result['result'].get('isError'),result
         response=client.post('/api/v1/workspaces/repo/git/push',json={k:v for k,v in payload.items() if k!='workspace_id'},
             headers={'X-AgentPorter-Key':temp_config.api_key})
         assert response.status_code==403,response.text
 
 
-def test_gateway_actions_deliver_receipt_to_exact_relay_job_and_worker_edit(tmp_path,monkeypatch,runtime_factory,temp_config):
+def test_gateway_actions_deliver_receipt_to_exact_relay_job_and_worker_commit(tmp_path,monkeypatch,runtime_factory,temp_config):
     import asyncio
     from types import SimpleNamespace
     import httpx
@@ -301,7 +294,7 @@ def test_gateway_actions_deliver_receipt_to_exact_relay_job_and_worker_edit(tmp_
         assert response.status_code==200 and response.json()['status']=='completed',response.text
         assert terminal(manager,native)['status']=='completed',manager.get_output(native)
         assert (root/'after-pull').read_text()=='worker continued edit\n'
-        assert git(root,'rev-parse','HEAD')==remote['oid']
+        assert git(root,'rev-parse','HEAD^')==remote['oid']
         assert git(root,'rev-parse','refs/remotes/origin/reviewed')==remote['oid']
         assert count(manager)==0
 

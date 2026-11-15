@@ -201,16 +201,9 @@ def test_git_backend_and_policy_denials_do_not_request_signatures(client, test_c
         json=payload, headers=headers,
     )
     assert response.status_code == 403
-    detail = response.json()["detail"]
-    if action == "push":
-        assert detail == {
-            "code": "POLICY_DENIED", "action": "git_push",
-            "mode": "LOCKED", "reason": "action_locked",
-        }
-    else:
-        assert isinstance(detail, str)
-        assert "backend" in detail.lower()
-    assert "approval" not in str(detail).lower()
+    detail = response.json()["detail"].lower()
+    assert ("backend" if action == "commit" else "protected policy") in detail
+    assert "approval" not in detail
 
 
 def test_public_rest_rejects_generic_runtime(client, test_config):

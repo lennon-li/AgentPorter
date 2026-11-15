@@ -297,8 +297,6 @@ class JobManager:
                 finally:
                     db.close()
                 if claimed:
-                    validate_grant=getattr(transaction,'_validate_publication_grant',None)
-                    if validate_grant is not None: validate_grant()
                     if (getattr(transaction, '_private_pull_pending', False) or getattr(transaction, '_private_clone_pending', False)):
                         if getattr(transaction,'_private_clone_pending',False):transaction.publish_approved_clone()
                         else:transaction.publish_approved_pull()
@@ -408,7 +406,7 @@ class JobManager:
             raise ValueError("cmd must be a non-empty list of non-empty strings")
         timeout_seconds = max(1, min(900, int(timeout_seconds)))
         transaction = None
-        if self.transactional_writes:
+        if self.transactional_writes and policy.workspace_write:
             if self.resources is None:
                 raise PermissionError('Transactional agents require a verified resource envelope')
             from agentporter.sandbox.workspace_transactions import WorkspaceTransaction
@@ -426,7 +424,6 @@ class JobManager:
                     raise PermissionError('Job workspace differs from its authoritative registration')
                 allow_git_birth=bool(registered.writable and registered.allow_git and policy.workspace_write)
             transaction = WorkspaceTransaction(Path(workspace_path), self.state_dir / 'workspace-transactions',
-                                               writable=policy.workspace_write,
                                                git_sandbox=self.git_sandbox,allow_git_birth=allow_git_birth)
         job_id = f"job_{uuid.uuid4().hex[:24]}"
         stdout_path = str(self.jobs_dir / f"{job_id}.stdout.log")
@@ -457,7 +454,7 @@ class JobManager:
                 recorded = True
             finally:
                 conn.close()
-            if transaction is not None and policy.workspace_write and self.approved_git_pulls is not None:
+            if transaction is not None and self.approved_git_pulls is not None:
                 authority = self.approved_git_pulls.authority
                 if any(grant.workspace_id == workspace_id and set(grant.operations)&{'fetch','pull','clone'} for grant in authority._grants):
                     from agentporter.worker_git_service import WorkerGitService

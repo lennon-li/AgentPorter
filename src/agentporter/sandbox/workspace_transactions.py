@@ -19,7 +19,6 @@ import tempfile
 import time
 
 from agentporter.resources import ResourceCleanupError
-from agentporter.policy_errors import WorkspaceBusyError
 from agentporter.workspaces.leases import workspace_key
 from agentporter.sandbox.workspace_delta import (
     UnsafeWorkspaceDelta, _require_public_path, publish_workspace_file,
@@ -102,35 +101,25 @@ class WorkspaceTransaction:
             try:
                 fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
-                os.close(self._lock)
-                self._lock = -1
-                raise WorkspaceBusyError() from error
+                raise PermissionError('Workspace already has an active transaction') from error
             if os.path.lexists(self._pending) or os.path.lexists(state / (key + '.git-pending.json')):
                 raise ResourceCleanupError('Workspace publication requires owner recovery')
             from agentporter.sandbox.recovery_guards import find_unfinished
             if find_unfinished(state.parent,key,self.workspace) is not None:
                 raise ResourceCleanupError('Workspace recovery guard retirement remains unfinished')
-            # Foreign-owned roots can be private (0700), and Git metadata files
-            # can be owner-only. Pin their identity with O_PATH; all data reads
-            # go through the verified idmapped read-only projection.
-            foreign_owner = identity.st_uid != os.getuid()
-            access = os.O_PATH if foreign_owner else os.O_RDONLY
+            # Foreign-owned roots can be private (0700). Pin their identity with
+            # O_PATH; data access occurs through the verified idmapped views.
+            access = os.O_PATH if writable and identity.st_uid != os.getuid() else os.O_RDONLY
             self._root_fd = os.open(self.workspace, access | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
             pinned = os.fstat(self._root_fd)
             if (pinned.st_dev, pinned.st_ino) != (identity.st_dev, identity.st_ino):
                 raise PermissionError('Workspace root changed during transaction creation')
-            if foreign_owner:
-                from agentporter.sandbox.workspace_projections import open_workspace_projection
+            if writable and pinned.st_uid != os.getuid():
+                from agentporter.sandbox.workspace_projections import open_workspace_projection, open_workspace_publication
                 self._projection_fd = open_workspace_projection(self._root_fd)
-                if writable:
-                    from agentporter.sandbox.workspace_projections import open_workspace_publication
-                    self._publication_fd = open_workspace_publication(self._root_fd, state_dir=state)
-            data_fd = self._publication_fd
-            if data_fd is None:
-                data_fd = self._projection_fd
-            if data_fd is None:
-                data_fd = self._root_fd
-            self._root_path = f'/proc/self/fd/{data_fd}/.'
+                self._publication_fd = open_workspace_publication(self._root_fd, state_dir=state)
+            publication_fd = self._publication_fd if self._publication_fd is not None else self._root_fd
+            self._root_path = f'/proc/self/fd/{publication_fd}/.'
             self.directory = Path(tempfile.mkdtemp(prefix=key[:12] + '-', dir=state))
             self.upper = self.directory / 'upper'
             self.work = self.directory / 'work'
@@ -167,18 +156,7 @@ class WorkspaceTransaction:
                         # any private overlay changes are rejected before application.
                         if name.lower() == '.git' and path.is_symlink():
                             raise PermissionError('Symlinked Git metadata cannot be delegated')
-                        if name.lower() == '.git' and path.is_file():
-                            raise PermissionError('Linked Git worktree metadata cannot be delegated')
                         if name.lower() == '.git' and path.is_dir():
-                            # Every admitted repository needs the private
-                            # metadata view. _MetadataMount currently requires
-                            # a real local config, so reject configless or
-                            # incomplete repositories before running Git over
-                            # any linked/common metadata paths.
-                            if name != '.git' or git_sandbox is None:
-                                raise PermissionError('Git metadata requires a private worker view')
-                            if not (path / 'HEAD').is_file() or not (path / 'config').is_file():
-                                raise PermissionError('Incomplete Git metadata cannot be delegated')
                             metadata_fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
                             try:
                                 metadata = Path(f'/proc/self/fd/{metadata_fd}')
@@ -188,7 +166,8 @@ class WorkspaceTransaction:
                                 _reject_excluded_git_paths(metadata, pass_fds=(metadata_fd,))
                             finally:
                                 os.close(metadata_fd)
-                        if name == '.git' and path.is_dir():
+                        if (name == '.git' and writable and git_sandbox is not None
+                                and (path / 'HEAD').is_file() and (path / 'config').is_file()):
                             from agentporter.sandbox.workspace_git import WorkspaceGitHistory
                             # Trusted imports need the same owner-mapped view
                             # as ordinary publication, never the foreign-owned
@@ -223,8 +202,7 @@ class WorkspaceTransaction:
                 os.close(self._projection_fd)
             if self._root_fd is not None:
                 os.close(self._root_fd)
-            if self._lock >= 0:
-                os.close(self._lock)
+            os.close(self._lock)
             self._closed = True
             raise
 
@@ -265,7 +243,7 @@ class WorkspaceTransaction:
         # ordinary delta validator remains unchanged and still refuses .git.
         for relative, history in self.git_histories.items():
             destination = '/workspace/' + relative
-            command += ['--bind' if self.writable else '--ro-bind', str(history.private), destination,
+            command += ['--bind', str(history.private), destination,
                         '--ro-bind', str(history.clean_config), destination + '/config']
         return command
 
@@ -384,7 +362,6 @@ os.execvpe(sys.argv[1], sys.argv[1:], os.environ)
         deletions = validate_workspace_delta(self.upper, deletion_baseline=self.baseline, repository_births=births)
         for history in self.git_histories.values():
             history.prepare()
-            self._validate_history_publication_authority(history)
         changes = [];new_trees=[]
         for root, dirs, files in os.walk(self.upper):
             for name in list(dirs):
@@ -535,30 +512,6 @@ os.execvpe(sys.argv[1], sys.argv[1:], os.environ)
             self._applied=True
         except BaseException as error:
             raise ResourceCleanupError('Workspace publication interrupted; retained custody requires recovery') from error
-
-    def _validate_history_publication_authority(self, history):
-        """Enforce the existing owner-approval boundary for Git history changes."""
-        history_intent = history._pull_intent
-        if history_intent is None and any(
-                history.plan['before'][field] != history.plan['after'][field]
-                for field in ('head', 'branch', 'refs', 'stash_log')):
-            # Enforce after arbitrary worker code, including raw Git or
-            # Python writes that bypass CLI deny lists. Ordinary edits and
-            # index staging remain publishable; history needs its separate
-            # trusted backend and consumed authorization.
-            raise PermissionError('Worker Git history change requires independent owner approval')
-        if history_intent is not None:
-            expected = json.loads(history_intent.expected_private)
-            before, after = history.plan['before'], history.plan['after']
-            local_refs = set(before['refs']) | set(after['refs'])
-            unauthorized_ref = any(
-                name != expected['branch']
-                and (name.startswith(('refs/heads/', 'refs/tags/')) or name == 'refs/stash')
-                and before['refs'].get(name) != after['refs'].get(name)
-                for name in local_refs)
-            if (unauthorized_ref or before['stash_log'] != after['stash_log']
-                    or any(after[field] != expected[field] for field in ('head', 'branch'))):
-                raise PermissionError('Approved inbound Git cannot expand worker history authority')
 
     def _restore_cleanup_access(self):
         # The job envelope must be quiescent before close. Operate only through

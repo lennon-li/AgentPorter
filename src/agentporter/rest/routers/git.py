@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, Request
-from agentporter.policy_errors import ActionPolicyDenied
 from typing import Dict, Any, Optional
 from agentporter.rest.schemas import (
     GitDiffRequest, GitLogRequest, GitShowRequest,
@@ -33,8 +32,6 @@ def git_fetch(workspace_id: str, req: GitFetchRequest, request: Request):
             workspace_id=workspace_id, remote=req.remote, branch=req.branch,
             approval_receipt=req.approval_receipt, prepare_only=req.prepare_only,
             **({'repository':req.repository} if req.repository is not None else {}))
-    except ActionPolicyDenied as exc:
-        raise HTTPException(status_code=403, detail=exc.detail) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
@@ -47,8 +44,6 @@ def git_pull(workspace_id: str, req: GitPullRequest, request: Request):
             job_id=req.job_id, request_sha256=req.request_sha256,
             **({'repository':req.repository} if req.repository is not None else {}),
             **({'operation':req.operation,'local_branch':req.local_branch} if req.operation!='pull' or req.local_branch is not None else {}))
-    except ActionPolicyDenied as exc:
-        raise HTTPException(status_code=403, detail=exc.detail) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
@@ -61,8 +56,6 @@ def git_push(workspace_id: str, req: GitPushRequest, request: Request):
             workspace_id=workspace_id, remote=req.remote, branch=req.branch, set_upstream=req.set_upstream,
             approval_receipt=req.approval_receipt, prepare_only=req.prepare_only
         )
-    except ActionPolicyDenied as exc:
-        raise HTTPException(status_code=403, detail=exc.detail) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
@@ -74,8 +67,6 @@ def git_commit(workspace_id: str, req: GitCommitRequest, request: Request):
             approval_receipt=req.approval_receipt, approval_timestamp=req.approval_timestamp,
             prepare_only=req.prepare_only
         )
-    except ActionPolicyDenied as exc:
-        raise HTTPException(status_code=403, detail=exc.detail) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 

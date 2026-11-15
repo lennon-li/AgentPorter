@@ -277,8 +277,6 @@ def validate_dispatch(data: dict, workspace_ids: set[str], *, write_workspace_id
         RelayLedger.validate_request_id(data["request_id"])
     if data.get("allow_push"):
         raise PermissionError("Relay never permits Git push")
-    if data.get("allow_commit"):
-        raise PermissionError("Relay commit flags are not independent owner approval")
     for key in ("purpose", "model", "reasoning_effort"):
         value = data.get(key)
         if value is not None and (not isinstance(value, str) or len(value) > 512):
@@ -290,7 +288,7 @@ def validate_dispatch(data: dict, workspace_ids: set[str], *, write_workspace_id
         raise PermissionError("Read-only dispatch cannot commit")
     if not read_only and workspace not in write_workspace_ids:
         raise PermissionError("Production relay workspace is not explicitly authorized for writable dispatch")
-    return {**data, "agent": agent, "workspace_id": workspace, "allow_commit": False,
+    return {**data, "agent": agent, "workspace_id": workspace, "allow_commit": not read_only,
             "allow_push": False, "read_only": data.get("read_only", True)}
 
 

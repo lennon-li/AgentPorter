@@ -1,4 +1,3 @@
-from agentporter.interface_catalog import RepositorySelector, LocalBranchSelector
 """Model Context Protocol (MCP) Streamable HTTP server for AgentPorter."""
 
 import os
@@ -199,8 +198,8 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     _exec_run, _exec_start = create_execution_tools(
         registry, sandbox, job_manager, scoped_https=scoped_https
     )
-    from agentporter.git_policy import load_approved_commits
-    approved_commits = (load_approved_commits(config.config_dir, registry, sandbox, job_manager)
+    from agentporter.git_commits import WorkspaceGitCommits
+    approved_commits = (WorkspaceGitCommits(registry, sandbox, job_manager=job_manager)
                         if sandbox.transactional_writes and sandbox.resources is not None else None)
     from agentporter.git_remote_policy import load_owner_git_remotes
     from agentporter.git_pushes import ApprovedGitPushes
@@ -307,8 +306,6 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
         """Return gateway capabilities and effective owner-approved HTTPS scope."""
         result = _get_capabilities()
         result["action_matrix"] = operator_policy.snapshot()
-        from agentporter.interface_catalog import add_catalog_diagnostics
-        add_catalog_diagnostics(result, mcp, operator_policy)
         git_operations = {}
         for action, backend in (("git_commit", approved_commits),):
             backend_available = backend is not None
@@ -514,7 +511,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True))
     @monitored_tool("git_fetch")
     def git_fetch(workspace_id: str, remote: str = "origin", branch: str = "",
-                  approval_receipt: str = '', prepare_only: bool = False,repository: RepositorySelector = None) -> str:
+                  approval_receipt: str = '', prepare_only: bool = False,repository: str | None = None) -> str:
         """Fetch one protected branch authorized by writable workspace policy."""
         return _git_fetch(workspace_id, remote=remote, branch=branch,
                           approval_receipt=approval_receipt, prepare_only=prepare_only,
@@ -525,7 +522,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def git_pull(workspace_id: str, remote: str = "origin", branch: str = "",
                  approval_receipt: str = '', prepare_only: bool = False,
                  mode: Literal['ff-only','merge','rebase'] | None = None,job_id: str = '',request_sha256: str = '',
-                 operation: Literal['pull','clone'] = 'pull',local_branch: LocalBranchSelector = None,repository: RepositorySelector = None) -> dict:
+                 operation: Literal['pull','clone'] = 'pull',local_branch: str | None = None,repository: str | None = None) -> dict:
         """Execute an exact workspace-authorized pull or clone; pull is the default."""
         options={}
         if operation=='clone':
@@ -566,7 +563,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
     def git_commit(workspace_id: str, message: str, all_files: bool = False,
                    approval_receipt: str = '', approval_timestamp: int | None = None,
                    prepare_only: bool = False) -> str:
-        """Commit explicitly staged changes with an exact server-verified owner receipt."""
+        """Commit explicitly staged workspace changes without a phone receipt."""
         return _git_commit(workspace_id, message=message, all_files=all_files,
                            approval_receipt=approval_receipt, approval_timestamp=approval_timestamp,
                            prepare_only=prepare_only)
@@ -626,7 +623,7 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             if client_policy.scopes is not None:visible.intersection_update(client_policy.scopes)
             if workspace_id is not None:visible.intersection_update({workspace_id})
             if visible:
-                row['writable_delegation_reason']='Writable delegation is restricted by protected dispatch policy and current native capabilities.'
+                row['writable_delegation_reason']='Writable delegation is restricted by protected dispatch/commit policy and current native capabilities.'
             rows.append(row)
         return rows
 
@@ -701,11 +698,6 @@ def build_mcp_server(config: Config) -> tuple[MCPServer, dict]:
             "dispatch_agent": dispatch_agent,
         }
     }
-    from agentporter.interface_catalog import align_mcp_argument_schemas
-    align_mcp_argument_schemas(mcp)
-    from agentporter.policy_errors import install_mcp_policy_results
-    install_mcp_policy_results(mcp)
-
     return mcp, context
 
 
@@ -784,7 +776,7 @@ def create_asgi_app(config: Config) -> ASGIApp:
             # embeddings must load the same protected receiver policy.
             receiving_operator_policy=OperatorActionPolicy(config.config_dir,
                 workspace_roots=[row['path'] for row in context['registry'].list_all()],
-                approved_git_commits=False,
+                approved_git_commits=config.sandbox.workspace_transactions and context['job_manager'].resources is not None,
                 approved_git_pushes=False)
         @app.post("/internal/delegation/v1", include_in_schema=False)
         async def internal_delegation(request: Request):
@@ -938,13 +930,6 @@ def create_asgi_app(config: Config) -> ASGIApp:
                 logger.warning("Narrow relay request denied: %s", type(exc).__name__)
                 return JSONResponse({"detail": "Delegation relay request denied"}, status_code=403)
 
-
-    from agentporter.policy_errors import WorkspaceBusyError
-
-    @app.exception_handler(WorkspaceBusyError)
-    async def workspace_busy_response(request, exc: WorkspaceBusyError):
-        return JSONResponse(status_code=409, content=exc.detail,
-                            headers={'Retry-After': str(exc.detail['error']['retry_after_seconds'])})
 
     @app.exception_handler(PermissionError)
     async def permission_error_response(request, exc: PermissionError):

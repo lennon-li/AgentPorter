@@ -142,7 +142,7 @@ def test_relay_dispatch_runs_confined_transaction(runtime_factory, temp_config, 
 
 
 @pytest.mark.parametrize('agent', ['codex_review', 'codex_impl', 'codex_research', 'copilot_agent', 'opencode_free', 'claude_agent', 'agy_agent'])
-def test_each_named_worker_cannot_publish_an_unapproved_commit(runtime_factory, monkeypatch, agent):
+def test_each_named_worker_can_commit_without_confirmation(runtime_factory, monkeypatch, agent):
     """Exercise each named worker's OS launch path with synthetic offline code."""
     from tests.security.test_git_approval_state import git
     runtime, _, _, workspace, _ = runtime_factory()
@@ -162,10 +162,10 @@ def test_each_named_worker_cannot_publish_an_unapproved_commit(runtime_factory, 
         policy=ExecutionPolicy.for_workspace(writable=True))
     wait(manager, job)
     result = manager.get_result(job)
-    assert result['status'] == 'failed', result
-    assert 'Workspace edits rejected before publication' in result['stderr']
-    assert git(workspace, 'rev-parse', 'HEAD') == old
-    assert (workspace / 'source.txt').read_text() == 'source'
+    assert result['status'] == 'completed', result.get('stderr')
+    assert result.get('stderr', '') == '', result.get('stderr')
+    assert git(workspace, 'rev-parse', 'HEAD') != old
+    assert git(workspace, 'rev-parse', 'HEAD') in result['stdout']
     assert git(workspace, 'status', '--short') == ''
     assert 'git push' in ExecutionPolicy.for_workspace(writable=True).denied_commands()
 
@@ -253,30 +253,15 @@ def test_confined_agent_job_persists_transaction_and_restart_retains_only_it(run
         transaction.close()
 
 
-def test_ordinary_readonly_confined_job_records_and_cleans_private_view(runtime_factory, monkeypatch):
+def test_ordinary_readonly_confined_job_has_no_transaction_path(runtime_factory, monkeypatch):
     runtime, _, _, workspace, _ = runtime_factory()
     no_probe(monkeypatch, runtime)
     manager = JobManager(runtime.state_dir, transactional_writes=True)
     manager.development_runtime = runtime
     manager.resources = RecordingResources()
-    prepared = []
-    original_prepare = runtime.prepare
-    def prepare(*args, **kwargs):
-        prepared.append(kwargs['workspace_transaction'])
-        return original_prepare(*args, **kwargs)
-    monkeypatch.setattr(runtime, 'prepare', prepare)
     _synthetic_launch(manager)
     job_id = manager.start_confined_agent_job(agent='codex_impl', workspace_id='selected',
         workspace_path=str(workspace), cmd=['/usr/bin/python3', '-c', 'pass'],
         policy=ExecutionPolicy.for_workspace(writable=False))
     assert wait(manager, job_id)['status'] == 'completed'
-    # Read-only jobs also need a private Git view and the workspace lease.
-    # The recorded path is audit metadata; successful finalization removes it.
-    assert len(prepared) == 1
-    transaction = prepared[0]
-    assert transaction.writable is False
-    assert _transaction_column(manager, job_id) == str(transaction.directory)
-    assert transaction.directory.parent == runtime.state_dir / 'workspace-transactions'
-    assert not transaction.directory.exists()
-    assert job_id not in manager._job_transactions
-    assert manager.resources.lease.closed
+    assert _transaction_column(manager, job_id) is None
