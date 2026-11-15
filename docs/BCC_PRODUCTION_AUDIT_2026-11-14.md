@@ -4,8 +4,9 @@
 
 **Generation 17 is active; full production acceptance remains incomplete.**
 Jax's personal login was restored and a fresh post-deployment Jax job succeeded.
-Ming's matching native identity currently has expired access; owner renewal is
-pending. Actual external ChatGPT acceptance after generation 17 is **NOT verified**.
+The owner renewed Ming's original native login; fresh worker-UID issuance now
+passes for all five identities. Actual external ChatGPT acceptance after
+generation 17 is **NOT verified**.
 Historical generation 16 acceptance is retained with its original scope.
 
 No credentials or account identifiers are included here. Jax personal and Prof
@@ -40,8 +41,8 @@ make it a fresh test. Every test listed as fresh ran on 2026-11-14.
 | Actual production-derived package regression | `candidate-gateway-tests.xml` / candidate-worker receipt; `runtime-fixture-bridge/results-final.xml` and manifest | Executed locally: 8 passed per role; 90 worker security cases passed, zero failures/skips, exit 0 | Production uses named identities; bridge translates only fixture aliases and synthetic helper setup. Assertions unchanged. Earlier fixture alias / stdin-spawn failures were corrected in the test harness, not suppressed |
 | Real history is readable but canonical metadata is isolated | Production-derived 90-case selection includes consolidation, Git views/metadata, incomplete/foreign layouts and publication mutation fixtures; prior ordinary/delegated history probes retained | Fresh host fixture tests passed; documented guarantee is mutation/publication isolation, not repository-history confidentiality | Fresh gen17 external Git probes pending; arbitrary nested bare Git directories remain ordinary workspace content |
 | Shared CLI and daemon selection | `fresh-shared-installation-generation17.json`: immutable manifest/file hashes, terminal launchers, worker selections and native daemon executable inodes | Fresh host execution passed for 39 configured existing workspaces; Codex 0.169.0, Claude 2.1.325, Copilot 1.0.112, OpenCode 1.19.5, Agy 1.5.9 | Version checks did not dispatch Wei or Argie; no actual update performed |
-| Native access custody and no writeback | `fresh-native-custody-generation17.json`: six real Codex access snapshots and Phil snapshot as worker UID 997; hostile fixture edits followed by lease finish; before/after all five native auth bytes compared in memory | Fresh host execution passed for Jax/Liz/Prof/Phil; native stores unchanged; Codex refresh authority excluded; no model calls | Ming issuance blocked before access creation; complete five-provider live custody acceptance pending |
-| Stale/changed identity fails closed | Production-derived credential broker/lease security fixtures; actual Ming preflight | Fresh host fixture tests passed; actual expired Ming access refused with binding still matching enrollment | Ming native renewal requires owner; do not lower the 1,260-second threshold |
+| Native access custody and no writeback | `fresh-native-custody-generation17.json`: six real Codex snapshots plus Ming/Phil snapshots as worker UID 997; hostile fixture edits followed by lease finish; before/after all five native auth bytes compared in memory | Fresh host execution passed for Jax/Liz/Prof/Ming/Phil after owner renewal; all native stores unchanged during verification; Codex refresh authority and Claude refresh token excluded; no model calls | This verifies custody/native login status, not a new Ming model response; the earlier partial receipt is retained as `fresh-native-custody-generation17-before-ming-renewal.json` |
+| Stale/changed identity fails closed | Production-derived credential broker/lease security fixtures; actual Ming preflight before and after owner renewal; `ming-after-owner-renewal.json` | Fresh host fixture tests passed; expired Ming access was refused; owner renewal of the same enrolled identity then passed with over seven hours of access lifetime | The 1,260-second threshold remains unchanged; future expired access still requires native renewal |
 | Shared updater privilege/credential boundaries | `fresh-updater-generation17.json`; timer/service effective settings and installed runner; shared-installation check covers disabled native updaters and removed updateCLI cron | Fresh configuration inspection: timer active at 02:00 America/New_York; strict filesystem, no-new-privileges, native auth paths inaccessible, package staging under unprivileged UID | No CLI update triggered merely to verify configuration; stored last-update success is not a fresh update |
 | Terminal Qman and DB preservation | `fresh-terminal-qman.json`: actual terminal live Jax/Phil calls, DB/WAL/SHM bytes/inode/mtime/ownership before/after | Fresh local live collectors: both exit 0, `live:true`, `mode:live_first`, no DB use, unchanged DB/sidecars, no model/update | Initial wrapper expected literal `live`; parent validated native `live_first` from saved fresh results without repeating collectors |
 | Jax capacity before post-cutover dispatch | `generation17-jax-quota.json`: exact Codex/Jax/Terra live request, no cached fallback | Fresh local live at dispatch: five-hour 96%, weekly 83% remaining, source codex_app_server_0.169.0 | Snapshot expires; persistent identity binding and general model entitlement remain unverified by Qman |
@@ -83,8 +84,9 @@ No additional restart is required for these already-active source changes.
 The protected control directory is
 `/var/lib/agentporter-bcc/consolidation-20261114-17`; its phase remains
 `active_pending_live_acceptance`, with no guards retained. The current pointer
-and local verification record must retain the outstanding Ming and external
-acceptance limitations; historical gen16 acceptance is not copied as gen17 proof.
+and local verification record clear the Ming renewal blocker while retaining the
+outstanding external acceptance limitation; historical gen16 acceptance is not
+copied as gen17 proof.
 
 ## Rollback
 
@@ -121,7 +123,7 @@ bounded `exec_start` sleep holder, followed by run/start probes while it owns th
 transaction; expect no execution and the explicit busy envelope, then normal
 runtime after holder completion. Do not leave the holder running.
 
-Full acceptance requires Ming's original native renewal, fresh successful
-worker-UID Ming issuance with refresh exclusion/no writeback, and the external
+Ming's original native renewal and fresh worker-UID issuance with refresh
+exclusion/no writeback are verified. Full acceptance still requires the external
 generation 17 checks. Wei remains paused; Argie/Agy remediation and Venkata/
 SciNet execution remain excluded. No new account or model entitlement is inferred.

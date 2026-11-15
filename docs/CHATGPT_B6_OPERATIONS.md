@@ -12,9 +12,9 @@ in its authentication header, never in prompts, URLs, files, or job packets.
 
 ## Current production audit status (2026-11-14)
 
-**Generation 17 is active. Full production acceptance is incomplete:** Ming's
-native Claude access has expired and awaits owner renewal; actual external
-ChatGPT verification after this deployment has not been reported. Commit and
+**Generation 17 is active. Full production acceptance is incomplete:** actual
+external ChatGPT verification after this deployment has not been reported.
+Ming's owner-renewed native login now passes the protected custody checks. Commit and
 push remain locked. Jax uses its personal subscription and Prof its separate
 academic research account; their native stores and enrolled identities remain
 distinct. No account identifiers or credentials are included in this manual.
@@ -52,11 +52,13 @@ Source verification passed 2,928 tests with 9 skipped; two additional rollout
 fault tests passed. Production-derived candidate checks passed 8 tests per
 role, then 90 worker security cases with fixture-only public identity mapping.
 These fixture tests are separate from live provider execution. Fresh worker-UID
-credential issuance passed for Jax, Liz, Prof and Phil with all five native auth
-files unchanged; Codex snapshots excluded refresh authority. Ming's matching
-native identity was rejected before issuance because its access lifetime is
-below the protected 1,260-second requirement. Owner renewal through the existing
-Ming account is pending; do not bypass the check or substitute an account.
+credential issuance passed for Jax, Liz, Prof, Ming and Phil with all five native
+auth files unchanged during verification. Codex snapshots excluded refresh
+authority, and Ming's access document excluded its refresh token. Ming's expired
+access was initially rejected before issuance. The owner then renewed the same
+native account; its original enrollment still matches and its renewed access
+passed the unchanged 1,260-second minimum. No account substitution or policy
+change was required. This custody check did not make a Ming model call.
 
 Fresh terminal Jax/Phil Qman collectors returned `live:true`, `status:ok`,
 `mode:live_first`, no database use and unchanged DB/WAL/SHM bytes and metadata.
